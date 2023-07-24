@@ -16,6 +16,8 @@ pcf_policyauth_sources = files('''
   app-log.c
   app-sm.h
   app-sm.c
+  dump-openapi.h
+  dump-openapi.c
   options.h
   options.c
 '''.split())
