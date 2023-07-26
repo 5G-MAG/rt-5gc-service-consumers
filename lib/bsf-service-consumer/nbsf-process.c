@@ -158,6 +158,40 @@ bool _bsf_process_event(ogs_event_t *e)
 
             break;
         }    
+        case OGS_EVENT_SBI_TIMER:
+            ogs_assert(e);
+
+            ogs_debug("Got timer event [%s]", ogs_timer_get_name(e->timer_id));
+            switch(e->timer_id) {
+            case OGS_TIMER_SBI_CLIENT_WAIT:
+            {
+                /* NRF connection may have timed out */
+                ogs_sbi_xact_t *xact = (ogs_sbi_xact_t*)e->sbi.data;
+                bsf_client_sess_t *sess;
+                char *ip;
+
+                if (!xact) return false;
+
+                /* Check if this is one of ours */
+                sess = ogs_container_of(xact->sbi_object, bsf_client_sess_t, sbi);
+                if (!_bsf_client_context_active_sessions_exists(sess)) return false;
+
+                /* inform the callback of the error */
+                ip = ogs_ipstrdup(sess->ue_address);
+                ogs_error("Timed out trying to find PCF binding for %s", ip);
+                _bsf_client_sess_retrieve_callback_call(sess, NULL);
+                ogs_free(ip);
+
+                /* destroy this transaction and BSF session */
+                ogs_sbi_xact_remove(xact);
+                _bsf_client_sess_free(sess);
+
+                return true;
+            }
+            default:
+                break;
+            }
+            break;
         case BSF_CLIENT_LOCAL_EVENT:
             return _bsf_client_local_process_event(e);
         default:
