@@ -8,6 +8,7 @@
  * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
  */
 
+#include "ogs-app.h"
 #include "ogs-core.h"
 
 #include "app-log.h"
@@ -17,6 +18,7 @@ int __pcf_policyauth_log_domain;
 void app_log_init(void)
 {
     ogs_log_install_domain(&__pcf_policyauth_log_domain, "pcf-policyauth", ogs_core()->log.level);
+    ogs_log_config_domain("pcf-policyauth", ogs_app()->logger.level);
 }
 
 void app_log_final(void)

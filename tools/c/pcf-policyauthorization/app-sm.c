@@ -121,6 +121,7 @@ static void app_state_discover_pcf(ogs_fsm_t *sm, ogs_event_t *event)
 
             switch (app_event->id) {
             case APP_LOCAL_EVENT_DISCOVERED_PCF:
+                ogs_info("Found PCF...");
                 OGS_FSM_TRAN(sm, app_state_create_app_session);
                 break;
             case APP_LOCAL_EVENT_PCF_DISCOVERY_FAILED:
@@ -128,6 +129,7 @@ static void app_state_discover_pcf(ogs_fsm_t *sm, ogs_event_t *event)
                 kill(getpid(), SIGTERM);
                 break;
             default:
+                ogs_error("Unexpected local event: %s", app_event_get_name(event));
                 break;
             }
         }
@@ -166,6 +168,7 @@ static void app_state_create_app_session(ogs_fsm_t *sm, ogs_event_t *event)
 
             switch (app_event->id) {
             case APP_LOCAL_EVENT_APP_SESSION_CREATED:
+                ogs_info("AppSessionContext created...");
                 OGS_FSM_TRAN(sm, app_state_running);
                 break;
 
@@ -175,6 +178,7 @@ static void app_state_create_app_session(ogs_fsm_t *sm, ogs_event_t *event)
                 break;
 
             default:
+                ogs_error("Unexpected local event: %s", app_event_get_name(event));
                 break;
             }
         }
@@ -216,6 +220,7 @@ static void app_state_running(ogs_fsm_t *sm, ogs_event_t *event)
                 break;
 
             default:
+                ogs_error("Unexpected local event: %s", app_event_get_name(event));
                 break;
             }
         }
