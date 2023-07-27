@@ -568,18 +568,17 @@ void dump_accumulated_usage(ogs_log_level_e lvl, const OpenAPI_accumulated_usage
 {
     if (au) {
         log_msg("Accumulated Usage:");
-        /* TODO: check units for the following */
         if (au->is_duration) {
-            log_msg("  Duration: %ims", au->duration);
+            log_msg("  Duration: %is", au->duration);
         }
         if (au->is_total_volume) {
-            log_msg("  Total Volume: %li", au->total_volume);
+            log_msg("  Total Volume: %li octets", au->total_volume);
         }
         if (au->is_downlink_volume) {
-            log_msg("  Downlink Volume: %li", au->downlink_volume);
+            log_msg("  Downlink Volume: %li octets", au->downlink_volume);
         }
         if (au->is_uplink_volume) {
-            log_msg("  Uplink Volume: %li", au->uplink_volume);
+            log_msg("  Uplink Volume: %li octets", au->uplink_volume);
         }
     }
 }
@@ -589,12 +588,14 @@ void dump_flows(ogs_log_level_e lvl, const OpenAPI_flows_t *flows, int indent)
     if (flows) {
         log_msg("Flows:");
         if (flows->cont_vers) {
-            log_msg("  Cont Vers:");
-            /* TODO: unpack array */
+            char *out = _join_array_int(flows->cont_vers, ", ", NULL);
+            log_msg("  Content Versions: %s", out);
+            ogs_free(out);
         }
         if (flows->f_nums) {
-            log_msg("  F nums:");
-            /* TODO: unpack array */
+            char *out = _join_array_int(flows->f_nums, ", ", NULL);
+            log_msg("  F-Nums: %s", out);
+            ogs_free(out);
         }
         log_msg("  Media Component: %i", flows->med_comp_n);
     }
