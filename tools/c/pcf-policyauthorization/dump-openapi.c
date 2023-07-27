@@ -41,6 +41,7 @@ static void _dump_event_successful_resources_allocation(ogs_log_level_e lvl, con
 static void _dump_event_tsn_bridge_info(ogs_log_level_e lvl, const OpenAPI_events_notification_t *notifications, int indent);
 static void _dump_event_up_path_chg_failure(ogs_log_level_e lvl, const OpenAPI_events_notification_t *notifications, int indent);
 static void _dump_event_usage_report(ogs_log_level_e lvl, const OpenAPI_events_notification_t *notifications, int indent);
+static char *_join_array_int(OpenAPI_list_t *arr, const char *sep, const char *units);
 
 
 #define log_msg(fmt,...) ogs_log_message(lvl, 0, "%*s" fmt, indent, "", ##__VA_ARGS__)
@@ -480,35 +481,137 @@ void dump_out_of_credit_information(ogs_log_level_e lvl, const OpenAPI_out_of_cr
 
 void dump_qos_monitoring_report(ogs_log_level_e lvl, const OpenAPI_qos_monitoring_report_t *qmr, int indent)
 {
+    if (qmr) {
+        log_msg("QoS Monitoring Report:");
+        if (qmr->flows) {
+            OpenAPI_lnode_t *flow_node;
+            log_msg("  Flows:");
+            OpenAPI_list_for_each(qmr->flows, flow_node) {
+                dump_flows(lvl, (const OpenAPI_flows_t*)flow_node->data, indent+4);
+            }
+        }
+        if (qmr->ul_delays) {
+            char *out = _join_array_int(qmr->ul_delays, ", ", "ms");
+            log_msg("  Uplink packet delays: %s", out);
+            ogs_free(out);
+        }
+        if (qmr->dl_delays) {
+            char *out = _join_array_int(qmr->dl_delays, ", ", "ms");
+            log_msg("  Downlink packet delays: %s", out);
+            ogs_free(out);
+        }
+        if (qmr->rt_delays) {
+            char *out = _join_array_int(qmr->rt_delays, ", ", "ms");
+            log_msg("  Round trip packet delays: %s", out);
+            ogs_free(out);
+        }
+    }
 }
 
 void dump_qos_notification_control_info(ogs_log_level_e lvl, const OpenAPI_qos_notification_control_info_t *qnci, int indent)
 {
+    if (qnci) {
+        log_msg("QoS Notification Control Information:");
+        log_msg("  Type: %s", OpenAPI_qos_notif_type_ToString(qnci->notif_type));
+        if (qnci->flows) {
+            OpenAPI_lnode_t *flow_node;
+            log_msg("  Flows:");
+            OpenAPI_list_for_each(qnci->flows, flow_node) {
+                dump_flows(lvl, (const OpenAPI_flows_t*)flow_node->data, indent+4);
+            }
+        }
+        if (qnci->alt_ser_req) {
+            log_msg("  Alternative Service Requirement: %s", qnci->alt_ser_req);
+        }
+    }
 }
 
 void dump_ran_nas_rel_cause(ogs_log_level_e lvl, const OpenAPI_ran_nas_rel_cause_t *rnrc, int indent)
 {
+    if (rnrc) {
+        dump_ng_ap_cause(lvl, rnrc->ng_ap_cause, indent+2);
+        if (rnrc->is__5g_mm_cause) {
+            log_msg("  5GMM Cause: %i", rnrc->_5g_mm_cause);
+        }
+        if (rnrc->is__5g_sm_cause) {
+            log_msg("  5GSM Cause: %i", rnrc->_5g_sm_cause);
+        }
+        if (rnrc->eps_cause) {
+            log_msg("  EPS Cause: %s", rnrc->eps_cause);
+        }
+    }
 }
 
 void dump_bridge_management_container(ogs_log_level_e lvl, const OpenAPI_bridge_management_container_t *bmc, int indent)
 {
+    if (bmc) {
+        log_msg("Bridge Management Container:");
+        if (bmc->bridge_man_cont) {
+            log_msg("  %s", bmc->bridge_man_cont);
+        }
+    }
 }
 
 void dump_port_management_container(ogs_log_level_e lvl, const OpenAPI_port_management_container_t *pmc, int indent,
                                     const char *port_type)
 {
+    if (pmc) {
+        log_msg("Port Management Container:");
+        if (pmc->port_man_cont) {
+            log_msg("  %s", pmc->port_man_cont);
+        }
+        log_msg("  Port: %i", pmc->port_num);
+    }
 }
 
 void dump_accumulated_usage(ogs_log_level_e lvl, const OpenAPI_accumulated_usage_t *au, int indent)
 {
+    if (au) {
+        log_msg("Accumulated Usage:");
+        /* TODO: check units for the following */
+        if (au->is_duration) {
+            log_msg("  Duration: %ims", au->duration);
+        }
+        if (au->is_total_volume) {
+            log_msg("  Total Volume: %li", au->total_volume);
+        }
+        if (au->is_downlink_volume) {
+            log_msg("  Downlink Volume: %li", au->downlink_volume);
+        }
+        if (au->is_uplink_volume) {
+            log_msg("  Uplink Volume: %li", au->uplink_volume);
+        }
+    }
 }
 
 void dump_flows(ogs_log_level_e lvl, const OpenAPI_flows_t *flows, int indent)
 {
+    if (flows) {
+        log_msg("Flows:");
+        if (flows->cont_vers) {
+            log_msg("  Cont Vers:");
+            /* TODO: unpack array */
+        }
+        if (flows->f_nums) {
+            log_msg("  F nums:");
+            /* TODO: unpack array */
+        }
+        log_msg("  Media Component: %i", flows->med_comp_n);
+    }
 }
 
 void dump_final_unit_action(ogs_log_level_e lvl, const OpenAPI_final_unit_action_t *fua, int indent)
 {
+    if (fua) {
+        log_msg("Final Unit Action");
+    }
+}
+
+void dump_ng_ap_cause(ogs_log_level_e lvl, const OpenAPI_ng_ap_cause_t *nac, int indent)
+{
+    if (nac) {
+        log_msg("NG AP Cause: Group = %i, Value = %i", nac->group, nac->value);
+    }
 }
 
 /*************************************/
@@ -784,6 +887,20 @@ static void _dump_event_usage_report(ogs_log_level_e lvl, const OpenAPI_events_n
 {
     log_msg("Usage Report:");
     dump_accumulated_usage(lvl, notifications->usg_rep, indent+2);
+}
+
+static char *_join_array_int(OpenAPI_list_t *arr, const char *sep, const char *units)
+{
+    OpenAPI_lnode_t *node;
+    const char *nextsep = "";
+    char *out = NULL;
+
+    OpenAPI_list_for_each(arr, node) {
+        out = ogs_mstrcatf(out, "%s%li%s", nextsep, (intptr_t)node->data, units?units:"");
+        nextsep = sep;
+    }
+
+    return out;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

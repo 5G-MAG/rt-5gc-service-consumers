@@ -63,6 +63,7 @@ void dump_port_management_container(ogs_log_level_e lvl, const OpenAPI_port_mana
 void dump_accumulated_usage(ogs_log_level_e lvl, const OpenAPI_accumulated_usage_t *au, int indent);
 void dump_flows(ogs_log_level_e lvl, const OpenAPI_flows_t *flows, int indent);
 void dump_final_unit_action(ogs_log_level_e lvl, const OpenAPI_final_unit_action_t *fua, int indent);
+void dump_ng_ap_cause(ogs_log_level_e lvl, const OpenAPI_ng_ap_cause_t *nac, int indent);
 
 #ifdef __cplusplus
 }
