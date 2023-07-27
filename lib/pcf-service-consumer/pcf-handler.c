@@ -235,12 +235,6 @@ void pcf_policyauthorization_create(
     cJSON_Delete(app_sess_context);
     cJSON_free(app_sess_context_text);
     
-    asc_req_data = OpenAPI_app_session_context_req_data_convertToJSON(AscReqData);
-    asc_req_data_text = cJSON_Print(asc_req_data);
-    ogs_debug("Asc Req Data: %s", asc_req_data_text);
-    cJSON_Delete(asc_req_data);
-    cJSON_free(asc_req_data_text);
-
     if(!_pcf_app_session_change_callback_call(sess, false))
     {
         ogs_error("AppSessionContext change callback failed");
