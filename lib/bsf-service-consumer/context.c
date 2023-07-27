@@ -406,7 +406,7 @@ static void __active_sessions_log_debug(int indent)
     if (!__self) return;
 
     ogs_list_for_each(&__self->active_sessions_list, node) {
-        if (sep) ogs_debug(sep);
+        if (sep) ogs_debug("%s", sep);
         _bsf_client_sess_log_debug(node->sess, indent);
         sep = "---------------------";
     }
