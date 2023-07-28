@@ -166,9 +166,7 @@ void pcf_policyauthorization_create(
     OpenAPI_app_session_context_req_data_t *AscReqData = NULL;
 
     cJSON *app_sess_context;
-    cJSON *asc_req_data;
     char *app_sess_context_text;
-    char *asc_req_data_text;
 
     uint64_t supported_features = 0;
 
