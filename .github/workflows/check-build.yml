@@ -1,0 +1,23 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: prerequisites
+      run: sudo apt-get -y install git ninja-build build-essential flex bison libsctp-dev libgnutls28-dev libgcrypt-dev libssl-dev libidn11-dev libmongoc-dev libbson-dev libyaml-dev libnghttp2-dev libmicrohttpd-dev libcurl4-gnutls-dev libnghttp2-dev libtins-dev libtalloc-dev meson
+    - name: configure
+      run: meson setup --prefix="$GITHUB_WORKSPACE/install" "$GITHUB_WORKSPACE/build"
+    - name: make
+      run: ninja -C "$GITHUB_WORKSPACE/build"
+    - name: test installation
+      run: ninja -C "$GITHUB_WORKSPACE/build" install
