@@ -84,7 +84,7 @@ ninja -C build
 To install the built libraries and tools:
 
 ```bash
-cd ~/rt-5gc-service-consumers
+cd ~/rt-5gc-service-consumers/build
 sudo meson install --no-rebuild
 ```
 
