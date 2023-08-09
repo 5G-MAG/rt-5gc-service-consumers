@@ -29,7 +29,7 @@ This library implements the service consumer end of the following service-based 
 
 ### `libscpcf` - Policy Control Function (PCF) service consumer library
 
-The Policy Control Function (PCF) is responsible for applying charging and network policy to the PDU sessions of UEs. The *Npcf_PolicyAuthorization* service API is used at refernece point N5 by an Application Function (AF) to request policy changes to the PDU session on behalf of the UE. This allows an Application Function to manipulate particular network QoS parameters for selected IP traffic flows within the PDU session.
+The Policy Control Function (PCF) is responsible for applying charging and network policy to the PDU sessions of UEs. The *Npcf_PolicyAuthorization* service API is used at reference point N5 by an Application Function (AF) to request policy changes to the PDU session on behalf of the UE. This allows an Application Function to manipulate particular network QoS parameters for selected IP traffic flows within the PDU session.
 
 The `libscpcf` library allows an application to connect to a PCF and request an `AppSessionContext` which it can then use to manipulate the network routing policies for traffic passing across specific application flows within a UE's PDU Session.
 
@@ -51,7 +51,7 @@ The PCF address can be explicitly specified at the command line if this is alrea
 To build and use the service consumer libraries and accompanying command line tools, you will need to install the following packages:
 
 ```bash
-sudo apt install git ninja-build build-essential flex bison libsctp-dev libgnutls28-dev libgcrypt-dev libssl-dev libidn11-dev libmongoc-dev libbson-dev libyaml-dev libnghttp2-dev libmicrohttpd-dev libcurl4-gnutls-dev libnghttp2-dev libtins-dev libtalloc-dev meson
+sudo apt install git ninja-build build-essential flex bison libsctp-dev libgnutls28-dev libgcrypt-dev libssl-dev libidn11-dev libmongoc-dev libbson-dev libyaml-dev libnghttp2-dev libmicrohttpd-dev libcurl4-gnutls-dev libnghttp2-dev libtins-dev libtalloc-dev meson cmake
 ```
 
 ## Downloading
@@ -69,7 +69,7 @@ git clone --recurse-submodules https://github.com/5G-MAG/rt-5gc-service-consumer
 
 ## Building
 
-The build process requires a working Internet connection as project dependancies are downloaded during the build.
+The build process requires a working Internet connection as project dependencies are downloaded during the build.
 
 To build the libraries and tools from the source:
 
@@ -84,7 +84,7 @@ ninja -C build
 To install the built libraries and tools:
 
 ```bash
-cd ~/rt-5gc-service-consumers
+cd ~/rt-5gc-service-consumers/build
 sudo meson install --no-rebuild
 ```
 
