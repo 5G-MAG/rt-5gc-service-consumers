@@ -58,7 +58,7 @@ sudo apt install git ninja-build build-essential flex bison libsctp-dev libgnutl
 
 Release tar files can be downloaded from <https://github.com/5G-MAG/rt-5gc-service-consumers/releases>.
 
-The source can be obtained by cloning the github repository.
+The source can be obtained by cloning the GitHub repository.
 
 For example, to download the latest release you can use:
 
