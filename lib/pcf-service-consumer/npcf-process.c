@@ -64,7 +64,7 @@ bool _pcf_process_event(ogs_event_t *e)
 
                 rv = ogs_sbi_parse_header(&message, &request->h);
                 if (rv != OGS_OK) {
-                    ogs_error("Failed to parse response");
+                    ogs_error("Failed to parse request headers");
                     ogs_sbi_message_free(&message);
                     break;
                 }
@@ -112,6 +112,8 @@ bool _pcf_process_event(ogs_event_t *e)
                                                 } else {
                                                     ogs_sbi_response_t *response;
 
+                                                    ogs_debug("Sending PCF notification to callback");
+
                                                     /* do notification callbacks */
                                                     _pcf_app_session_notifications_callback_call(app_session, notifications);
 
@@ -121,29 +123,71 @@ bool _pcf_process_event(ogs_event_t *e)
                                                     ogs_assert(true == ogs_sbi_server_send_response(stream, response));
                                                 }
                                                 cJSON_Delete(json);
-                                                ogs_sbi_message_free(&message);
-                                                ogs_sbi_request_free(request);
-                                                return true;
+                                            } else {
+                                                char *err = ogs_msprintf("Unknown notification operation \"%s\"",
+                                                                         message.h.resource.component[2]);
+                                                ogs_error("%s", err);
+                                                ogs_assert(true == ogs_sbi_server_send_error(stream,
+                                                           OGS_SBI_HTTP_STATUS_BAD_REQUEST,
+                                                           &message, "Bad content", err));
+                                                ogs_free(err);
                                             }
+                                        } else {
+                                            char *err = ogs_msprintf("Session instance %p does not exist", app_session);
+                                            ogs_warn("%s", err);
+                                            ogs_assert(true == ogs_sbi_server_send_error(stream, OGS_SBI_HTTP_STATUS_NOT_FOUND,
+                                                       &message, "Not found", err));
+                                            ogs_free(err);
                                         }
+                                    } else {
+                                        char *err = ogs_msprintf("Bad session instance id \"%s\"", message.h.resource.component[1]);
+                                        ogs_error("%s", err);
+                                        ogs_assert(true == ogs_sbi_server_send_error(stream, OGS_SBI_HTTP_STATUS_BAD_REQUEST,
+                                                   &message, "Bad request", err));
+                                        ogs_free(err);
                                     }
+                                } else {
+                                    static const char *err = "App session id missing from PCF notification";
+                                    ogs_error("%s", err);
+                                    ogs_assert(true == ogs_sbi_server_send_error(stream,
+                                               OGS_SBI_HTTP_STATUS_BAD_REQUEST,
+                                               &message, "Missing path value", err));
                                 }
                                 break;
                             DEFAULT
+                                char *err = ogs_msprintf("Unknown object type \"%s\" in PCF notification",
+                                                         message.h.resource.component[0]);
+                                ogs_error("%s", err);
+                                ogs_assert(true == ogs_sbi_server_send_error(stream,
+                                           OGS_SBI_HTTP_STATUS_BAD_REQUEST,
+                                           &message, "Bad request", err));
+                                ogs_free(err);
                             END
+                        } else {
+                            static const char *err = "Object type missing from PCF notification";
+                            ogs_error("%s", err);
+                            ogs_assert(true == ogs_sbi_server_send_error(stream,
+                                       OGS_SBI_HTTP_STATUS_BAD_REQUEST,
+                                       &message, "Missing path value", err));
                         }
                         break;
                     DEFAULT
+                        char *err = ogs_msprintf("Unknown service name \"%s\" in PCF notification", message.h.service.name);
+                        ogs_error("%s", err);
+                        ogs_assert(true == ogs_sbi_server_send_error(stream, OGS_SBI_HTTP_STATUS_BAD_REQUEST,
+                                   &message, "Bad request", err));
+                        ogs_free(err);
                     END
+                } else {
+                    static const char *err = "Missing service name from URL path";
+                    ogs_error("%s", err);
+                    ogs_assert(true == ogs_sbi_server_send_error(stream,
+                               OGS_SBI_HTTP_STATUS_BAD_REQUEST,
+                               &message, "Missing service name", err));
                 }
                 ogs_sbi_message_free(&message);
-                /* ogs_sbi_parse_header leaves allocated strings in the request->h that we need to free */
-                {
-                    char *method = request->h.method; /* save this */
-                    request->h.method = NULL;
-                    ogs_sbi_header_free(&request->h);
-                    request->h.method = method;
-                }
+                ogs_sbi_request_free(request);
+                return true;
             }
             break;
         case OGS_EVENT_SBI_CLIENT:
