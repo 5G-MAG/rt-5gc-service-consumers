@@ -62,6 +62,7 @@ bool _bsf_client_local_process_event(ogs_event_t *e)
                 _bsf_client_sess_discover_and_send(sess);
                 break;
             default:
+                break;
         }
         return true;
     }

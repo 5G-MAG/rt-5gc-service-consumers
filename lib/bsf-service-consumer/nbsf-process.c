@@ -195,6 +195,7 @@ bool _bsf_process_event(ogs_event_t *e)
         case BSF_CLIENT_LOCAL_EVENT:
             return _bsf_client_local_process_event(e);
         default:
+            break;
     }
 
     return false;    
