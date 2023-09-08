@@ -105,14 +105,11 @@ int merge_event_subsc_to_app_session_context(pcf_app_session_t *app_session, Ope
 	OpenAPI_list_for_each(evt_subsc_req->events, node1){ 
 	    Event_from_subsc = node1->data;
 	    if(strcmp(OpenAPI_npcf_af_event_ToString(Event->event), OpenAPI_npcf_af_event_ToString(Event_from_subsc->event)) || strcmp(OpenAPI_af_notif_method_ToString(Event->notif_method), OpenAPI_af_notif_method_ToString(Event_from_subsc->notif_method))) {
-	        Event_to_add = ogs_calloc(1, sizeof(*Event_to_add));
+                Event_to_add = OpenAPI_af_event_subscription_copy(NULL, Event_from_subsc);
                 ogs_assert(Event_to_add);
-                Event_to_add = OpenAPI_af_event_subscription_copy(Event_to_add, Event_from_subsc);
                 OpenAPI_list_add(app_session->pcf_app_session_context_requested->asc_req_data->ev_subsc->events, Event_to_add);
 		merged_events++;
-
 	    }
-
 	}
     }
     return merged_events;	
@@ -131,10 +128,8 @@ void merge_evt_subsc_to_app_session_context(pcf_app_session_t *app_session,
     OpenAPI_list_for_each(evt_subsc_req->events, node) {
         Event = node->data;
         if (Event) {
-
-            Event_from_subsc = ogs_calloc(1, sizeof(*Event_from_subsc));
+	    Event_from_subsc = OpenAPI_af_event_subscription_copy(NULL, Event);
             ogs_assert(Event_from_subsc);
-	    Event_from_subsc = OpenAPI_af_event_subscription_copy(Event_from_subsc, Event);
 	    OpenAPI_list_add(evSubsc->events, Event_from_subsc);
 	}
     }
@@ -170,8 +165,6 @@ bool _pcf_client_requested_app_sess_context_set(pcf_app_session_t *sess, OpenAPI
         } 
     }
 
-    if(sess->pcf_app_session_context_requested) OpenAPI_app_session_context_free(sess->pcf_app_session_context_requested);
-    
     sess->pcf_app_session_context_requested = OpenAPI_app_session_context_copy(sess->pcf_app_session_context_requested, AppSessionContext);
     
     if(!sess->pcf_app_session_context_requested) return false;
@@ -197,7 +190,6 @@ bool _pcf_client_received_app_sess_context_set(pcf_app_session_t *sess, OpenAPI_
         } 
         return false;
     }
-    if(sess->pcf_app_session_context_received) OpenAPI_app_session_context_free(sess->pcf_app_session_context_received);
     sess->pcf_app_session_context_received = OpenAPI_app_session_context_copy(sess->pcf_app_session_context_received, AppSessionContext);
     if(!sess->pcf_app_session_context_received) return false;
 
@@ -215,8 +207,6 @@ bool _pcf_client_app_sess_context_updates_set(pcf_app_session_t *sess, OpenAPI_a
         }
         return false;
     }
-    if(sess->pcf_app_session_context_updates)
-        OpenAPI_app_session_context_update_data_patch_free(sess->pcf_app_session_context_updates);
     sess->pcf_app_session_context_updates = OpenAPI_app_session_context_update_data_patch_copy(sess->pcf_app_session_context_updates, AppSessionContext);
     if(!sess->pcf_app_session_context_updates) return false;
     return true;
@@ -233,7 +223,6 @@ bool _pcf_client_app_sess_context_received_updates_set(pcf_app_session_t *sess, 
         }
         return false;
     }
-    if(sess->pcf_app_session_context_updates_received) OpenAPI_app_session_context_update_data_patch_free(sess->pcf_app_session_context_updates_received);
     sess->pcf_app_session_context_updates_received = OpenAPI_app_session_context_update_data_patch_copy(sess->pcf_app_session_context_updates_received, AppSessionContext);
     if(!sess->pcf_app_session_context_updates_received) return false;
 
