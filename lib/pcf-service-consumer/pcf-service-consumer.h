@@ -170,9 +170,9 @@ PCF_SVC_CONSUMER_API bool pcf_session_create_app_session(pcf_session_t *session,
  * Update the MediaComponents for an AppSessionContext
  *
  * @param sess The AppSessionContext to update the MediaComponents for.
- * @param media_component The map of MediaComponent entries for the update.
+ * @param media_component The map of MediaComponentRm entries for the update.
  */
-PCF_SVC_CONSUMER_API bool pcf_session_update_app_session(pcf_app_session_t *sess, OpenAPI_list_t *media_component);
+PCF_SVC_CONSUMER_API bool pcf_session_update_app_session(pcf_app_session_t *sess, OpenAPI_list_t *media_component_rm_map);
 
 /**
  * Release an AppSessionContext
