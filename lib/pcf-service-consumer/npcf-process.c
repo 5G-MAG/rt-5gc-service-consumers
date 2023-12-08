@@ -291,8 +291,13 @@ bool _pcf_process_event(ogs_event_t *e)
                 ogs_debug("App shutting down client request aborted - destroying app session");
                 if (sess) pcf_app_sess_remove(sess);
                 break;
+            case OGS_TIMEUP:
+                /* Client request took too long - leave state */
+                ogs_warn("Timeout connecting to the client - app session unchanged");
+                break;
             default:
                 /* Some other error happened - client request failed */
+                ogs_debug("OGS_EVENT_SBI_CLIENT: SBI client response state = %i", e->sbi.state);
                 if (response) {
                     ogs_error("Problem with %s %s request", response->h.method, response->h.uri);
                 } else {
