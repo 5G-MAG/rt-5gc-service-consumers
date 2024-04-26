@@ -1,6 +1,9 @@
-# 5G Core Service Consumers
-
-This is a set of service consumer libraries and testing tools for communicating with 5G Core Network Functions.
+<h1 align="center">5G Core Service Consumers</h1>
+<p align="center">
+  <img src="https://img.shields.io/badge/Status-Under_Development-yellow" alt="Under Development">
+  <img src="https://img.shields.io/github/v/tag/5G-MAG/rt-5gc-service-consumers?label=version" alt="Version">
+  <img src="https://img.shields.io/badge/License-5G--MAG%20Public%20License%20(v1.0)-blue" alt="License">
+</p>
 
 ## Introduction
 
@@ -8,9 +11,7 @@ The 5G Core presents several Network Functions, each of which has its own set of
 
 In addition, command line tools are provided to demonstrate the use of these service consumer libraries.
 
-### Relevant specifications
-
-A list of specification related to this repository is available in the [Standards Wiki](https://github.com/5G-MAG/Standards/wiki/5G-Downlink-Media-Streaming-Architecture-(5GMSd):-Relevant-Specifications).
+Additional information can be found at: https://5g-mag.github.io/Getting-Started/pages/5g-core-network-components/
 
 ### About the implementation
 
