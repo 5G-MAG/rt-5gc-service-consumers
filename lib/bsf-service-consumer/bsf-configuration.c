@@ -130,9 +130,9 @@ ogs_sockaddr_t *_bsf_configuration_get_bsf_address(bsf_configuration_t *config)
         ogs_assert(ogs_addaddrinfo(&addr, AF_UNSPEC, node->addr, node->port, 0) == OGS_OK);
     } else {
         if (config->discovered_bsf_nf_instance) {
-            if (config->discovered_bsf_nf_instance->num_of_ipv6 > 0 && ogs_app()->parameter.no_ipv6 == 0) {
+            if (config->discovered_bsf_nf_instance->num_of_ipv6 > 0 /*&& ogs_app()->parameter.no_ipv6 == 0*/) {
                 ogs_copyaddrinfo(&addr, config->discovered_bsf_nf_instance->ipv6[0]);
-            } else if (config->discovered_bsf_nf_instance->num_of_ipv4 > 0 && ogs_app()->parameter.no_ipv4 == 0) {
+            } else if (config->discovered_bsf_nf_instance->num_of_ipv4 > 0 /*&& ogs_app()->parameter.no_ipv4 == 0*/) {
                 ogs_copyaddrinfo(&addr, config->discovered_bsf_nf_instance->ipv4[0]);
             }
         }

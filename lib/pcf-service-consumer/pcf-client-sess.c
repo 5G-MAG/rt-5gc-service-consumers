@@ -300,7 +300,7 @@ ogs_sbi_server_t *_pcf_session_get_notifications_server(pcf_session_t *pcf_sessi
         } else if (sock->local_addr.ogs_sa_family == AF_INET6) {
             sock->local_addr.sin6.sin6_port = 0;
         }
-        pcf_session->notif_server = ogs_sbi_server_add(&sock->local_addr, NULL);
+        pcf_session->notif_server = ogs_sbi_server_add(NULL /*interface*/, OpenAPI_uri_scheme_http, &sock->local_addr, NULL);
 
         ogs_sbi_server_actions.start(pcf_session->notif_server, ogs_sbi_server_handler);
 

@@ -7,3 +7,4 @@
 # https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
 
 subdir('pcf-policyauthorization')
+subdir('mbs-service-tool')

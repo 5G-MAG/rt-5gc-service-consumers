@@ -267,19 +267,11 @@ static ogs_sbi_client_t *find_client_by_fqdn(
                 scheme == OpenAPI_uri_scheme_http);
     ogs_assert(fqdn);
 
-    rv = ogs_getaddrinfo(
-            &addr, AF_UNSPEC, fqdn,
-            scheme == OpenAPI_uri_scheme_https ?
-                OGS_SBI_HTTPS_PORT : OGS_SBI_HTTP_PORT,
-            0);
-    if (rv != OGS_OK) {
-        ogs_error("Invalid NFProfile.fqdn");
-        return NULL;
-    }
-
-    client = ogs_sbi_client_find(scheme, addr);
+    client = ogs_sbi_client_find(scheme, fqdn, scheme == OpenAPI_uri_scheme_https ?
+                                                OGS_SBI_HTTPS_PORT : OGS_SBI_HTTP_PORT, NULL, NULL);
     if (!client) {
-        client = ogs_sbi_client_add(scheme, addr);
+        client = ogs_sbi_client_add(scheme, fqdn, scheme == OpenAPI_uri_scheme_https ?
+                                                    OGS_SBI_HTTPS_PORT : OGS_SBI_HTTP_PORT, NULL, NULL);
         ogs_assert(client);
     }
 
@@ -296,8 +288,12 @@ void bsf_test_sess_associate_pcf_client(bsf_test_sess_t *sess)
 
     ogs_assert(sess);
 
+#if 0
     scheme = ogs_app()->sbi.client.no_tls == false ?
                 OpenAPI_uri_scheme_https : OpenAPI_uri_scheme_http;
+#else
+    scheme = OpenAPI_uri_scheme_http;
+#endif
 
     if (sess->pcf.fqdn && strlen(sess->pcf.fqdn))
         client = find_client_by_fqdn(scheme, sess->pcf.fqdn);
@@ -311,9 +307,11 @@ void bsf_test_sess_associate_pcf_client(bsf_test_sess_t *sess)
         }
 
         if (addr) {
-            client = ogs_sbi_client_find(scheme, addr);
+            client = ogs_sbi_client_find(scheme, NULL, 0, (addr->ogs_sa_family==AF_INET)?addr:NULL,
+                                         (addr->ogs_sa_family==AF_INET6)?addr:NULL);
             if (!client) {
-                client = ogs_sbi_client_add(scheme, addr);
+                client = ogs_sbi_client_add(scheme, NULL, 0, (addr->ogs_sa_family==AF_INET)?addr:NULL,
+                                            (addr->ogs_sa_family==AF_INET6)?addr:NULL);
                 ogs_assert(client);
             }
         }

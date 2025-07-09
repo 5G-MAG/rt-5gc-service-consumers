@@ -35,7 +35,8 @@ bool _bsf_process_event(ogs_event_t *e)
             int rv;
             ogs_sbi_response_t *response = e->sbi.response;
             ogs_sbi_message_t message;
-            ogs_sbi_xact_t *xact = (ogs_sbi_xact_t*)e->sbi.data;
+            ogs_pool_id_t xact_id = OGS_POINTER_TO_UINT(e->sbi.data);
+            ogs_sbi_xact_t *xact = ogs_sbi_xact_find_by_id(xact_id);
             bsf_client_sess_t *sess;
  
             if (!xact) return false;
@@ -166,7 +167,8 @@ bool _bsf_process_event(ogs_event_t *e)
             case OGS_TIMER_SBI_CLIENT_WAIT:
             {
                 /* NRF connection may have timed out */
-                ogs_sbi_xact_t *xact = (ogs_sbi_xact_t*)e->sbi.data;
+                ogs_pool_id_t xact_id = OGS_POINTER_TO_UINT(e->sbi.data);
+                ogs_sbi_xact_t *xact = ogs_sbi_xact_find_by_id(xact_id);
                 bsf_client_sess_t *sess;
                 char *ip;
 

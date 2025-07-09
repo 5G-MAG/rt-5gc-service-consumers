@@ -9,3 +9,4 @@
 
 subdir('bsf-service-consumer')
 subdir('pcf-service-consumer')
+subdir('mb-smf-service-consumer')

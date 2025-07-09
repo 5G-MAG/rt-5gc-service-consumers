@@ -26,7 +26,10 @@ pcf_session_t *pcf_session_new(const ogs_sockaddr_t *pcf_address)
         return NULL;
     }
     ogs_copyaddrinfo(&pcf_session->pcf_addr, pcf_address);
-    pcf_session->client = ogs_sbi_client_add(scheme, pcf_session->pcf_addr);
+    
+    pcf_session->client = ogs_sbi_client_add(scheme, NULL /*pcf_session->pcf_addr.fqdn*/, 0 /*port_num*/,
+                                             (pcf_session->pcf_addr->ogs_sa_family == AF_INET)?pcf_session->pcf_addr:NULL,
+                                             (pcf_session->pcf_addr->ogs_sa_family == AF_INET6)?pcf_session->pcf_addr:NULL);
     if(!pcf_session->client) {
 	ogs_freeaddrinfo(pcf_session->pcf_addr);
 	ogs_free(pcf_session);

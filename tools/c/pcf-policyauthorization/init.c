@@ -230,24 +230,44 @@ void pcf_policyauth_get_app_session_context(void)
         OpenAPI_list_add(media_sub_comp_list, media_sub_comp_map);
     }
 
-    media_comp = OpenAPI_media_component_create(NULL /* afAppId */, NULL /* afRoutReq */, NULL /* qosReference */,
-            false /* have disUeNotif */, 0 /* disUeNotif */, NULL /* altSerReqs */, NULL /* altSerReqsData */,
-            false /* have contVer */, 0 /* contVer */, NULL /* codecs */, false /* have desMaxLatency */, 0.0 /* desMaxLatency */,
-            false /* have desMaxLoss */, 0.0 /* desMaxLoss */, NULL /* flusId */, OpenAPI_flow_status_NULL /* fStatus */,
+    media_comp = OpenAPI_media_component_create(
+            NULL /* afAppId */,
+            NULL /* afRoutReq */,
+            NULL /* qosReference */,
+            false /* have disUeNotif */, 0 /* disUeNotif */,
+            NULL /* altSerReqs */,
+            NULL /* altSerReqsData */,
+            false /* have contVer */, 0 /* contVer */,
+            NULL /* codecs */,
+            false /* have desMaxLatency */, 0.0 /* desMaxLatency */,
+            false /* have desMaxLoss */, 0.0 /* desMaxLoss */,
+            NULL /* flusId */,
+            OpenAPI_flow_status_NULL /* fStatus */,
             _bw_string(g_app_context->options->max_dl_bit_rate) /* marBwDl */,
             _bw_string(g_app_context->options->max_ul_bit_rate) /* marBwUl */,
-            false /* have maxPacketLossRateDl */, 0 /* maxPacketLossRateDl */,
-            false /* have maxPacketLossRateUl */, 0 /* maxPacketLossRateUl */,
-            NULL /* maxSuppBwDl */, NULL /* maxSuppBwUl */,
-            0 /* medCompN (map key) */, media_sub_comp_list /* medSubComps */, g_app_context->options->media_type /* medType */,
-            NULL /* minDesBwDl */, NULL /* minDesBwUl */,
+            false /* maxPacketLossRateDl is null */, false /* have maxPacketLossRateDl */, 0 /* maxPacketLossRateDl */,
+            false /* maxPacketLossRateUl is null */, false /* have maxPacketLossRateUl */, 0 /* maxPacketLossRateUl */,
+            NULL /* maxSuppBwDl */,
+            NULL /* maxSuppBwUl */,
+            0 /* medCompN (map key) */,
+            media_sub_comp_list /* medSubComps */,
+            g_app_context->options->media_type /* medType */,
+            NULL /* minDesBwDl */,
+            NULL /* minDesBwUl */,
             _bw_string(g_app_context->options->min_dl_bit_rate) /* mirBwDl */,
             _bw_string(g_app_context->options->min_ul_bit_rate) /* mirBwUl */,
-            OpenAPI_preemption_capability_NULL /* preemptCap */, OpenAPI_preemption_vulnerability_NULL /* preemtVuln */,
-            OpenAPI_priority_sharing_indicator_NULL /* prioSharingInd */, OpenAPI_reserv_priority_NULL /* resPrio */,
-            NULL /* rrBw */, NULL /* rsBw */, false /* have sharingKeyDl */, 0 /* sharingKeyDl */,
-            false /* have sharingKeyUl */, 0 /* sharingKeyUl */, NULL /* tsnQos */, NULL /* tscaiInputDl */,
-            NULL /* tscaiInputUl */, false /* have tscaiTimeDom */, 0 /* tscaiTimeDom */);
+            OpenAPI_preemption_capability_NULL /* preemptCap */,
+            OpenAPI_preemption_vulnerability_NULL /* preemtVuln */,
+            OpenAPI_priority_sharing_indicator_NULL /* prioSharingInd */,
+            OpenAPI_reserv_priority_NULL /* resPrio */,
+            NULL /* rrBw */,
+            NULL /* rsBw */,
+            false /* have sharingKeyDl */, 0 /* sharingKeyDl */,
+            false /* have sharingKeyUl */, 0 /* sharingKeyUl */,
+            NULL /* tsnQos */,
+            false /* tscaiInputDl is null */, NULL /* tscaiInputDl */,
+            false /* tscaiInputUl is null */, NULL /* tscaiInputUl */,
+            false /* have tscaiTimeDom */, 0 /* tscaiTimeDom */);
 
     media_comp_map = OpenAPI_map_create(ogs_msprintf("%i", media_comp->med_comp_n), media_comp);
     ogs_assert(media_comp_map);
@@ -301,16 +321,24 @@ static void _write_app_yaml_config()
 {
     int fd;
     static const char config_hdr[] =
-        "pcf-policyauth:\n"
-        "  discovery:\n"
-        "    delegated: auto\n"
+        "global:\n"
+        "  max:\n"
+        "    ue: 64\n"
         "\n"
         "sbi:\n"
         "  server:\n"
         "    no_tls: true\n"
         "  client:\n"
         "    no_tls: true\n"
-        "\n";
+        "\n"
+        "pcf-policyauth:\n"
+        "  discovery:\n"
+        "    delegated: auto\n"
+        "  sbi:\n"
+        "    server:\n"
+        "      - address: 127.0.0.1\n"
+        "        port: 0\n"
+        ;
     const char *tmpdir;
 
     tmpdir = ogs_env_get("TMPDIR");
@@ -331,11 +359,9 @@ static void _write_app_yaml_config()
 
     if (g_app_context->options->nrf_address) {
         dprintf(fd,
-                "nrf:\n"
-                "  sbi:\n"
-                "    - addr:\n"
-                "      - %s\n"
-                "      port: %i\n"
+                "    client:\n"
+                "      nrf:\n"
+                "        - uri: http://%s:%i\n"
                 "\n", g_app_context->options->nrf_address, g_app_context->options->nrf_port);
     }
 

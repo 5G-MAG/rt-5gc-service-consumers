@@ -1,0 +1,69 @@
+#ifndef _MB_SMF_MBS_SESSION_H_
+#define _MB_SMF_MBS_SESSION_H_
+/*****************************************************************************
+ * License: 5G-MAG Public License (v1.0)
+ * Copyright: (C) 2025 British Broadcasting Corporation
+ * Author(s): David Waring <david.waring2@bbc.co.uk>
+ *
+ * For full license terms please see the LICENSE file distributed with this
+ * program. If this file is missing then the license can be retrieved from
+ * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
+ */
+#include <netinet/in.h>
+
+#include "ogs-core.h"
+#include "ogs-proto.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Forward declarations */
+typedef struct mb_smf_sc_mbs_status_subscription_s mb_smf_sc_mbs_status_subscription_t;
+
+/* Data types */
+typedef struct mb_smf_sc_ssm_addr_s {
+    int family;
+    union {
+        struct in_addr ipv4;
+        struct in6_addr ipv6;
+    } source;
+    union {
+        struct in_addr ipv4;
+        struct in6_addr ipv6;
+    } dest_mc;
+} mb_smf_sc_ssm_addr_t;
+
+typedef struct mb_smf_sc_tmgi_s {
+    char *mbs_service_id;
+    ogs_plmn_id_t plmn;
+} mb_smf_sc_tmgi_t;
+
+typedef struct mb_smf_sc_mbs_session_s {
+    mb_smf_sc_ssm_addr_t *ssm;         /* SSM for this session, NULL if no SSM assigned */
+    mb_smf_sc_tmgi_t *tmgi;            /* TMGI for this session, NULL if no TMGI assigned */
+    ogs_sockaddr_t *mb_upf_udp_tunnel; /* Tunnel address assigned by the MB-UPF for this session */
+    bool tunnel_req;                   /* Tunnel required, true to ask the MB-SMF for a UDP tunnel if mb_upf_udp_tunnel is NULL */
+    ogs_hash_t *subscriptions;         /* list of mb_smf_sc_mbs_status_subscription_t indexed by their id */
+} mb_smf_sc_mbs_session_t;
+
+/* Type functions */
+MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session();
+MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv4(const struct in_addr *source, const struct in_addr *dest);
+MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv6(const struct in6_addr *source, const struct in6_addr *dest);
+
+MB_SMF_CLIENT_API void mb_smf_sc_mbs_session_delete(mb_smf_sc_mbs_session_t *);
+
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_add_subscription(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_status_subscription_t *subscription);
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_remove_subscription(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_status_subscription_t *subscription);
+
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_changes(mb_smf_sc_mbs_session_t *);
+
+#ifdef __cplusplus
+}
+#endif
+
+/* vim:ts=8:sts=4:sw=4:expandtab:
+ */
+
+#endif /* _MB_SMF_MBS_SESSION_H_ */

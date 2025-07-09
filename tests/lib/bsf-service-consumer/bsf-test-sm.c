@@ -57,6 +57,7 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
     ogs_sbi_response_t *response = NULL;
     ogs_sbi_message_t message;
     ogs_sbi_xact_t *sbi_xact = NULL;
+    ogs_pool_id_t sbi_xact_id = 0;
 
     bsf_test_sm_debug(e);
 
@@ -87,7 +88,7 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
             ogs_assert(true ==
                 ogs_sbi_server_send_error(
                     stream, OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                    NULL, "cannot parse HTTP sbi_message", NULL));
+                    NULL, "cannot parse HTTP sbi_message", NULL, NULL));
             break;
         }
 
@@ -98,7 +99,7 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
             ogs_assert(true ==
                 ogs_sbi_server_send_error(
                     stream, OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                    &message, "Not supported version", NULL));
+                    &message, "Not supported version", NULL, NULL));
             ogs_sbi_message_free(&message);
             break;
         }
@@ -118,7 +119,7 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
                     ogs_assert(true ==
                         ogs_sbi_server_send_error(stream,
                             OGS_SBI_HTTP_STATUS_FORBIDDEN, &message,
-                            "Invalid HTTP method", message.h.method));
+                            "Invalid HTTP method", message.h.method, NULL));
                 END
                 break;
 
@@ -129,7 +130,7 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
                     ogs_sbi_server_send_error(stream,
                         OGS_SBI_HTTP_STATUS_BAD_REQUEST, &message,
                         "Invalid resource name",
-                        message.h.resource.component[0]));
+                        message.h.resource.component[0], NULL));
             END
             break;
 
@@ -145,7 +146,7 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
                         ogs_sbi_server_send_error(stream,
                             OGS_SBI_HTTP_STATUS_NOT_FOUND,
                             &message, "Not found",
-                            message.h.resource.component[1]));
+                            message.h.resource.component[1], NULL));
                     break;
                 }
 
@@ -158,7 +159,7 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
                         ogs_sbi_server_send_error(stream,
                             OGS_SBI_HTTP_STATUS_NOT_FOUND,
                             &message, "Not found",
-                            message.h.resource.component[1]));
+                            message.h.resource.component[1], NULL));
                     break;
                 }
 
@@ -175,7 +176,7 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
                         ogs_sbi_server_send_error(stream,
                             OGS_SBI_HTTP_STATUS_BAD_REQUEST, &message,
                             "Invalid resource name",
-                            message.h.resource.component[2]));
+                            message.h.resource.component[2], NULL));
                 END
                 break;
             DEFAULT
@@ -185,7 +186,7 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
                     ogs_sbi_server_send_error(stream,
                         OGS_SBI_HTTP_STATUS_BAD_REQUEST, &message,
                         "Invalid resource name",
-                        message.h.resource.component[0]));
+                        message.h.resource.component[0], NULL));
             END
             break;
 
@@ -194,7 +195,7 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
             ogs_assert(true ==
                 ogs_sbi_server_send_error(stream,
                     OGS_SBI_HTTP_STATUS_BAD_REQUEST, &message,
-                    "Invalid API name", message.h.service.name));
+                    "Invalid API name", message.h.service.name, NULL));
         END
 
         /* In lib/sbi/server.c, notify_completed() releases 'request' buffer. */
@@ -293,8 +294,14 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
         CASE(OGS_SBI_SERVICE_NAME_NNRF_DISC)
             SWITCH(message.h.resource.component[0])
             CASE(OGS_SBI_RESOURCE_NAME_NF_INSTANCES)
-                sbi_xact = e->h.sbi.data;
-                ogs_assert(sbi_xact);
+                sbi_xact_id = OGS_POINTER_TO_UINT(e->h.sbi.data);
+                ogs_assert(sbi_xact_id >= OGS_MIN_POOL_ID && sbi_xact_id <= OGS_MAX_POOL_ID);
+
+                sbi_xact = ogs_sbi_xact_find_by_id(sbi_xact_id);
+                if (!sbi_xact) {
+                    ogs_error("Response already dealt with");
+                    break;
+                }
 
                 SWITCH(message.h.method)
                 CASE(OGS_SBI_HTTP_METHOD_GET)
@@ -324,10 +331,10 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
 	    	
 		ogs_debug("Got OGS_SBI_RESOURCE_NAME_PCF_BINDINGS method: %s %d", message.h.method, message.res_status);
 
-                sbi_xact = e->h.sbi.data;
-                ogs_assert(sbi_xact);
+                sbi_xact_id = OGS_POINTER_TO_UINT(e->h.sbi.data);
+                ogs_assert(sbi_xact_id >= OGS_MIN_POOL_ID && sbi_xact_id <= OGS_MAX_POOL_ID);
 
-                sbi_xact = ogs_sbi_xact_cycle(sbi_xact);
+                sbi_xact = ogs_sbi_xact_find_by_id(sbi_xact_id);
                 if (!sbi_xact) {
                     /* CLIENT_WAIT timer could remove SBI transaction
                      * before receiving SBI message */
@@ -501,13 +508,14 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
              * To avoid double-free SBI xact,
              * we need to check ogs_sbi_xact_cycle()
              */
-            sbi_xact = ogs_sbi_xact_cycle(e->h.sbi.data);
+            sbi_xact_id = OGS_POINTER_TO_UINT(e->h.sbi.data);
+            sbi_xact = ogs_sbi_xact_find_by_id(sbi_xact_id);
             if (!sbi_xact) {
                 ogs_error("SBI transaction has already been removed");
                 break;
             }
 
-            stream = sbi_xact->assoc_stream;
+            stream = ogs_sbi_stream_find_by_id(sbi_xact->assoc_stream_id);
             /* Here, we should not use ogs_assert(stream)
              * since 'namf-comm' service has no an associated stream. */
 
@@ -518,7 +526,7 @@ static void bsf_test_state_operational(ogs_fsm_t *s, bsf_test_event_t *e)
                 ogs_assert(true ==
                     ogs_sbi_server_send_error(stream,
                         OGS_SBI_HTTP_STATUS_GATEWAY_TIMEOUT, NULL,
-                        "Cannot receive SBI message", NULL));
+                        "Cannot receive SBI message", NULL, NULL));
             }
             break;
 

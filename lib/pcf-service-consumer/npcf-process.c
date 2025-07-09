@@ -98,7 +98,7 @@ bool _pcf_process_event(ogs_event_t *e)
                                                     ogs_error("%s", error);
                                                     ogs_assert(true == ogs_sbi_server_send_error(stream,
                                                                 OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                                                &message, "Bad content", error));
+                                                                &message, "Bad content", error, NULL));
                                                     break;
                                                 }
                                                 notifications = OpenAPI_events_notification_parseFromJSON(json);
@@ -108,7 +108,7 @@ bool _pcf_process_event(ogs_event_t *e)
                                                     ogs_error("%s", error);
                                                     ogs_assert(true == ogs_sbi_server_send_error(stream,
                                                                 OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                                                &message, "Bad content", error));
+                                                                &message, "Bad content", error, NULL));
                                                 } else {
                                                     ogs_sbi_response_t *response;
 
@@ -129,21 +129,21 @@ bool _pcf_process_event(ogs_event_t *e)
                                                 ogs_error("%s", err);
                                                 ogs_assert(true == ogs_sbi_server_send_error(stream,
                                                            OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                                           &message, "Bad content", err));
+                                                           &message, "Bad content", err, NULL));
                                                 ogs_free(err);
                                             }
                                         } else {
                                             char *err = ogs_msprintf("Session instance %p does not exist", app_session);
                                             ogs_warn("%s", err);
                                             ogs_assert(true == ogs_sbi_server_send_error(stream, OGS_SBI_HTTP_STATUS_NOT_FOUND,
-                                                       &message, "Not found", err));
+                                                       &message, "Not found", err, NULL));
                                             ogs_free(err);
                                         }
                                     } else {
                                         char *err = ogs_msprintf("Bad session instance id \"%s\"", message.h.resource.component[1]);
                                         ogs_error("%s", err);
                                         ogs_assert(true == ogs_sbi_server_send_error(stream, OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                                   &message, "Bad request", err));
+                                                   &message, "Bad request", err, NULL));
                                         ogs_free(err);
                                     }
                                 } else {
@@ -151,7 +151,7 @@ bool _pcf_process_event(ogs_event_t *e)
                                     ogs_error("%s", err);
                                     ogs_assert(true == ogs_sbi_server_send_error(stream,
                                                OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                               &message, "Missing path value", err));
+                                               &message, "Missing path value", err, NULL));
                                 }
                                 break;
                             DEFAULT
@@ -160,7 +160,7 @@ bool _pcf_process_event(ogs_event_t *e)
                                 ogs_error("%s", err);
                                 ogs_assert(true == ogs_sbi_server_send_error(stream,
                                            OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                           &message, "Bad request", err));
+                                           &message, "Bad request", err, NULL));
                                 ogs_free(err);
                             END
                         } else {
@@ -168,14 +168,14 @@ bool _pcf_process_event(ogs_event_t *e)
                             ogs_error("%s", err);
                             ogs_assert(true == ogs_sbi_server_send_error(stream,
                                        OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                       &message, "Missing path value", err));
+                                       &message, "Missing path value", err, NULL));
                         }
                         break;
                     DEFAULT
                         char *err = ogs_msprintf("Unknown service name \"%s\" in PCF notification", message.h.service.name);
                         ogs_error("%s", err);
                         ogs_assert(true == ogs_sbi_server_send_error(stream, OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                   &message, "Bad request", err));
+                                   &message, "Bad request", err, NULL));
                         ogs_free(err);
                     END
                 } else {
@@ -183,7 +183,7 @@ bool _pcf_process_event(ogs_event_t *e)
                     ogs_error("%s", err);
                     ogs_assert(true == ogs_sbi_server_send_error(stream,
                                OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                               &message, "Missing service name", err));
+                               &message, "Missing service name", err, NULL));
                 }
                 ogs_sbi_message_free(&message);
                 ogs_sbi_request_free(request);

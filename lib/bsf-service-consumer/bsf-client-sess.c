@@ -148,7 +148,7 @@ bool _bsf_client_sess_discover_and_send(bsf_client_sess_t *sess)
 
     if (!sess) return false;
 
-    xact = ogs_sbi_xact_add(&sess->sbi, OGS_SBI_SERVICE_TYPE_NBSF_MANAGEMENT, NULL, (ogs_sbi_build_f)_nbsf_management_pcf_binding_build, sess, NULL);
+    xact = ogs_sbi_xact_add(0, &sess->sbi, OGS_SBI_SERVICE_TYPE_NBSF_MANAGEMENT, NULL, (ogs_sbi_build_f)_nbsf_management_pcf_binding_build, sess, NULL);
     if (!xact) {
         ogs_error("bsf_client_sess_discover_and_send() failed");
         return false;
