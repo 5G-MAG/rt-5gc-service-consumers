@@ -1,4 +1,4 @@
 [wrap-git]
 directory = open5gs
 url = https://github.com/5G-MAG/open5gs.git
-revision = 5mbs
+revision = feature/mbs-udp-tunnel-creation
