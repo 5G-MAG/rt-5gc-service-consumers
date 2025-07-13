@@ -7,7 +7,7 @@
 # https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
 
 project('rt-5gc-service-consumers', 'c',
-    version : '1.0.1',
+    version : '2.0.0',
     license : '5G-MAG Public',
     meson_version : '>= 0.59.0',
     default_options : [
