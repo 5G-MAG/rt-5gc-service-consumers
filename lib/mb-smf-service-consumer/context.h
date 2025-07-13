@@ -21,6 +21,7 @@ extern "C" {
 #endif
 
 typedef struct _context_s _context_t;
+typedef struct ogs_sbi_object_s ogs_sbi_object_t;
 
 _context_t *_context_new();
 void _context_destroy();
@@ -28,6 +29,7 @@ bool _context_add_mbs_session(_priv_mbs_session_t *session);
 bool _context_remove_mbs_session(_priv_mbs_session_t *session);
 ogs_list_t *_context_mbs_sessions();
 bool _context_active_sessions_exists(_priv_mbs_session_t *session);
+_priv_mbs_session_t *_context_sbi_object_to_session(ogs_sbi_object_t *sbi_object);
 
 #ifdef __cplusplus
 }

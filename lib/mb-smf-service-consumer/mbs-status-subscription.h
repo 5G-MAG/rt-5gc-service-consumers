@@ -9,6 +9,11 @@
  * program. If this file is missing then the license can be retrieved from
  * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
  */
+#include <netinet/in.h>
+#include <stdint.h>
+
+#include <ogs-core.h>
+
 #include "macros.h"
 
 #ifdef __cplusplus
@@ -18,13 +23,39 @@ extern "C" {
 typedef struct mb_smf_sc_mbs_session_s mb_smf_sc_mbs_session_t;
 
 typedef enum mb_smf_sc_mbs_session_event_type_e {
+    MBS_SESSION_EVENT_OTHER = 0, /* signalled in a notification result when type not understood */
     MBS_SESSION_EVENT_MBS_REL_TMGI_EXPIRY = 1,
     MBS_SESSION_EVENT_BROADCAST_DELIVERY_STATUS = 2,
     MBS_SESSION_EVENT_INGRESS_TUNNEL_ADD_CHANGE = 4
 } mb_smf_sc_mbs_session_event_type_t;
 
 typedef struct mb_smf_sc_mbs_status_subscription_s mb_smf_sc_mbs_status_subscription_t;
-typedef struct mb_smf_sc_mbs_status_notification_result_s mb_smf_sc_mbs_status_notification_result_t;
+
+typedef enum {
+    BROADCAST_DELIVERY_STARTED,
+    BROADCAST_DELIVERY_TERMINATED
+} mb_smf_sc_mbs_status_notification_broadcast_delivery_status_e;
+
+typedef struct mb_smf_sc_mbs_status_notification_ingress_tunnel_addr_s {
+    ogs_lnode_t node;
+    struct in_addr *ipv4;
+    struct in6_addr *ipv6;
+    uint16_t port;
+} mb_smf_sc_mbs_status_notification_ingress_tunnel_addr_t;
+
+typedef struct mb_smf_sc_mbs_status_notification_result_s {
+    mb_smf_sc_mbs_session_event_type_t event_type;
+    char *event_type_name;
+    mb_smf_sc_mbs_session_t *mbs_session;
+    char *correlation_id;
+    time_t event_time;
+    union {
+        /* BroadcastDeliveryStatus - enumeration [BROADCAST_DELIVERY_STARTED, BROADCAST_DELIVERY_TERMINATED] */
+        mb_smf_sc_mbs_status_notification_broadcast_delivery_status_e  broadcast_delivery_status;
+        /* IngressTunAddr - list of mb_smf_sc_mbs_status_notification_ingress_tunnel_addr_t */
+        ogs_list_t                                                     ingress_tunnel_add_change;
+    };
+} mb_smf_sc_mbs_status_notification_result_t;
 
 typedef void (*mb_smf_sc_mbs_status_notification_cb)(const mb_smf_sc_mbs_status_notification_result_t *result, void *data);
 

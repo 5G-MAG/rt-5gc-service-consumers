@@ -10,6 +10,7 @@
 #include <stdbool.h>
 
 #include "ogs-core.h"
+#include "ogs-sbi.h"
 
 #include "macros.h"
 #include "priv_mbs-session.h"
@@ -79,6 +80,19 @@ bool _context_active_sessions_exists(_priv_mbs_session_t *session)
     }
 
     return false;
+}
+
+_priv_mbs_session_t *_context_sbi_object_to_session(ogs_sbi_object_t *sbi_object)
+{
+    _priv_mbs_session_t *sess;
+
+    if (__self && sbi_object) {
+        ogs_list_for_each(&__self->mbs_sessions, sess) {
+            if (&sess->sbi_object == sbi_object) return sess;
+        }
+    }
+
+    return NULL;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

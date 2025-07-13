@@ -24,7 +24,13 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
 {
     _priv_mbs_session_t *session = (_priv_mbs_session_t*)context;
 
-    ogs_sbi_request_t *req = ogs_sbi_request_new();
+    ogs_sbi_message_t msg;
+
+    memset(&msg, 0, sizeof(msg));
+    msg.h.method = (char*)OGS_SBI_HTTP_METHOD_POST;
+    msg.h.service.name = (char*)OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION;
+    msg.h.api.version = (char *)OGS_SBI_API_V1;
+    msg.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_MBS_SESSIONS;
 
     OpenAPI_ssm_t *ssm = NULL;
     OpenAPI_tmgi_t *tmgi = NULL;
@@ -74,22 +80,21 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
                                                                                 NULL, /* mbs_security_context */
                                                                                 false, 0 /* contact_pcf_ind */
                                                                                 );
-    OpenAPI_create_req_data_t *create_req_data = OpenAPI_create_req_data_create(ext_mbs_session);
+    msg.CreateReqData = OpenAPI_create_req_data_create(ext_mbs_session);
 
-    cJSON *json = OpenAPI_create_req_data_convertToJSON(create_req_data);
+    /* message => request for CreateReqData is not implemented, so do so here */
+    cJSON *json = OpenAPI_create_req_data_convertToJSON(msg.CreateReqData);
     char *body = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
 
-    OpenAPI_create_req_data_free(create_req_data);
+    ogs_sbi_request_t *req = ogs_sbi_build_request(&msg);
+    ogs_expect(req);
 
-    req->h.method = ogs_strdup(OGS_SBI_HTTP_METHOD_POST);
-    req->h.service.name = ogs_strdup(OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION);
-    req->h.api.version = ogs_strdup(OGS_SBI_API_V1);
-    req->h.resource.component[0] = ogs_strdup(OGS_SBI_RESOURCE_NAME_MBS_SESSIONS);
-
-    ogs_hash_set(req->http.headers, "Content-Type", OGS_HASH_KEY_STRING, "application/json");
+    ogs_sbi_header_set(req->http.headers, OGS_SBI_CONTENT_TYPE, OGS_SBI_CONTENT_JSON_TYPE);
     req->http.content = body;
     req->http.content_length = strlen(body);
+
+    if (msg.CreateReqData) OpenAPI_create_req_data_free(msg.CreateReqData);
 
     return req;
 }

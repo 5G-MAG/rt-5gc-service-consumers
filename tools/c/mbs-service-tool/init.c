@@ -34,6 +34,7 @@ static struct {
     int argc;
     char **argv;
     char *app_config_filename;
+    mb_smf_sc_mbs_session_t *mbs_session;
 } *g_app_context = NULL;
 
 static void _context_init(int argc, char *argv[]);
@@ -43,6 +44,8 @@ static void _write_app_yaml_config();
 /**************************/
 /**** Public functions ****/
 /**************************/
+
+#define APP_NAME "mbs-service-tool"
 
 bool mbs_service_tool_init(int argc, char *argv[])
 {
@@ -64,9 +67,17 @@ bool mbs_service_tool_init(int argc, char *argv[])
     /* initialise logging */
     app_log_init();
 
+    ogs_debug("App initialised, configuring...");
+
+    /* initialise local settings */
+    int rv = ogs_app_parse_local_conf(APP_NAME);
+    if (rv != OGS_OK) {
+        ogs_fatal("Unable to parse local configuration");
+    }
+
     /* Setup Open5GS SBI library */
     ogs_sbi_context_init(OpenAPI_nf_type_AF);
-    ogs_sbi_context_parse_config("mbs-service-tool", g_app_context->options->nrf_address?"nrf":NULL,
+    ogs_sbi_context_parse_config(APP_NAME, g_app_context->options->nrf_address?"nrf":NULL,
                                                      g_app_context->options->scp_address?"scp":NULL);
     nf_instance = ogs_sbi_self()->nf_instance;
     ogs_assert(nf_instance);
@@ -74,7 +85,7 @@ bool mbs_service_tool_init(int argc, char *argv[])
 
     /* Setup Service Consumers */
     if (g_app_context->options->nrf_address || g_app_context->options->scp_address) {
-        mb_smf_sc_parse_config("mbs-service-tool");
+        mb_smf_sc_parse_config(APP_NAME);
     }
 
     return true;
@@ -97,6 +108,26 @@ void mbs_service_tool_final(void)
     app_log_final();
     _context_final();
     ogs_app_terminate();
+}
+
+mb_smf_sc_mbs_session_t *mbs_service_tool_get_mbs_session()
+{
+    return g_app_context->mbs_session;
+}
+
+void mbs_service_tool_set_mbs_session(mb_smf_sc_mbs_session_t *session)
+{
+    if (g_app_context->mbs_session == session) return;
+    if (g_app_context->mbs_session) {
+        mb_smf_sc_mbs_session_delete(g_app_context->mbs_session);
+        mb_smf_sc_mbs_session_push_changes(g_app_context->mbs_session);
+    }
+    g_app_context->mbs_session = session;
+}
+
+const app_options_t *mbs_service_tool_get_app_options()
+{
+    return g_app_context->options;
 }
 
 /***************************/
@@ -142,7 +173,7 @@ static void _write_app_yaml_config()
         "  client:\n"
         "    no_tls: true\n"
         "\n"
-        "mbs-service-tool:\n"
+        APP_NAME ":\n"
         "  discovery:\n"
         "    delegated: auto\n"
         "  sbi:\n"
@@ -157,7 +188,7 @@ static void _write_app_yaml_config()
     if (!tmpdir) tmpdir = P_tmpdir;
 #endif
     if (!tmpdir) tmpdir = OGS_DIR_SEPARATOR_S "tmp";
-    g_app_context->app_config_filename = ogs_msprintf("%s%cmbs-service-tool-yaml.XXXXXX", tmpdir, OGS_DIR_SEPARATOR);
+    g_app_context->app_config_filename = ogs_msprintf("%s%c" APP_NAME "-yaml.XXXXXX", tmpdir, OGS_DIR_SEPARATOR);
     fd = mkostemp(g_app_context->app_config_filename, O_CREAT|O_WRONLY|O_TRUNC|O_CLOEXEC);
 
     if (fd < 0) {

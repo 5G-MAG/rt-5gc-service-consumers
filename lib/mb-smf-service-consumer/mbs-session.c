@@ -10,9 +10,11 @@
 #include <netinet/in.h>
 
 #include "ogs-core.h"
+#include "ogs-sbi.h"
 
 #include "macros.h"
 #include "context.h"
+#include "log.h"
 #include "mbs-status-subscription.h"
 #include "nmbsmf-mbs-session-build.h"
 #include "priv_mbs-session.h"
@@ -21,7 +23,7 @@
 #include "mbs-session.h"
 
 /* Type functions */
-MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session()
+MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new()
 {
     return mb_smf_sc_mbs_session_new_ipv4(NULL, NULL);
 }
@@ -32,11 +34,19 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv4(const 
 
     session->changed = true;
     if (source) {
+        session->session.ssm = ogs_calloc(1, sizeof(*session->session.ssm));
+        session->session.ssm->family = AF_INET;
         memcpy(&session->session.ssm->source.ipv4, source, sizeof(session->session.ssm->source.ipv4));
     }
     if (dest) {
+        if (!session->session.ssm) {
+            session->session.ssm = ogs_calloc(1, sizeof(*session->session.ssm));
+            session->session.ssm->family = AF_INET;
+        }
         memcpy(&session->session.ssm->dest_mc.ipv4, dest, sizeof(session->session.ssm->dest_mc.ipv4));
     }
+
+    _context_add_mbs_session(session);
 
     return _priv_mbs_session_to_public(session);
 }
@@ -47,9 +57,15 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv6(const 
 
     session->changed = true;
     if (source) {
+        session->session.ssm = ogs_calloc(1, sizeof(*session->session.ssm));
+        session->session.ssm->family = AF_INET6;
         memcpy(&session->session.ssm->source.ipv6, source, sizeof(session->session.ssm->source.ipv6));
     }
     if (dest) {
+        if (!session->session.ssm) {
+            session->session.ssm = ogs_calloc(1, sizeof(*session->session.ssm));
+            session->session.ssm->family = AF_INET6;
+        }
         memcpy(&session->session.ssm->dest_mc.ipv6, dest, sizeof(session->session.ssm->dest_mc.ipv6));
     }
 
@@ -83,6 +99,8 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_add_subscription(mb_smf_sc_mbs_sess
         // Remove from active list of current mbs session
         ogs_hash_set(subsc->session->session.subscriptions, subsc->id, OGS_HASH_KEY_STRING, NULL);
         // TODO: send remove subscription
+        ogs_warn("TODO: Send delete from old MbsSession [%p (%p)] for status subscription [%p (%p)]", sess, session,
+                  subsc, subscription);
         // forget the assigned id
         ogs_free(subsc->id);
         subsc->id = NULL;
@@ -127,6 +145,49 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_remove_subscription(mb_smf_sc_mbs_s
     return true;
 }
 
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tmgi_request(mb_smf_sc_mbs_session_t *session, bool request_tmgi)
+{
+    _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
+
+    if (!sess || sess->deleted) return false;
+
+    if (session->tmgi_req == request_tmgi) return false;
+
+    session->tmgi_req = request_tmgi;
+    sess->changed = true;
+
+    return true;
+}
+
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tunnel_request(mb_smf_sc_mbs_session_t *session, bool request_udp_tunnel)
+{
+    _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
+
+    if (!sess || sess->deleted) return false;
+
+    if (session->tunnel_req == request_udp_tunnel) return false;
+
+    session->tunnel_req = request_udp_tunnel;
+    sess->changed = true;
+
+    return true;
+}
+
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_service_type(mb_smf_sc_mbs_session_t *session,
+                                                              mb_smf_sc_mbs_service_type_e service_type)
+{
+    _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
+
+    if (!sess || sess->deleted) return false;
+
+    if (session->service_type == service_type) return false;
+
+    session->service_type = service_type;
+    sess->changed = true;
+
+    return true;
+}
+
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_all_changes()
 {
     ogs_list_t *sessions = _context_mbs_sessions();
@@ -146,20 +207,24 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_changes(mb_smf_sc_mbs_session_
 
 /* protected functions */
 
-mb_smf_sc_mbs_session_t *_priv_mbs_session_to_public(_priv_mbs_session_t *session) {
+mb_smf_sc_mbs_session_t *_priv_mbs_session_to_public(_priv_mbs_session_t *session)
+{
     return &session->session;
 }
 
-const mb_smf_sc_mbs_session_t *_priv_mbs_session_to_public_const(const _priv_mbs_session_t *session) {
+const mb_smf_sc_mbs_session_t *_priv_mbs_session_to_public_const(const _priv_mbs_session_t *session)
+{
     return &session->session;
 }
 
-_priv_mbs_session_t *_priv_mbs_session_from_public(mb_smf_sc_mbs_session_t *session) {
+_priv_mbs_session_t *_priv_mbs_session_from_public(mb_smf_sc_mbs_session_t *session)
+{
     if (!session) return NULL;
     return ogs_container_of(session, _priv_mbs_session_t, session);
 }
 
-const _priv_mbs_session_t *_priv_mbs_session_from_public_const(const mb_smf_sc_mbs_session_t *session) {
+const _priv_mbs_session_t *_priv_mbs_session_from_public_const(const mb_smf_sc_mbs_session_t *session)
+{
     if (!session) return NULL;
     return ogs_container_of(session, _priv_mbs_session_t, session);
 }
@@ -168,31 +233,40 @@ bool _mbs_session_push_changes(_priv_mbs_session_t *sess)
 {
     if (!sess) return false;
 
+    ogs_debug("Pushing changes for MbsSession [%p (%p)]", sess, _priv_mbs_session_to_public(sess));
+
     if (sess->deleted) {
-        _context_remove_mbs_session(sess);
+        ogs_debug("Session has been deleted, removing...");
         _mbs_session_send_remove(sess);
+        _context_remove_mbs_session(sess); // TODO: This drops the MBS session object before the removal request has been responded
+        _mbs_session_delete(sess);         //       to. Move these two lines to client response for MBS Session removal?
         return true;
     }
 
     if (memcmp(&sess->previous_ssm, sess->session.ssm, sizeof(*sess->session.ssm))!=0) {
+        ogs_debug("SSM changed, recreating MbsSession");
         /* SSM address change */
         if (sess->previous_ssm.family != 0) {
             /* remove session at old SSM */
             _mbs_session_send_remove(sess);
         }
 
-        if (sess->session.ssm->family != 0) {
-            /* create new session */
+        if (sess->session.ssm && sess->session.ssm->family != 0) {
+            /* create new session (includes subscriptions) */
             _mbs_session_send_create(sess);
         }
 
         return true;
     }
 
-    if (!sess->changed) return false;
+    if (!sess->changed) {
+        ogs_debug("MbsSession [%p (%p)] not changed", sess, _priv_mbs_session_to_public(sess));
+        return false;
+    }
 
     sess->changed = false;
 
+    /* main session not changed, let's update the subscriptions */
     _mbs_session_subscriptions_update(sess);
 
     return true;
@@ -200,10 +274,11 @@ bool _mbs_session_push_changes(_priv_mbs_session_t *sess)
 
 static int __update_status_subscription(void *rec, const void *key, int klen, const void *value)
 {
-    _priv_mbs_session_t *sess = (_priv_mbs_session_t*)rec;
+    //_priv_mbs_session_t *sess = (_priv_mbs_session_t*)rec;
     _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)value;
     if (subsc->changed) {
         // TODO: Send update subscription
+        ogs_warn("TODO: Send patch for status subscription [%p (%p)]", subsc, _priv_mbs_status_subscription_to_public(subsc));
         subsc->changed = false;
     }
     return 1;
@@ -215,6 +290,8 @@ void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess)
 
     ogs_list_for_each_safe(&sess->new_subscriptions, next, node) {
         // TODO: Send create status subscription
+        ogs_warn("TODO: Send create status subscription for subscription [%p (%p)]",
+                 node, _priv_mbs_status_subscription_to_public(node));
         node->changed = false;
         // Await response then:
         // ogs_list_remove(&sess->new_subscriptions, node);
@@ -225,6 +302,8 @@ void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess)
 
     ogs_list_for_each_safe(&sess->deleted_subscriptions, next, node) {
         // TODO: Send delete status subscription
+        ogs_warn("TODO: Send delete status subscription for subscription [%p (%p)]",
+                 node, _priv_mbs_status_subscription_to_public(node));
         node->changed = false;
         ogs_list_remove(&sess->deleted_subscriptions, node);
         _mbs_status_subscription_delete(node);
@@ -254,6 +333,16 @@ void _mbs_session_delete(_priv_mbs_session_t *session)
         session->session.subscriptions = NULL;
     }
 
+    if (session->session.ssm) {
+        ogs_free(session->session.ssm);
+        session->session.ssm = NULL;
+    }
+
+    if (session->session.tmgi) {
+        ogs_free(session->session.tmgi);
+        session->session.tmgi = NULL;
+    }
+
     // session
     ogs_free(session);
 }
@@ -262,13 +351,15 @@ void _mbs_session_send_create(_priv_mbs_session_t *session)
 {
     if (!session) return;
 
-    ogs_sbi_discovery_option_t *discovery_option = NULL;
+    ogs_debug("Send create for MbsSession [%p (%p)]", session, _priv_mbs_session_to_public(session));
+
+    ogs_sbi_discovery_option_t *discovery_option = ogs_sbi_discovery_option_new();
     ogs_sbi_service_type_e service_type = OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION;
 
+    OGS_SBI_FEATURES_SET(discovery_option->requester_features, OGS_SBI_NNRF_DISC_SERVICE_MAP);
+    ogs_sbi_discovery_option_add_service_names(discovery_option, (char *)ogs_sbi_service_type_to_name(service_type));
+
     if (session->session.tmgi) {
-        discovery_option = ogs_sbi_discovery_option_new();
-        OGS_SBI_FEATURES_SET(discovery_option->requester_features, OGS_SBI_NNRF_DISC_SERVICE_MAP);
-        ogs_sbi_discovery_option_add_service_names(discovery_option, (char *)ogs_sbi_service_type_to_name(service_type));
         ogs_sbi_discovery_option_add_target_plmn_list(discovery_option, &session->session.tmgi->plmn);
     }
 
@@ -280,11 +371,14 @@ void _mbs_session_send_create(_priv_mbs_session_t *session)
 
 void _mbs_session_send_update(_priv_mbs_session_t *session)
 {
+    ogs_warn("TODO: _mbs_session_send_update(%p (%p))", session, _priv_mbs_session_to_public(session));
 }
 
 void _mbs_session_send_remove(_priv_mbs_session_t *session)
 {
     if (!session) return;
+
+    ogs_debug("Send removal of MbsSession [%p (%p)]", session, _priv_mbs_session_to_public(session));
 
     ogs_sbi_service_type_e service_type = OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION;
 

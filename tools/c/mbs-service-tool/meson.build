@@ -18,6 +18,8 @@ mbs_service_tool_sources = files('''
   app-sm.c
   options.h
   options.c
+  utils.c
+  utils.h
 '''.split())
 
 mbs_service_tool = executable('mbs-service-tool',

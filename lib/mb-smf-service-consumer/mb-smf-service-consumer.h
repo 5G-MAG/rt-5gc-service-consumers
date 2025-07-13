@@ -15,6 +15,8 @@
 
 /* Library public API includes */
 #include "macros.h"
+#include "mbs-session.h"
+#include "mbs-status-subscription.h"
 
 #ifdef __cplusplus
 extern "C" {
