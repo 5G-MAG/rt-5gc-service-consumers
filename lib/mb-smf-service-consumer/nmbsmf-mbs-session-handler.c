@@ -24,6 +24,29 @@ int _nmbsmf_mbs_session_parse(ogs_sbi_message_t *message, _priv_mbs_session_t *s
     ogs_assert(sess);
     ogs_assert(message);
 
+    if (message->http.location) {
+        int rv;
+        ogs_sbi_header_t header;
+        ogs_sbi_message_t msg;
+        memset(&header, 0, sizeof(header));
+        header.uri = message->http.location;
+        rv = ogs_sbi_parse_header(&msg, &header);
+        if (rv != OGS_OK) {
+            ogs_error("Cannot parse http.location [%s]", message->http.location);
+            return OGS_ERROR;
+        }
+        if (!msg.h.resource.component[1]) {
+            ogs_error("No MBS Session resource id in http.location [%s]", message->http.location);
+            return OGS_ERROR;
+        }
+        sess->id = ogs_strdup(msg.h.resource.component[1]);
+        ogs_sbi_message_free(&msg);
+        ogs_sbi_header_free(&header);
+    } else {
+        ogs_error("No Location header found in the Create response, unable to determine MBS Session identifier");
+        return OGS_ERROR;
+    }
+
     OpenAPI_create_rsp_data_t *create_rsp_data = message->CreateRspData;
     if (!create_rsp_data) {
         ogs_error("CreateRspData object not found in response");

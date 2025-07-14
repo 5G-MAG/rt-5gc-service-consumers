@@ -22,7 +22,23 @@
 
 #include "mbs-session.h"
 
-/* Type functions */
+/* TMGI Type functions */
+
+MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_new()
+{
+    return (mb_smf_sc_tmgi_t*)ogs_calloc(1, sizeof(mb_smf_sc_tmgi_t));
+}
+
+MB_SMF_CLIENT_API void mb_smf_sc_tmgi_free(mb_smf_sc_tmgi_t *tmgi)
+{
+    if (!tmgi) return;
+
+    if (tmgi->mbs_service_id) ogs_free(tmgi->mbs_service_id);
+
+    ogs_free(tmgi);
+}
+
+/* MBS Session Type functions */
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new()
 {
     return mb_smf_sc_mbs_session_new_ipv4(NULL, NULL);
@@ -77,7 +93,7 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv6(const 
 MB_SMF_CLIENT_API void mb_smf_sc_mbs_session_delete(mb_smf_sc_mbs_session_t *mbs_session)
 {
     _priv_mbs_session_t *session = _priv_mbs_session_from_public(mbs_session);
-    
+
     if (!session) return;
 
     session->deleted = true;
@@ -197,6 +213,12 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_all_changes()
         ret &= _mbs_session_push_changes(sess);
     }
     return ret;
+}
+
+MB_SMF_CLIENT_API const char *mb_smf_sc_mbs_session_get_resource_id(const mb_smf_sc_mbs_session_t *session)
+{
+    if (!session) return NULL;
+    return _priv_mbs_session_from_public_const(session)->id;
 }
 
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_changes(mb_smf_sc_mbs_session_t *session)
@@ -327,6 +349,18 @@ void _mbs_session_delete(_priv_mbs_session_t *session)
         session->session.mb_upf_udp_tunnel = NULL;
     }
 
+    _priv_mbs_status_subscription_t *next, *node;
+
+    ogs_list_for_each_safe(&session->new_subscriptions, next, node) {
+        ogs_list_remove(&session->new_subscriptions, node);
+        _mbs_status_subscription_delete(node);
+    }
+
+    ogs_list_for_each_safe(&session->deleted_subscriptions, next, node) {
+        ogs_list_remove(&session->new_subscriptions, node);
+        _mbs_status_subscription_delete(node);
+    }
+
     if (session->session.subscriptions) {
         ogs_hash_do(__free_status_subscription, session->session.subscriptions, session->session.subscriptions);
         ogs_hash_destroy(session->session.subscriptions);
@@ -339,8 +373,13 @@ void _mbs_session_delete(_priv_mbs_session_t *session)
     }
 
     if (session->session.tmgi) {
-        ogs_free(session->session.tmgi);
+        mb_smf_sc_tmgi_free(session->session.tmgi);
         session->session.tmgi = NULL;
+    }
+
+    if (session->id) {
+        ogs_free(session->id);
+        session->id = NULL;
     }
 
     // session
@@ -381,6 +420,8 @@ void _mbs_session_send_remove(_priv_mbs_session_t *session)
     ogs_debug("Send removal of MbsSession [%p (%p)]", session, _priv_mbs_session_to_public(session));
 
     ogs_sbi_service_type_e service_type = OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION;
+
+    /* Shouldn't need discovery options as we are talking to previously discovered MB-SMF (details in session->sbi_object) */
 
     ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, &session->sbi_object, service_type, NULL,
                                             _nmbsmf_mbs_session_build_remove, session, NULL);

@@ -30,7 +30,7 @@ char *time_t_to_str(time_t t)
         ogs_free(str);
         str = NULL;
     }
-    
+
     return str;
 }
 

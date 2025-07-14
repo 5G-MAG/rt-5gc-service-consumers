@@ -39,23 +39,27 @@ MB_SMF_CLIENT_API void mb_smf_sc_terminate(void)
 
 MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
 {
+    ogs_sbi_xact_t *xact = NULL;
+
     if (!e) return false;
 
-    ogs_pool_id_t xact_id = OGS_POINTER_TO_UINT(e->sbi.data);
-    if (xact_id < OGS_MIN_POOL_ID || xact_id > OGS_MAX_POOL_ID) return false;
-
-    ogs_sbi_xact_t *xact = ogs_sbi_xact_find_by_id(xact_id);
-    if (!xact) return false;
-
-    _priv_mbs_session_t *sess = _context_sbi_object_to_session(xact->sbi_object);
-    if (!sess) return false;
-
-    /* This is one of ours, handle it */
-
-    ogs_debug("Processing event %p [%s] for session [%p (%p)]", e, ogs_event_get_name(e), sess, _priv_mbs_session_to_public(sess));
+    ogs_debug("Processing event %p [%s]", e, ogs_event_get_name(e));
 
     switch (e->id) {
     case OGS_EVENT_SBI_CLIENT:
+        ogs_pool_id_t xact_id = OGS_POINTER_TO_UINT(e->sbi.data);
+        if (xact_id < OGS_MIN_POOL_ID || xact_id > OGS_MAX_POOL_ID) return false;
+
+        xact = ogs_sbi_xact_find_by_id(xact_id);
+        if (!xact) return false;
+
+        _priv_mbs_session_t *sess = _context_sbi_object_to_session(xact->sbi_object);
+        if (!sess) return false;
+
+        /* This is one of ours, handle it */
+
+        ogs_debug("Client response for session [%p (%p)]", sess, _priv_mbs_session_to_public(sess));
+
         /* response from MB-SMF */
         switch (xact->service_type) {
         case OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION:
@@ -83,6 +87,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                             ogs_warn("Errors in response from MB-SMF");
                         }
                         ogs_sbi_response_free(response);
+                        ogs_sbi_message_free(&message);
                         break;
                     DEFAULT
                         break;
@@ -103,9 +108,21 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
 
     case OGS_EVENT_SBI_TIMER:
         ogs_debug("Timer id = %i (%s)", e->timer_id, ogs_timer_get_name(e->timer_id));
+
         switch (e->timer_id) {
         case OGS_TIMER_SBI_CLIENT_WAIT:
             /* client call timed out */
+            ogs_pool_id_t xact_id = OGS_POINTER_TO_UINT(e->sbi.data);
+            if (xact_id < OGS_MIN_POOL_ID || xact_id > OGS_MAX_POOL_ID) return false;
+
+            xact = ogs_sbi_xact_find_by_id(xact_id);
+            if (!xact) return false;
+
+            _priv_mbs_session_t *sess = _context_sbi_object_to_session(xact->sbi_object);
+            if (!sess) return false;
+
+            ogs_debug("Client response timeout for MBS Session [%p (%p)]", sess, _priv_mbs_session_to_public(sess));
+
             switch (xact->service_type) {
             case OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION:
                 SWITCH(xact->request->h.resource.component[0])
@@ -144,7 +161,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
         }
         break;
     default:
-        break;
+        return false;
     }
 
     if (xact) ogs_sbi_xact_remove(xact);

@@ -110,7 +110,8 @@ static void app_state_create_session(ogs_fsm_t *sm, ogs_event_t *event)
                 break;
             case APP_LOCAL_EVENT_MBS_SESSION_CREATE_RESULT:
                 if (app_event->result == OGS_OK) {
-                    ogs_info("MBS Session %p created", app_event->mbs_session);
+                    ogs_info("MBS Session %s [%p] created", mb_smf_sc_mbs_session_get_resource_id(app_event->mbs_session),
+                             app_event->mbs_session);
                     if (app_event->mbs_session->tmgi_req) {
                         if (app_event->mbs_session->tmgi) {
                             char buf[OGS_PLMNIDSTRLEN];
@@ -374,7 +375,7 @@ static void app_mbs_session_create(ogs_fsm_t *sm)
         struct addrinfo *ai_src = NULL, *ai_dst = NULL;
         int result;
         void *source_addr, *dest_addr;
-        
+
         result = getaddrinfo(options->ssm.source, NULL, NULL, &ai_src);
         if (result) {
             ogs_error("Unable to resolve SSM source address '%s': %s", options->ssm.source, gai_strerror(result));

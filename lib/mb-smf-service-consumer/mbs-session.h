@@ -45,6 +45,8 @@ typedef struct mb_smf_sc_tmgi_s {
     ogs_plmn_id_t plmn;
 } mb_smf_sc_tmgi_t;
 
+
+
 typedef void (*mb_smf_sc_mbs_session_create_result_cb)(mb_smf_sc_mbs_session_t *session, int result, void *data);
 
 typedef struct mb_smf_sc_mbs_session_s {
@@ -59,7 +61,12 @@ typedef struct mb_smf_sc_mbs_session_s {
     void *create_result_cb_data;       /* data passed to the create_result_cb when it is called */
 } mb_smf_sc_mbs_session_t;
 
-/* Type functions */
+/* mb_smf_sc_tmgi Type functions */
+
+MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_new();
+MB_SMF_CLIENT_API void mb_smf_sc_tmgi_free(mb_smf_sc_tmgi_t *tmgi);
+
+/* mb_smf_sc_mbs_session Type functions */
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new();
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv4(const struct in_addr *source, const struct in_addr *dest);
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv6(const struct in6_addr *source, const struct in6_addr *dest);
@@ -73,6 +80,8 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tmgi_request(mb_smf_sc_mbs_sess
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tunnel_request(mb_smf_sc_mbs_session_t *session, bool request_udp_tunnel);
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_service_type(mb_smf_sc_mbs_session_t *session,
                                                               mb_smf_sc_mbs_service_type_e service_type);
+
+MB_SMF_CLIENT_API const char *mb_smf_sc_mbs_session_get_resource_id(const mb_smf_sc_mbs_session_t *session);
 
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_changes(mb_smf_sc_mbs_session_t *);
 

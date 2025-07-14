@@ -52,7 +52,7 @@ MB_SMF_CLIENT_API void mb_smf_sc_mbs_status_subscription_delete(mb_smf_sc_mbs_st
     } else {
         // Not attached, delete status subscription object
         _mbs_status_subscription_delete(subsc);
-    } 
+    }
 }
 
 MB_SMF_CLIENT_API const char *mb_smf_sc_mbs_status_subscription_get_id(const mb_smf_sc_mbs_status_subscription_t *subscription)
@@ -135,7 +135,7 @@ MB_SMF_CLIENT_API void mb_smf_sc_mbs_status_subscription_set_correlation_id(mb_s
         subsc->correlation_id = NULL;
     }
     if (correlation_id) subsc->correlation_id = ogs_strdup(correlation_id);
-    
+
     if (subsc->cache->repr_string) {
         ogs_free(subsc->cache->repr_string);
         subsc->cache->repr_string = NULL;
@@ -168,7 +168,7 @@ MB_SMF_CLIENT_API void mb_smf_sc_mbs_status_subscription_set_expiry_time(mb_smf_
     }
 
     subsc->changed = true;
-    if (subsc->session) subsc->session->changed = true;    
+    if (subsc->session) subsc->session->changed = true;
 }
 
 MB_SMF_CLIENT_API void mb_smf_sc_mbs_status_subscription_set_notification_callback(
@@ -194,7 +194,7 @@ MB_SMF_CLIENT_API const char *mb_smf_sc_mbs_status_subscription_as_string(const 
 {
     const _priv_mbs_status_subscription_t *subsc = _priv_mbs_status_subscription_from_public_const(subscription);
     if (!subsc) return NULL;
-    
+
     if (!subsc->cache->repr_string) {
         const char *sep = "";
         size_t i;

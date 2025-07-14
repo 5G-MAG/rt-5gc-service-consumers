@@ -53,7 +53,7 @@ app_options_t* app_options_parse(int *argc, char ***argv)
     app_opts = ogs_calloc(1, sizeof(*app_opts));
 
     /* parse command line */
-    for (opt = getopt_long(*argc, *argv, shortopts, longopts, NULL); 
+    for (opt = getopt_long(*argc, *argv, shortopts, longopts, NULL);
          opt != -1;
          opt = getopt_long(*argc, *argv, shortopts, longopts, NULL)) {
         switch (opt) {

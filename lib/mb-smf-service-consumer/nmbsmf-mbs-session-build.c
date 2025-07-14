@@ -103,13 +103,16 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_remove(void *context, void *data)
 {
     _priv_mbs_session_t *session = (_priv_mbs_session_t*)context;
 
-    ogs_sbi_request_t *req = ogs_sbi_request_new();
+    ogs_sbi_message_t msg;
 
-    req->h.method = ogs_strdup(OGS_SBI_HTTP_METHOD_DELETE);
-    req->h.service.name = ogs_strdup(OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION);
-    req->h.api.version = ogs_strdup(OGS_SBI_API_V1);
-    req->h.resource.component[0] = ogs_strdup(OGS_SBI_RESOURCE_NAME_MBS_SESSIONS);
-    req->h.resource.component[1] = ogs_strdup(session->id);
+    memset(&msg, 0, sizeof(msg));
+    msg.h.method = (char*)OGS_SBI_HTTP_METHOD_DELETE;
+    msg.h.service.name = (char*)OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION;
+    msg.h.api.version = (char *)OGS_SBI_API_V1;
+    msg.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_MBS_SESSIONS;
+    msg.h.resource.component[1] = ogs_strdup(session->id);
+
+    ogs_sbi_request_t *req = ogs_sbi_build_request(&msg);
 
     return req;
 }
