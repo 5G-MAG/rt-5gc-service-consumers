@@ -100,6 +100,41 @@ int _nmbsmf_mbs_session_parse(ogs_sbi_message_t *message, _priv_mbs_session_t *s
         ogs_plmn_id_build(&sess->session.tmgi->plmn, atoi(mbs_session->tmgi->plmn_id->mcc),
                                                      atoi(mbs_session->tmgi->plmn_id->mnc),
                                                      strlen(mbs_session->tmgi->plmn_id->mnc));
+        /* Copy new TMGI to previous record to detect app changes */
+        if (!sess->previous_tmgi) {
+            sess->previous_tmgi = ogs_calloc(1, sizeof(*sess->session.tmgi));
+        }
+        if (sess->previous_tmgi->mbs_service_id) ogs_free(sess->previous_tmgi->mbs_service_id);
+        sess->previous_tmgi->mbs_service_id = ogs_strdup(sess->session.tmgi->mbs_service_id);
+        memcpy(&sess->previous_tmgi->plmn, &sess->session.tmgi->plmn, sizeof(sess->previous_tmgi->plmn));
+    }
+
+    if (mbs_session->ssm && mbs_session->ssm->source_ip_addr && mbs_session->ssm->dest_ip_addr) {
+        ogs_sockaddr_t *addr = NULL;
+        if (!sess->session.ssm) {
+            sess->session.ssm = ogs_calloc(1, sizeof(*sess->session.ssm));
+        }
+        if (mbs_session->ssm->source_ip_addr->ipv4_addr && mbs_session->ssm->dest_ip_addr->ipv4_addr) {
+            sess->session.ssm->family = AF_INET;
+            ogs_getaddrinfo(&addr, AF_INET, mbs_session->ssm->source_ip_addr->ipv4_addr, 0, 0);
+            sess->session.ssm->source.ipv4 = addr->sin.sin_addr;
+            ogs_freeaddrinfo(addr);
+            addr = NULL;
+            ogs_getaddrinfo(&addr, AF_INET, mbs_session->ssm->dest_ip_addr->ipv4_addr, 0, 0);
+            sess->session.ssm->dest_mc.ipv4 = addr->sin.sin_addr;
+            ogs_freeaddrinfo(addr);
+        } else if (mbs_session->ssm->source_ip_addr->ipv6_addr && mbs_session->ssm->dest_ip_addr->ipv6_addr) {
+            sess->session.ssm->family = AF_INET6;
+            ogs_getaddrinfo(&addr, AF_INET6, mbs_session->ssm->source_ip_addr->ipv6_addr, 0, 0);
+            memcpy(&sess->session.ssm->source.ipv6, &addr->sin6.sin6_addr, sizeof(sess->session.ssm->source.ipv6));
+            ogs_freeaddrinfo(addr);
+            addr = NULL;
+            ogs_getaddrinfo(&addr, AF_INET6, mbs_session->ssm->dest_ip_addr->ipv6_addr, 0, 0);
+            memcpy(&sess->session.ssm->dest_mc.ipv6, &addr->sin6.sin6_addr, sizeof(sess->session.ssm->dest_mc.ipv6));
+            ogs_freeaddrinfo(addr);
+        } else {
+            ogs_warn("Unable to extract SSM details from the MbsSession");
+        }
     }
 
     /* TODO: process the events and trigger local notification events for each one */

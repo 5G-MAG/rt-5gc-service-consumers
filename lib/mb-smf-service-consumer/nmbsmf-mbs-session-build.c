@@ -13,6 +13,7 @@
 
 #include "macros.h"
 #include "context.h"
+#include "log.h"
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
 
@@ -37,7 +38,10 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
     msg.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_MBS_SESSIONS;
 
     OpenAPI_ssm_t *ssm = NULL;
-    OpenAPI_mbs_session_id_t *mbs_session_id = OpenAPI_mbs_session_id_create(NULL /*tmgi*/, NULL /*ssm*/, NULL /*nid*/);
+    OpenAPI_mbs_session_id_t *mbs_session_id = NULL;
+    if (session->session.ssm || session->session.tmgi) {
+        mbs_session_id = OpenAPI_mbs_session_id_create(NULL /*tmgi*/, NULL /*ssm*/, NULL /*nid*/);
+    }
     if (session->session.ssm) {
         OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
         if (session->session.ssm->family == AF_INET) {
@@ -150,6 +154,8 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
     req->http.content_length = strlen(body);
 
     if (msg.CreateReqData) OpenAPI_create_req_data_free(msg.CreateReqData);
+
+    ogs_debug("CreateReqData: %s", body);
 
     return req;
 }

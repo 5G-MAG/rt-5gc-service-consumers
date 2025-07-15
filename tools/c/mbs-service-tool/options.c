@@ -130,6 +130,11 @@ app_options_t* app_options_parse(int *argc, char ***argv)
         exit(1);
     }
 
+    if (!app_opts->req_tunnel && !app_opts->ssm.source) {
+        dprintf(2, "Must provide an SSM address pair if not requesting a UDP tunnel.\n");
+        exit(1);
+    }
+
     if (!app_opts->scp_address && !app_opts->nrf_address) {
         dprintf(2, "Must provide at least one of an SCP address or an NRF address\n");
         exit(1);

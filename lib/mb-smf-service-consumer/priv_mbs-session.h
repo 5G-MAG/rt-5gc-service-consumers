@@ -33,8 +33,8 @@ typedef struct _priv_mbs_session_s {
     char                   *id;
     ogs_list_t              new_subscriptions;
     ogs_list_t              deleted_subscriptions;
-    mb_smf_sc_ssm_addr_t    previous_ssm;
-    mb_smf_sc_tmgi_t        previous_tmgi;
+    mb_smf_sc_ssm_addr_t   *previous_ssm;
+    mb_smf_sc_tmgi_t       *previous_tmgi;
     bool                    changed;
     bool                    deleted;
     ogs_sbi_object_t        sbi_object;

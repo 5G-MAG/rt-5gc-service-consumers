@@ -60,10 +60,13 @@ typedef struct mb_smf_sc_mbs_session_s {
     void *create_result_cb_data;       /* data passed to the create_result_cb when it is called */
 } mb_smf_sc_mbs_session_t;
 
-/* mb_smf_sc_tmgi Type functions */
+/* mb_smf_sc_ssm Type functions */
+MB_SMF_CLIENT_API bool mb_smf_sc_ssm_equal(const mb_smf_sc_ssm_addr_t *a, const mb_smf_sc_ssm_addr_t *b);
 
+/* mb_smf_sc_tmgi Type functions */
 MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_new();
 MB_SMF_CLIENT_API void mb_smf_sc_tmgi_free(mb_smf_sc_tmgi_t *tmgi);
+MB_SMF_CLIENT_API bool mb_smf_sc_tmgi_equal(const mb_smf_sc_tmgi_t *a, const mb_smf_sc_tmgi_t *b);
 
 /* mb_smf_sc_mbs_session Type functions */
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new();

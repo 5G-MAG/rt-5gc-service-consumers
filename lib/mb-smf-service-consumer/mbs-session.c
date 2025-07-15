@@ -7,6 +7,7 @@
  * program. If this file is missing then the license can be retrieved from
  * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
  */
+#include <string.h>
 #include <netinet/in.h>
 
 #include "ogs-core.h"
@@ -22,6 +23,16 @@
 
 #include "mbs-session.h"
 
+/* SSM Type functions */
+MB_SMF_CLIENT_API bool mb_smf_sc_ssm_equal(const mb_smf_sc_ssm_addr_t *a, const mb_smf_sc_ssm_addr_t *b)
+{
+    if (a == b) return true;
+
+    if (!a || !b) return false;
+
+    return memcmp(a, b, sizeof(*a)) == 0;
+}
+
 /* TMGI Type functions */
 
 MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_new()
@@ -36,6 +47,22 @@ MB_SMF_CLIENT_API void mb_smf_sc_tmgi_free(mb_smf_sc_tmgi_t *tmgi)
     if (tmgi->mbs_service_id) ogs_free(tmgi->mbs_service_id);
 
     ogs_free(tmgi);
+}
+
+MB_SMF_CLIENT_API bool mb_smf_sc_tmgi_equal(const mb_smf_sc_tmgi_t *a, const mb_smf_sc_tmgi_t *b)
+{
+    if (a == b) return true;
+
+    if (!a || !b) return false;
+
+    if (a->mbs_service_id || b->mbs_service_id) {
+        if (!a->mbs_service_id || !b->mbs_service_id) return false;
+        if (strcmp(a->mbs_service_id, b->mbs_service_id) != 0) return false;
+    }
+
+    /* ignore expiry_time for equality comparison */
+
+    return memcmp(&a->plmn, &b->plmn, sizeof(a->plmn)) == 0;
 }
 
 /* MBS Session Type functions */
@@ -265,18 +292,40 @@ bool _mbs_session_push_changes(_priv_mbs_session_t *sess)
         return true;
     }
 
-    if (memcmp(&sess->previous_ssm, sess->session.ssm, sizeof(*sess->session.ssm))!=0) {
+    if (!sess->id && sess->changed) {
+        /* No ID and not already sent, this must be new, push it */
+        ogs_debug("New MbsSession");
+        sess->changed = false;
+        _mbs_session_send_create(sess);
+        return true;
+    }
+
+    if (!mb_smf_sc_ssm_equal(sess->previous_ssm, sess->session.ssm)) {
         ogs_debug("SSM changed, recreating MbsSession");
         /* SSM address change */
-        if (sess->previous_ssm.family != 0) {
+        if (sess->previous_ssm) {
             /* remove session at old SSM */
             _mbs_session_send_remove(sess);
         }
 
-        if (sess->session.ssm && sess->session.ssm->family != 0) {
-            /* create new session (includes subscriptions) */
-            _mbs_session_send_create(sess);
+        /* create new session (includes subscriptions) */
+        sess->changed = false;
+        _mbs_session_send_create(sess);
+
+        return true;
+    }
+
+    if (!mb_smf_sc_tmgi_equal(sess->previous_tmgi, sess->session.tmgi)) {
+        ogs_debug("TMGI changed, recreating MbsSession");
+        /* TMGI change */
+        if (sess->previous_tmgi) {
+            /* remove session for previous TMGI */
+            _mbs_session_send_remove(sess);
         }
+
+        /* create new session (includes subscriptions) */
+        sess->changed = false;
+        _mbs_session_send_create(sess);
 
         return true;
     }
@@ -380,6 +429,16 @@ void _mbs_session_delete(_priv_mbs_session_t *session)
     if (session->id) {
         ogs_free(session->id);
         session->id = NULL;
+    }
+
+    if (session->previous_ssm) {
+        ogs_free(session->previous_ssm);
+        session->previous_ssm = NULL;
+    }
+
+    if (session->previous_tmgi) {
+        mb_smf_sc_tmgi_free(session->previous_tmgi);
+        session->previous_tmgi = NULL;
     }
 
     // session
