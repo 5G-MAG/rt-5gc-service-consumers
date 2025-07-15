@@ -16,6 +16,7 @@
 #include "macros.h"
 #include "context.h"
 #include "log.h"
+#include "nmbsmf-mbs-session-build.h"
 #include "nmbsmf-mbs-session-handler.h"
 
 /* Header for this implementation */
@@ -27,13 +28,14 @@ MB_SMF_CLIENT_API bool mb_smf_sc_parse_config(const char *mb_smf_client_sect)
     _context_new();
     _log_init();
 
-    // TODO: parse the configuration sections
+    _context_parse_config(mb_smf_client_sect);
 
     return false;
 }
 
 MB_SMF_CLIENT_API void mb_smf_sc_terminate(void)
 {
+    _tidy_fixed_notification_server();
     _context_destroy();
 }
 
@@ -46,6 +48,28 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
     ogs_debug("Processing event %p [%s]", e, ogs_event_get_name(e));
 
     switch (e->id) {
+    case OGS_EVENT_SBI_SERVER:
+        /* possible notification */
+        ogs_sbi_request_t *request = e->sbi.request;
+        if (!request) return false;
+
+        ogs_pool_id_t stream_id = OGS_POINTER_TO_UINT(e->sbi.data);
+        ogs_sbi_stream_t *stream = ogs_sbi_stream_find_by_id(stream_id);
+        if (!stream) return false;
+
+        ogs_sbi_server_t *server = ogs_sbi_server_from_stream(stream);
+        if (!server) return false;
+
+        if (!_context_is_notification_server(server)) return false;
+
+        ogs_sbi_message_t message;
+        if (ogs_sbi_parse_header(&message, &request->h) != OGS_OK) return false;
+
+        ogs_warn("TODO: Check for a notification message and forward to the correct subscriber");
+
+        ogs_sbi_message_free(&message);
+
+        break;
     case OGS_EVENT_SBI_CLIENT:
         ogs_pool_id_t xact_id = OGS_POINTER_TO_UINT(e->sbi.data);
         if (xact_id < OGS_MIN_POOL_ID || xact_id > OGS_MAX_POOL_ID) return false;
@@ -75,16 +99,25 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                         ogs_sbi_message_t message;
                         ogs_debug("Client response for Create MBS Session received");
                         ogs_assert(response);
-                        ogs_debug("Parsing response");
-                        ogs_sbi_parse_response(&message, response);
-                        if (_nmbsmf_mbs_session_parse(&message, sess) == OGS_OK) {
-                            if (sess->session.create_result_cb) {
-                                ogs_debug("Forwarding creation result to calling application");
-                                sess->session.create_result_cb(_priv_mbs_session_to_public(sess), OGS_OK,
-                                                               sess->session.create_result_cb_data);
+                        if (response->status >= 200 && response->status < 300) {
+                            ogs_debug("Parsing response");
+                            ogs_sbi_parse_response(&message, response);
+                            if (_nmbsmf_mbs_session_parse(&message, sess) == OGS_OK) {
+                                if (sess->session.create_result_cb) {
+                                    ogs_debug("Forwarding creation result to calling application");
+                                    sess->session.create_result_cb(_priv_mbs_session_to_public(sess), OGS_OK,
+                                                                   sess->session.create_result_cb_data);
+                                }
+                            } else {
+                                ogs_warn("Errors in response from MB-SMF");
                             }
                         } else {
-                            ogs_warn("Errors in response from MB-SMF");
+                            ogs_error("MB-SMF responded with a %i status code", response->status);
+                            if (sess->session.create_result_cb) {
+                                ogs_debug("Forwarding creation error to calling application");
+                                sess->session.create_result_cb(_priv_mbs_session_to_public(sess), OGS_ERROR,
+                                                               sess->session.create_result_cb_data);
+                            }
                         }
                         ogs_sbi_response_free(response);
                         ogs_sbi_message_free(&message);

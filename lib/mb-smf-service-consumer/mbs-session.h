@@ -43,9 +43,8 @@ typedef struct mb_smf_sc_ssm_addr_s {
 typedef struct mb_smf_sc_tmgi_s {
     char *mbs_service_id;
     ogs_plmn_id_t plmn;
+    time_t expiry_time;
 } mb_smf_sc_tmgi_t;
-
-
 
 typedef void (*mb_smf_sc_mbs_session_create_result_cb)(mb_smf_sc_mbs_session_t *session, int result, void *data);
 

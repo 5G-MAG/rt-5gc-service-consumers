@@ -11,6 +11,7 @@
 
 #include "macros.h"
 #include "mbs-status-notification-result.h"
+#include "nmbsmf-mbs-session-build.h"
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
 
@@ -255,7 +256,7 @@ void _mbs_status_subscription_delete(_priv_mbs_status_subscription_t *subsc)
     if (subsc->id) ogs_free(subsc->id);
     if (subsc->cache->repr_string) ogs_free(subsc->cache->repr_string);
     if (subsc->cache->notif_url) ogs_free(subsc->cache->notif_url);
-    if (subsc->cache->notif_server) ogs_sbi_server_remove(subsc->cache->notif_server);
+    if (subsc->cache->notif_server) _notification_server_free(subsc->cache->notif_server);
     ogs_free(subsc->cache);
     ogs_free(subsc);
 }

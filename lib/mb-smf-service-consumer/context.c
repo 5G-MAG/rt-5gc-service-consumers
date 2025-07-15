@@ -14,11 +14,13 @@
 
 #include "macros.h"
 #include "priv_mbs-session.h"
+#include "priv_mbs-status-subscription.h"
 
 #include "context.h"
 
 typedef struct _context_s {
     ogs_list_t mbs_sessions; /* item type is _priv_mbs_session_t */
+    ogs_sockaddr_t *notification_bind_address;
 } _context_t;
 
 static _context_t *__self = NULL;
@@ -27,6 +29,12 @@ _context_t *_context_new()
 {
     __self = (_context_t*)ogs_calloc(1, sizeof(_context_t));
     return __self;
+}
+
+int _context_parse_config(const char *local)
+{
+    /* TODO: parse local config for library settings. */
+    return OGS_OK;
 }
 
 void _context_destroy()
@@ -93,6 +101,33 @@ _priv_mbs_session_t *_context_sbi_object_to_session(ogs_sbi_object_t *sbi_object
     }
 
     return NULL;
+}
+
+const ogs_sockaddr_t *_context_get_notification_address()
+{
+    if (!__self) return NULL;
+    return __self->notification_bind_address;
+}
+
+static int __check_notification_server(void *rec, const void *key, int klen, const void *value)
+{
+    ogs_sbi_server_t *server = rec;
+    const _priv_mbs_status_subscription_t *subsc = _priv_mbs_status_subscription_from_public_const(value);
+    if (subsc->cache && subsc->cache->notif_server == server) return 0;
+    return 1;
+}
+
+bool _context_is_notification_server(ogs_sbi_server_t *server)
+{
+    _priv_mbs_session_t *sess;
+    ogs_list_for_each(&__self->mbs_sessions, sess) {
+        _priv_mbs_status_subscription_t *subsc;
+        ogs_list_for_each(&sess->new_subscriptions, subsc) {
+            if (subsc->cache && subsc->cache->notif_server == server) return true;
+        }
+        if (!ogs_hash_do(__check_notification_server, server, sess->session.subscriptions)) return true;
+    }
+    return false;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

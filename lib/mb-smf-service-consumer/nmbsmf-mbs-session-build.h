@@ -21,6 +21,9 @@ extern "C" {
 ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data);
 ogs_sbi_request_t *_nmbsmf_mbs_session_build_remove(void *context, void *data);
 
+void _notification_server_free(ogs_sbi_server_t *server);
+void _tidy_fixed_notification_server();
+
 #ifdef __cplusplus
 }
 #endif

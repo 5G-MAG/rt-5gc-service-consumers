@@ -12,12 +12,16 @@
 #include "ogs-sbi.h"
 
 #include "macros.h"
+#include "context.h"
 #include "priv_mbs-session.h"
+#include "priv_mbs-status-subscription.h"
 
 #include "nmbsmf-mbs-session-build.h"
 
 static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr *addr);
 static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_addr *addr);
+static void __allocate_notification_server(_priv_mbs_status_subscription_t *subscription);
+static ogs_sbi_server_t *__new_sbi_server(const ogs_sockaddr_t *address);
 
 /* Library Internals */
 ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
@@ -33,7 +37,6 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
     msg.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_MBS_SESSIONS;
 
     OpenAPI_ssm_t *ssm = NULL;
-    OpenAPI_tmgi_t *tmgi = NULL;
     OpenAPI_mbs_session_id_t *mbs_session_id = OpenAPI_mbs_session_id_create(NULL /*tmgi*/, NULL /*ssm*/, NULL /*nid*/);
     if (session->session.ssm) {
         OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
@@ -51,35 +54,87 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
         OpenAPI_plmn_id_t *plmn_id = OpenAPI_plmn_id_create(ogs_plmn_id_mcc_string(&session->session.tmgi->plmn),
                                                             ogs_plmn_id_mnc_string(&session->session.tmgi->plmn));
         mbs_session_id->tmgi = OpenAPI_tmgi_create(ogs_strdup(session->session.tmgi->mbs_service_id), plmn_id);
-        tmgi = OpenAPI_tmgi_copy(tmgi, mbs_session_id->tmgi);
     }
     OpenAPI_ext_mbs_session_t *ext_mbs_session = OpenAPI_ext_mbs_session_create(mbs_session_id,
-                                                                                !tmgi, (tmgi?0:1),
-                                                                                tmgi,
-                                                                                NULL, /* TODO expiry_time as str */
+                                                                                session->session.tmgi_req,
+                                                                                (session->session.tmgi_req?1:0), /* tmgi_alloc_req: write-only */
+                                                                                NULL, /* tmgi: read-only */
+                                                                                NULL, /* expiry_time: read-only */
                                                                                 ssm?OpenAPI_mbs_service_type_MULTICAST
-                                                                                   :OpenAPI_mbs_service_type_BROADCAST,
+                                                                                   :OpenAPI_mbs_service_type_BROADCAST, /* service_type: write-only */
                                                                                 false, 0, /* location_dependant */
-                                                                                false, 0, /* area_session_id */
-                                                                                session->session.tunnel_req,
+                                                                                false, 0, /* area_session_id: read-only */
+                                                                                session->session.tunnel_req, /* ingress_tun_addr_req: write-only */
                                                                                 ((session->session.tunnel_req)?1:0),
-                                                                                NULL, /* ingress_tun_addr list */
-                                                                                ssm,
-                                                                                NULL, /* mbs_service_area */
-                                                                                NULL, /* ext_mbs_service_area */
-                                                                                NULL, /* dnn */
-                                                                                NULL, /* snssai */
-                                                                                NULL, /* activation_time */
+                                                                                NULL, /* ingress_tun_addr list: read-only */
+                                                                                ssm,  /* ssm: write-only */
+                                                                                NULL, /* mbs_service_area: write-only */
+                                                                                NULL, /* ext_mbs_service_area: write-only */
+                                                                                /* red_mbs_serv_area: read-only */
+                                                                                /* ext_red_mbs_serv_area: read-only */
+                                                                                NULL, /* dnn: write-only */
+                                                                                NULL, /* snssai: write-only */
+                                                                                NULL, /* activation_time: deprecated */
                                                                                 NULL, /* start_time */
                                                                                 NULL, /* termination_time */
                                                                                 NULL, /* mbs_serv_info */
-                                                                                NULL, /* mbs_session_subsc TODO */
+                                                                                NULL, /* mbs_session_subsc */
                                                                                 OpenAPI_mbs_session_activity_status_ACTIVE,
                                                                                 true, 1, /* any_ue_ind */
                                                                                 NULL, /* mbs_fsa_id_list */
                                                                                 NULL, /* mbs_security_context */
                                                                                 false, 0 /* contact_pcf_ind */
                                                                                 );
+
+    /* Add first subscription */
+    _priv_mbs_status_subscription_t *subsc;
+    if (!ogs_list_empty(&session->new_subscriptions)) {
+        subsc = ogs_list_first(&session->new_subscriptions);
+    } else if (ogs_hash_count(session->session.subscriptions) > 0) {
+        ogs_hash_index_t *it = ogs_hash_first(session->session.subscriptions);
+        subsc = _priv_mbs_status_subscription_from_public(ogs_hash_this_val(it));
+    }
+    if (subsc) {
+        OpenAPI_list_t *subsc_events = NULL;
+        if (subsc->flags & MBS_SESSION_EVENT_MBS_REL_TMGI_EXPIRY) {
+            OpenAPI_mbs_session_event_t *event = OpenAPI_mbs_session_event_create(
+                                                            OpenAPI_mbs_session_event_type_MBS_REL_TMGI_EXPIRY);
+            subsc_events = OpenAPI_list_create();
+            OpenAPI_list_add(subsc_events, event);
+        }
+        if (subsc->flags & MBS_SESSION_EVENT_BROADCAST_DELIVERY_STATUS) {
+            OpenAPI_mbs_session_event_t *event = OpenAPI_mbs_session_event_create(
+                                                            OpenAPI_mbs_session_event_type_BROADCAST_DELIVERY_STATUS);
+            if (!subsc_events) subsc_events = OpenAPI_list_create();
+            OpenAPI_list_add(subsc_events, event);
+        }
+        if (subsc->flags & MBS_SESSION_EVENT_INGRESS_TUNNEL_ADD_CHANGE) {
+            OpenAPI_mbs_session_event_t *event = OpenAPI_mbs_session_event_create(
+                                                            OpenAPI_mbs_session_event_type_INGRESS_TUNNEL_ADD_CHANGE);
+            if (!subsc_events) subsc_events = OpenAPI_list_create();
+            OpenAPI_list_add(subsc_events, event);
+        }
+        if (subsc_events) {
+            char *correlation_id = subsc->correlation_id?ogs_strdup(subsc->correlation_id):NULL;
+            char *notify_uri = NULL;
+            __allocate_notification_server(subsc);
+            if (subsc->cache->notif_url) {
+                notify_uri = ogs_strdup(subsc->cache->notif_url);
+            }
+            ext_mbs_session->mbs_session_subsc = OpenAPI_mbs_session_subscription_create(
+                                                     NULL, /* mbs_session_id: not in MBS Session create */
+                                                     false, 0, /* area_session_id: not in MBS Session create */
+                                                     subsc_events, /* event_list: must have at least 1 entry */
+                                                     notify_uri, /* notify_uri: write-only */
+                                                     correlation_id, /* notify_correlation_id: write-only */
+                                                     NULL, /* expiry_time (TODO) */
+                                                     NULL, /* nfc_instance_id: write-only (TODO - use app nf_instance if available) */
+                                                     NULL /* mbs_session_subsc_uri: read-only */
+                                                 );
+        }
+    }
+
+    /* Create the request */
     msg.CreateReqData = OpenAPI_create_req_data_create(ext_mbs_session);
 
     /* message => request for CreateReqData is not implemented, so do so here */
@@ -141,6 +196,95 @@ static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_ad
     }
 
     return ret;
+}
+
+static ogs_sbi_server_t *fixed_port_notifications = NULL;
+
+static void __allocate_notification_server(_priv_mbs_status_subscription_t *subsc)
+{
+    if (subsc->cache->notif_server) return; /* Already got a server allocated */
+
+    const ogs_sockaddr_t *notif_address = _context_get_notification_address();
+
+    if (!notif_address) {
+        /* use ephemeral port on any address */
+        static const ogs_sockaddr_t any_ephemeral_v4 = { .sa = { .sa_family = AF_INET } };
+        notif_address = &any_ephemeral_v4;
+    }
+
+    bool is_ephemeral = false;
+    if (notif_address->ogs_sa_family == AF_INET) {
+        if (notif_address->sin.sin_port == 0) {
+            is_ephemeral = true;
+        }
+    } else if (notif_address->ogs_sa_family == AF_INET6) {
+        if (notif_address->sin6.sin6_port == 0) {
+            is_ephemeral = true;
+        }
+    }
+
+    ogs_sbi_header_t header;
+    memset(&header, 0, sizeof(header));
+    header.service.name = (char*)"mbs-session-notify";
+    header.api.version = (char*)"v1";
+
+    if (is_ephemeral) {
+        /* ephemeral port, allocate new server, notifications to come in at root */
+        subsc->cache->notif_server = __new_sbi_server(notif_address);
+        if (subsc->cache->notif_server) {
+            header.resource.component[0] = (char*)"notification";
+            subsc->cache->notif_url = ogs_sbi_server_uri(subsc->cache->notif_server, &header);
+        }
+    } else {
+        if (!fixed_port_notifications) fixed_port_notifications = __new_sbi_server(notif_address);
+        if (fixed_port_notifications) {
+            ogs_uuid_t uuid;
+            char id[OGS_UUID_FORMATTED_LENGTH + 1];
+
+            ogs_uuid_get(&uuid);
+            ogs_uuid_format(id, &uuid);
+            header.resource.component[0] = id;
+            subsc->cache->notif_server = fixed_port_notifications;
+            subsc->cache->notif_url = ogs_sbi_server_uri(subsc->cache->notif_server, &header);
+        }
+    }
+}
+
+extern ogs_sbi_server_actions_t ogs_sbi_server_actions;
+
+static ogs_sbi_server_t *__new_sbi_server(const ogs_sockaddr_t *address)
+{
+    ogs_sbi_server_t *svr = ogs_sbi_server_add(NULL, OpenAPI_uri_scheme_http, (ogs_sockaddr_t*)address, NULL);
+    if (svr) {
+        ogs_sbi_server_actions.start(svr, ogs_sbi_server_handler);
+        if ((address->ogs_sa_family == AF_INET && address->sin.sin_port == 0) ||
+            (address->ogs_sa_family == AF_INET6 && address->sin6.sin6_port == 0)) {
+            /* Retrieve bound address to get port number of ephemeral port */
+            char buf[OGS_ADDRSTRLEN];
+            socklen_t len = ogs_sockaddr_len(&svr->node.sock->local_addr);
+            getsockname(svr->node.sock->fd, (struct sockaddr*)&svr->node.sock->local_addr, &len);
+            ogs_freeaddrinfo(svr->node.addr);
+            ogs_copyaddrinfo(&svr->node.addr, &svr->node.sock->local_addr);
+            ogs_info("Ephemeral notification server(%s) [%s://%s]:%u", svr->interface ? svr->interface : "",
+                     svr->ssl_ctx ? "https" : "http", OGS_ADDR(svr->node.addr, buf), OGS_PORT(svr->node.addr));
+        }
+    }
+    return svr;
+}
+
+void _notification_server_free(ogs_sbi_server_t *server)
+{
+    if (!server || fixed_port_notifications == server) return;
+
+    ogs_sbi_server_actions.stop(server);
+    ogs_sbi_server_remove(server);
+}
+
+void _tidy_fixed_notification_server()
+{
+    if (!fixed_port_notifications) return;
+    ogs_sbi_server_actions.stop(fixed_port_notifications);
+    ogs_sbi_server_remove(fixed_port_notifications);
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:
