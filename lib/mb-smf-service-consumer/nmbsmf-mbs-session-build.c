@@ -94,7 +94,7 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
     _priv_mbs_status_subscription_t *subsc;
     if (!ogs_list_empty(&session->new_subscriptions)) {
         subsc = ogs_list_first(&session->new_subscriptions);
-    } else if (ogs_hash_count(session->session.subscriptions) > 0) {
+    } else if (session->session.subscriptions && ogs_hash_count(session->session.subscriptions) > 0) {
         ogs_hash_index_t *it = ogs_hash_first(session->session.subscriptions);
         subsc = _priv_mbs_status_subscription_from_public(ogs_hash_this_val(it));
     }
