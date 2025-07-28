@@ -86,6 +86,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_service_type(mb_smf_sc_mbs_sess
 MB_SMF_CLIENT_API const char *mb_smf_sc_mbs_session_get_resource_id(const mb_smf_sc_mbs_session_t *session);
 
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_changes(mb_smf_sc_mbs_session_t *);
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_all_changes();
 
 #ifdef __cplusplus
 }
