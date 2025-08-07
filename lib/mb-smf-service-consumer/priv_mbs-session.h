@@ -22,6 +22,8 @@ extern "C" {
 #endif
 
 /* Data types */
+typedef struct _priv_mbs_status_subscription_s _priv_mbs_status_subscription_t;
+
 typedef struct _priv_mbs_session_s {
     /* Enable use in ogs_list_t */
     ogs_lnode_t             node;
@@ -50,7 +52,9 @@ bool _mbs_session_push_changes(_priv_mbs_session_t *session);
 void _mbs_session_send_create(_priv_mbs_session_t *session);
 void _mbs_session_send_update(_priv_mbs_session_t *session);
 void _mbs_session_send_remove(_priv_mbs_session_t *session);
+void _mbs_session_send_subscription_create(_priv_mbs_session_t *session, _priv_mbs_status_subscription_t *subsc);
 void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess);
+_priv_mbs_status_subscription_t *_mbs_session_find_subscription(_priv_mbs_session_t *session, const char *correlation_id);
 
 #ifdef __cplusplus
 }

@@ -360,9 +360,7 @@ void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess)
     _priv_mbs_status_subscription_t *next, *node;
 
     ogs_list_for_each_safe(&sess->new_subscriptions, next, node) {
-        // TODO: Send create status subscription
-        ogs_warn("TODO: Send create status subscription for subscription [%p (%p)]",
-                 node, _priv_mbs_status_subscription_to_public(node));
+        if (node->changed) _mbs_session_send_subscription_create(sess, node);
         node->changed = false;
         // Await response then:
         // ogs_list_remove(&sess->new_subscriptions, node);
@@ -486,6 +484,67 @@ void _mbs_session_send_remove(_priv_mbs_session_t *session)
                                             _nmbsmf_mbs_session_build_remove, session, NULL);
 
     ogs_sbi_discover_and_send(xact);
+}
+
+void _mbs_session_send_subscription_create(_priv_mbs_session_t *session, _priv_mbs_status_subscription_t *subsc)
+{
+    if (!session || !subsc) return;
+
+    ogs_debug("Send creation of MBS Status Subscription [%p (%p)] for MBS Session [%p (%p)]",
+              subsc, _priv_mbs_status_subscription_to_public(subsc),
+              session, _priv_mbs_session_to_public(session));
+
+    ogs_sbi_service_type_e service_type = OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION;
+
+    /* Shouldn't need discovery options as we are talking to previously discovered MB-SMF (details in session->sbi_object) */
+
+    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, &session->sbi_object, service_type, NULL,
+                                            _nmbsmf_mbs_session_build_status_subscription_create, session, subsc);
+    ogs_sbi_discover_and_send(xact);
+}
+
+typedef struct __mbs_session_find_subsc_filter_s {
+    const char *correlation_id;
+    _priv_mbs_status_subscription_t *found;
+} __mbs_session_find_subsc_filter_t;
+
+static int __mbs_session_find_subsc_hash_do(void *rec, const void *key, int klen, const void *value)
+{
+    _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)value;
+    __mbs_session_find_subsc_filter_t *filter = (__mbs_session_find_subsc_filter_t*)rec;
+    if (!filter->correlation_id && !subsc->correlation_id) {
+        filter->found = subsc;
+        return 0;
+    }
+    if (filter->correlation_id && subsc->correlation_id && !strcmp(filter->correlation_id, subsc->correlation_id)) {
+        filter->found = subsc;
+        return 0;
+    }
+    return 1;
+}
+
+_priv_mbs_status_subscription_t *_mbs_session_find_subscription(_priv_mbs_session_t *session, const char *correlation_id)
+{
+    if (!session) return NULL;
+
+    _priv_mbs_status_subscription_t *subsc;
+    ogs_list_for_each(&session->new_subscriptions, subsc) {
+        if (!correlation_id && !subsc->correlation_id) return subsc;
+        if (correlation_id && subsc->correlation_id && !strcmp(correlation_id, subsc->correlation_id)) return subsc;
+    }
+
+    __mbs_session_find_subsc_filter_t filter = {
+        .correlation_id = correlation_id,
+        .found = NULL
+    };
+
+    if (session->session.subscriptions) {
+        if (!ogs_hash_do(__mbs_session_find_subsc_hash_do, &filter, session->session.subscriptions)) {
+            return filter.found;
+        }
+    }
+
+    return NULL;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

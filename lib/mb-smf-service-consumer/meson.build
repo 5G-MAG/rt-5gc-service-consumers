@@ -11,6 +11,7 @@ libcore_dep = open5gs_project.get_variable('libcore_dep')
 libcrypt_dep = open5gs_project.get_variable('libcrypt_dep')
 libsbi_dep = open5gs_project.get_variable('libsbi_dep')
 libinc = open5gs_project.get_variable('libinc')
+libsbi_openapi_inc = open5gs_project.get_variable('libsbi_openapi_inc')
 
 libscmbsmf_version_major = 1
 libscmbsmf_version_minor = 0
@@ -46,6 +47,17 @@ libscmbsmf_sources = files('''
     priv_mbs-session.h
     utils.c
     utils.h
+
+    openapi_status_notify_req_data.c
+    openapi_status_subscribe_req_data.c
+'''.split())
+
+libscmbsmf_public_hdrs = files('''
+    macros.h
+    mb-smf-service-consumer.h
+    mbs-session.h
+    mbs-status-notification-result.h
+    mbs-status-subscription.h
 '''.split())
 
 libscmbsmf_inc = include_directories('.')

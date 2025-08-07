@@ -15,6 +15,7 @@
 
 #include "macros.h"
 #include "priv_mbs-session.h"
+#include "priv_mbs-status-subscription.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,6 +34,7 @@ bool _context_active_sessions_exists(_priv_mbs_session_t *session);
 _priv_mbs_session_t *_context_sbi_object_to_session(ogs_sbi_object_t *sbi_object);
 const ogs_sockaddr_t *_context_get_notification_address();
 bool _context_is_notification_server(ogs_sbi_server_t *server);
+_priv_mbs_status_subscription_t *_context_find_subscription(ogs_sbi_server_t *server, const char *url_path);
 
 #ifdef __cplusplus
 }

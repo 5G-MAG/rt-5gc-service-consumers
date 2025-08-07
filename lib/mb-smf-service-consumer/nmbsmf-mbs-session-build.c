@@ -10,6 +10,7 @@
 
 #include "ogs-core.h"
 #include "ogs-sbi.h"
+#include "openapi/model/status_subscribe_req_data.h"
 
 #include "macros.h"
 #include "context.h"
@@ -19,10 +20,15 @@
 
 #include "nmbsmf-mbs-session-build.h"
 
+extern ogs_sbi_server_actions_t ogs_sbi_server_actions;
+
 static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr *addr);
 static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_addr *addr);
 static void __allocate_notification_server(_priv_mbs_status_subscription_t *subscription);
 static ogs_sbi_server_t *__new_sbi_server(const ogs_sockaddr_t *address);
+static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *session, OpenAPI_ssm_t **ssm_ptr);
+
+static ogs_sbi_server_t *fixed_port_notifications = NULL;
 
 /* Library Internals */
 ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
@@ -38,27 +44,8 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
     msg.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_MBS_SESSIONS;
 
     OpenAPI_ssm_t *ssm = NULL;
-    OpenAPI_mbs_session_id_t *mbs_session_id = NULL;
-    if (session->session.ssm || session->session.tmgi) {
-        mbs_session_id = OpenAPI_mbs_session_id_create(NULL /*tmgi*/, NULL /*ssm*/, NULL /*nid*/);
-    }
-    if (session->session.ssm) {
-        OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
-        if (session->session.ssm->family == AF_INET) {
-            src = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->source.ipv4);
-            dest = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->dest_mc.ipv4);
-        } else {
-            src = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->source.ipv6);
-            dest = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->dest_mc.ipv6);
-        }
-        mbs_session_id->ssm = OpenAPI_ssm_create(src, dest);
-        ssm = OpenAPI_ssm_copy(ssm, mbs_session_id->ssm);
-    }
-    if (session->session.tmgi) {
-        OpenAPI_plmn_id_t *plmn_id = OpenAPI_plmn_id_create(ogs_plmn_id_mcc_string(&session->session.tmgi->plmn),
-                                                            ogs_plmn_id_mnc_string(&session->session.tmgi->plmn));
-        mbs_session_id->tmgi = OpenAPI_tmgi_create(ogs_strdup(session->session.tmgi->mbs_service_id), plmn_id);
-    }
+    OpenAPI_mbs_session_id_t *mbs_session_id = __make_mbs_session_id(session, &ssm);
+
     OpenAPI_ext_mbs_session_t *ext_mbs_session = OpenAPI_ext_mbs_session_create(mbs_session_id,
                                                                                 session->session.tmgi_req,
                                                                                 (session->session.tmgi_req?1:0), /* tmgi_alloc_req: write-only */
@@ -178,6 +165,81 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_remove(void *context, void *data)
     return req;
 }
 
+ogs_sbi_request_t *_nmbsmf_mbs_session_build_status_subscription_create(void *context, void *data)
+{
+    _priv_mbs_session_t *session = (_priv_mbs_session_t*)context;
+    _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)data;
+
+    ogs_sbi_message_t msg;
+
+    memset(&msg, 0, sizeof(msg));
+    msg.h.method = (char*)OGS_SBI_HTTP_METHOD_POST;
+    msg.h.service.name = (char*)OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION;
+    msg.h.api.version = (char *)OGS_SBI_API_V1;
+    msg.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_MBS_SESSIONS;
+    msg.h.resource.component[1] = (char *)OGS_SBI_RESOURCE_NAME_SUBSCRIPTIONS;
+
+    char *body = NULL;
+
+    OpenAPI_mbs_session_id_t *mbs_session_id = __make_mbs_session_id(session, NULL);
+
+    bool has_area_session_id = (subsc->area_session_id != 0);
+    int area_session_id = subsc->area_session_id;
+
+    OpenAPI_list_t *event_list = NULL;
+
+    char *notify_uri = subsc->cache?subsc->cache->notif_url:NULL;
+
+    char *notify_correlation_id = subsc->correlation_id?ogs_strdup(subsc->correlation_id):NULL;
+
+    char *expiry_time = (subsc->expiry_time!=0)?ogs_sbi_gmtime_string(subsc->expiry_time):NULL;
+
+    char *nfc_instance_id = NF_INSTANCE_ID(ogs_sbi_self()->nf_instance);
+    if (nfc_instance_id) nfc_instance_id = ogs_strdup(nfc_instance_id);
+
+    OpenAPI_mbs_session_subscription_t *subscription = OpenAPI_mbs_session_subscription_create(
+                                                                mbs_session_id,
+                                                                has_area_session_id, area_session_id,
+                                                                event_list,
+                                                                notify_uri,
+                                                                notify_correlation_id,
+                                                                expiry_time,
+                                                                nfc_instance_id,
+                                                                NULL /* Read-Only */);
+
+    ogs_assert(subscription);
+
+    OpenAPI_status_subscribe_req_data_t *req_data = OpenAPI_status_subscribe_req_data_create(subscription);
+    ogs_assert(req_data);
+
+    cJSON *json = OpenAPI_status_subscribe_req_data_convertToJSON(req_data);
+    if (json) {
+        body = cJSON_PrintUnformatted(json);
+        cJSON_Delete(json);
+    }
+
+    ogs_sbi_request_t *req = ogs_sbi_build_request(&msg);
+    req->http.content = body;
+    req->http.content_length = body?strlen(body):0;
+
+    return req;
+}
+
+void _notification_server_free(ogs_sbi_server_t *server)
+{
+    if (!server || fixed_port_notifications == server) return;
+
+    ogs_sbi_server_actions.stop(server);
+    ogs_sbi_server_remove(server);
+}
+
+void _tidy_fixed_notification_server()
+{
+    if (!fixed_port_notifications) return;
+    ogs_sbi_server_actions.stop(fixed_port_notifications);
+    ogs_sbi_server_remove(fixed_port_notifications);
+}
+
 /* Private functions */
 
 static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr *addr)
@@ -204,8 +266,6 @@ static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_ad
     return ret;
 }
 
-static ogs_sbi_server_t *fixed_port_notifications = NULL;
-
 static void __allocate_notification_server(_priv_mbs_status_subscription_t *subsc)
 {
     if (subsc->cache->notif_server) return; /* Already got a server allocated */
@@ -213,7 +273,7 @@ static void __allocate_notification_server(_priv_mbs_status_subscription_t *subs
     const ogs_sockaddr_t *notif_address = _context_get_notification_address();
 
     if (!notif_address) {
-        /* use ephemeral port on any address */
+        /* if not configured, use ephemeral port on IPv4 any address */
         static const ogs_sockaddr_t any_ephemeral_v4 = { .sa = { .sa_family = AF_INET } };
         notif_address = &any_ephemeral_v4;
     }
@@ -256,8 +316,6 @@ static void __allocate_notification_server(_priv_mbs_status_subscription_t *subs
     }
 }
 
-extern ogs_sbi_server_actions_t ogs_sbi_server_actions;
-
 static ogs_sbi_server_t *__new_sbi_server(const ogs_sockaddr_t *address)
 {
     ogs_sbi_server_t *svr = ogs_sbi_server_add(NULL, OpenAPI_uri_scheme_http, (ogs_sockaddr_t*)address, NULL);
@@ -278,19 +336,30 @@ static ogs_sbi_server_t *__new_sbi_server(const ogs_sockaddr_t *address)
     return svr;
 }
 
-void _notification_server_free(ogs_sbi_server_t *server)
+static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *session, OpenAPI_ssm_t **ssm_ptr)
 {
-    if (!server || fixed_port_notifications == server) return;
-
-    ogs_sbi_server_actions.stop(server);
-    ogs_sbi_server_remove(server);
-}
-
-void _tidy_fixed_notification_server()
-{
-    if (!fixed_port_notifications) return;
-    ogs_sbi_server_actions.stop(fixed_port_notifications);
-    ogs_sbi_server_remove(fixed_port_notifications);
+    OpenAPI_mbs_session_id_t *mbs_session_id = NULL;
+    if (session->session.ssm || session->session.tmgi) {
+        mbs_session_id = OpenAPI_mbs_session_id_create(NULL /*tmgi*/, NULL /*ssm*/, NULL /*nid*/);
+    }
+    if (session->session.ssm) {
+        OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
+        if (session->session.ssm->family == AF_INET) {
+            src = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->source.ipv4);
+            dest = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->dest_mc.ipv4);
+        } else {
+            src = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->source.ipv6);
+            dest = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->dest_mc.ipv6);
+        }
+        mbs_session_id->ssm = OpenAPI_ssm_create(src, dest);
+        if (ssm_ptr) *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, mbs_session_id->ssm);
+    }
+    if (session->session.tmgi) {
+        OpenAPI_plmn_id_t *plmn_id = OpenAPI_plmn_id_create(ogs_plmn_id_mcc_string(&session->session.tmgi->plmn),
+                                                            ogs_plmn_id_mnc_string(&session->session.tmgi->plmn));
+        mbs_session_id->tmgi = OpenAPI_tmgi_create(ogs_strdup(session->session.tmgi->mbs_service_id), plmn_id);
+    }
+    return mbs_session_id;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

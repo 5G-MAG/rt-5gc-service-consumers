@@ -7,15 +7,19 @@
  * program. If this file is missing then the license can be retrieved from
  * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
  */
+#define _DEFAULT_SOURCE     /* See feature_test_macros(7) */
+#define _XOPEN_SOURCE       /* See feature_test_macros(7) */
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <time.h>
 
 #include "ogs-core.h"
 #include "ogs-sbi.h"
 
 #include "log.h"
 #include "priv_mbs-session.h"
+#include "priv_mbs-status-subscription.h"
 
 #include "nmbsmf-mbs-session-handler.h"
 
@@ -109,37 +113,154 @@ int _nmbsmf_mbs_session_parse(ogs_sbi_message_t *message, _priv_mbs_session_t *s
         memcpy(&sess->previous_tmgi->plmn, &sess->session.tmgi->plmn, sizeof(sess->previous_tmgi->plmn));
     }
 
-    if (mbs_session->ssm && mbs_session->ssm->source_ip_addr && mbs_session->ssm->dest_ip_addr) {
+    if (mbs_session->mbs_session_id->ssm && mbs_session->mbs_session_id->ssm->source_ip_addr &&
+            mbs_session->mbs_session_id->ssm->dest_ip_addr) {
         ogs_sockaddr_t *addr = NULL;
         if (!sess->session.ssm) {
             sess->session.ssm = ogs_calloc(1, sizeof(*sess->session.ssm));
         }
-        if (mbs_session->ssm->source_ip_addr->ipv4_addr && mbs_session->ssm->dest_ip_addr->ipv4_addr) {
+        if (mbs_session->mbs_session_id->ssm->source_ip_addr->ipv4_addr &&
+                mbs_session->mbs_session_id->ssm->dest_ip_addr->ipv4_addr) {
             sess->session.ssm->family = AF_INET;
-            ogs_getaddrinfo(&addr, AF_INET, mbs_session->ssm->source_ip_addr->ipv4_addr, 0, 0);
+            ogs_getaddrinfo(&addr, AF_INET, mbs_session->mbs_session_id->ssm->source_ip_addr->ipv4_addr, 0, 0);
             sess->session.ssm->source.ipv4 = addr->sin.sin_addr;
             ogs_freeaddrinfo(addr);
             addr = NULL;
-            ogs_getaddrinfo(&addr, AF_INET, mbs_session->ssm->dest_ip_addr->ipv4_addr, 0, 0);
+            ogs_getaddrinfo(&addr, AF_INET, mbs_session->mbs_session_id->ssm->dest_ip_addr->ipv4_addr, 0, 0);
             sess->session.ssm->dest_mc.ipv4 = addr->sin.sin_addr;
             ogs_freeaddrinfo(addr);
-        } else if (mbs_session->ssm->source_ip_addr->ipv6_addr && mbs_session->ssm->dest_ip_addr->ipv6_addr) {
+        } else if (mbs_session->mbs_session_id->ssm->source_ip_addr->ipv6_addr &&
+                mbs_session->mbs_session_id->ssm->dest_ip_addr->ipv6_addr) {
             sess->session.ssm->family = AF_INET6;
-            ogs_getaddrinfo(&addr, AF_INET6, mbs_session->ssm->source_ip_addr->ipv6_addr, 0, 0);
+            ogs_getaddrinfo(&addr, AF_INET6, mbs_session->mbs_session_id->ssm->source_ip_addr->ipv6_addr, 0, 0);
             memcpy(&sess->session.ssm->source.ipv6, &addr->sin6.sin6_addr, sizeof(sess->session.ssm->source.ipv6));
             ogs_freeaddrinfo(addr);
             addr = NULL;
-            ogs_getaddrinfo(&addr, AF_INET6, mbs_session->ssm->dest_ip_addr->ipv6_addr, 0, 0);
+            ogs_getaddrinfo(&addr, AF_INET6, mbs_session->mbs_session_id->ssm->dest_ip_addr->ipv6_addr, 0, 0);
             memcpy(&sess->session.ssm->dest_mc.ipv6, &addr->sin6.sin6_addr, sizeof(sess->session.ssm->dest_mc.ipv6));
             ogs_freeaddrinfo(addr);
         } else {
             ogs_warn("Unable to extract SSM details from the MbsSession");
         }
+        if (!sess->previous_ssm) {
+            sess->previous_ssm = (mb_smf_sc_ssm_addr_t*)ogs_malloc(sizeof(*sess->previous_ssm));
+        }
+        memcpy(sess->previous_ssm, sess->session.ssm, sizeof(*sess->previous_ssm));
     }
 
-    /* TODO: process the events and trigger local notification events for each one */
+    OpenAPI_mbs_session_event_report_list_t *event_list = create_rsp_data->event_list;
+    if (event_list && event_list->event_report_list) {
+        /* process the events and trigger local notification events for each one */
+        _priv_mbs_status_subscription_t *subsc = _mbs_session_find_subscription(sess, event_list->notify_correlation_id);
+        _nmbsmf_mbs_session_subscription_report_list_handler(subsc, event_list->event_report_list);
+    }
 
     return OGS_OK;
+}
+
+int _nmbsmf_mbs_session_subscription_report_list_handler(_priv_mbs_status_subscription_t *subsc,
+                                                         OpenAPI_list_t *event_report_list)
+{
+    if (!subsc || !subsc->callback || !event_report_list) return 0;
+
+    OpenAPI_lnode_t *node = NULL;
+    OpenAPI_list_for_each(event_report_list, node) {
+        OpenAPI_mbs_session_event_report_t *report = (OpenAPI_mbs_session_event_report_t*)node->data;
+        /* Parse event time */
+        struct tm report_tm = {};
+        char *rest = ogs_strptime(report->time_stamp, "%Y-%m-%dT%H:%M:%SZ", &report_tm);
+        if (!rest || rest[0]) {
+            ogs_warn("Received notification from MB-SMF with bad timestamp: %s", report->time_stamp);
+            continue;
+        }
+
+        /* Build a notification result to send to the app callback */
+        mb_smf_sc_mbs_status_notification_result_t notification = {
+            .mbs_session = _priv_mbs_session_to_public(subsc->session),
+            .correlation_id = subsc->correlation_id,
+            .event_time = ogs_mktime(&report_tm)
+        };
+
+        /* Add event specific results to notification result */
+        switch (report->event_type) {
+        case OpenAPI_mbs_session_event_type_MBS_REL_TMGI_EXPIRY:
+            notification.event_type = MBS_SESSION_EVENT_MBS_REL_TMGI_EXPIRY;
+            notification.event_type_name = (char*)"MBS_REL_TMGI_EXPIRY";
+            break;
+        case OpenAPI_mbs_session_event_type_BROADCAST_DELIVERY_STATUS:
+            notification.event_type = MBS_SESSION_EVENT_BROADCAST_DELIVERY_STATUS;
+            notification.event_type_name = (char*)"BROADCAST_DELIVERY_STATUS";
+            switch (report->broadcast_del_status) {
+            case OpenAPI_broadcast_delivery_status_STARTED:
+                notification.broadcast_delivery_status = BROADCAST_DELIVERY_STARTED;
+                break;
+            case OpenAPI_broadcast_delivery_status_TERMINATED:
+                notification.broadcast_delivery_status = BROADCAST_DELIVERY_TERMINATED;
+                break;
+            default:
+                break;
+            }
+            break;
+        case OpenAPI_mbs_session_event_type_INGRESS_TUNNEL_ADD_CHANGE:
+        {
+            OpenAPI_lnode_t *node2;
+            notification.event_type = MBS_SESSION_EVENT_INGRESS_TUNNEL_ADD_CHANGE;
+            notification.event_type_name = (char*)"INGRESS_TUNNEL_ADD_CHANGE";
+            OpenAPI_list_for_each(report->ingress_tun_addr_info->ingress_tun_addr, node2) {
+                OpenAPI_tunnel_address_t *tun_addr = (OpenAPI_tunnel_address_t*)node2->data;
+                mb_smf_sc_mbs_status_notification_ingress_tunnel_addr_t *notif_tun_addr =
+                        (mb_smf_sc_mbs_status_notification_ingress_tunnel_addr_t*)ogs_calloc(1,
+                                sizeof(mb_smf_sc_mbs_status_notification_ingress_tunnel_addr_t));
+                struct in_addr *ipv4 = NULL;
+                if (tun_addr->ipv4_addr) {
+                    ipv4 = (struct in_addr*)ogs_calloc(1, sizeof(*ipv4));
+                    if (inet_pton(AF_INET, tun_addr->ipv4_addr, (void*)ipv4) != 1) {
+                        ogs_warn("Received INGRESS_TUNNEL_ADD_CHANGE notification from MB-SMF with bad IPv4 address: %s",
+                                 tun_addr->ipv4_addr);
+                        ogs_free(ipv4);
+                        ipv4 = NULL;
+                    }
+                }
+                notif_tun_addr->ipv4 = ipv4;
+
+                struct in6_addr *ipv6 = NULL;
+                if (tun_addr->ipv6_addr) {
+                    ipv6 = (struct in6_addr*)ogs_calloc(1, sizeof(*ipv6));
+                    if (inet_pton(AF_INET6, tun_addr->ipv6_addr, (void*)ipv6) != 1) {
+                        ogs_warn("Received INGRESS_TUNNEL_ADD_CHANGE notification from MB-SMF with bad IPv6 address: %s",
+                                 tun_addr->ipv6_addr);
+                        ogs_free(ipv6);
+                        ipv6 = NULL;
+                    }
+                }
+                notif_tun_addr->ipv6 = ipv6;
+
+                notif_tun_addr->port = tun_addr->port_number;
+
+                ogs_list_add(&notification.ingress_tunnel_add_change, notif_tun_addr);
+            }
+            break;
+        }
+        default:
+            break;
+        }
+
+        if (subsc->flags & notification.event_type) {
+            subsc->callback(&notification, subsc->callback_data);
+        }
+
+        /* Free memory allocated for the notification */
+        if (notification.event_type & MBS_SESSION_EVENT_INGRESS_TUNNEL_ADD_CHANGE) {
+            mb_smf_sc_mbs_status_notification_ingress_tunnel_addr_t *ita, *ita_next;
+            ogs_list_for_each_safe(&notification.ingress_tunnel_add_change, ita_next, ita) {
+                if (ita->ipv4) ogs_free(ita->ipv4);
+                if (ita->ipv6) ogs_free(ita->ipv6);
+                ogs_list_remove(&notification.ingress_tunnel_add_change, ita);
+                ogs_free(ita);
+            }
+        }
+    }
+    return 1;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:
