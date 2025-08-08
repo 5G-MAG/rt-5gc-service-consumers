@@ -22,8 +22,6 @@
 
 extern ogs_sbi_server_actions_t ogs_sbi_server_actions;
 
-static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr *addr);
-static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_addr *addr);
 static void __allocate_notification_server(_priv_mbs_status_subscription_t *subscription);
 static ogs_sbi_server_t *__new_sbi_server(const ogs_sockaddr_t *address);
 static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *session, OpenAPI_ssm_t **ssm_ptr);
@@ -241,30 +239,6 @@ void _tidy_fixed_notification_server()
 }
 
 /* Private functions */
-
-static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr *addr)
-{
-    OpenAPI_ip_addr_t *ret = NULL;
-    char addr_str[INET_ADDRSTRLEN];
-
-    if (inet_ntop(AF_INET, addr, addr_str, sizeof(addr_str))) {
-        ret = OpenAPI_ip_addr_create(ogs_strdup(addr_str), NULL, NULL);
-    }
-
-    return ret;
-}
-
-static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_addr *addr)
-{
-    OpenAPI_ip_addr_t *ret = NULL;
-    char addr_str[INET6_ADDRSTRLEN];
-
-    if (inet_ntop(AF_INET6, addr, addr_str, sizeof(addr_str))) {
-        ret = OpenAPI_ip_addr_create(NULL, ogs_strdup(addr_str), NULL);
-    }
-
-    return ret;
-}
 
 static void __allocate_notification_server(_priv_mbs_status_subscription_t *subsc)
 {
