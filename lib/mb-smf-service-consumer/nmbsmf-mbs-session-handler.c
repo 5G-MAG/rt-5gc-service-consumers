@@ -16,6 +16,7 @@
 
 #include "ogs-core.h"
 #include "ogs-sbi.h"
+#include "openapi/model/status_subscribe_rsp_data.h"
 
 #include "log.h"
 #include "priv_mbs-session.h"
@@ -261,6 +262,71 @@ int _nmbsmf_mbs_session_subscription_report_list_handler(_priv_mbs_status_subscr
         }
     }
     return 1;
+}
+
+void _nmbsmf_mbs_session_subscription_response(_priv_mbs_session_t *sess, ogs_sbi_message_t *message, ogs_sbi_response_t *response)
+{
+    if (!sess || !message || !response) return;
+
+    cJSON *json = cJSON_Parse(response->http.content);
+    bool error = false;
+
+    if (!json) {
+        ogs_error("Response from MB-SMF, to subscription creation, is not valid JSON");
+        error = true;
+    } else {
+        if (response->status >= 200 && response->status < 300) {
+            OpenAPI_status_subscribe_rsp_data_t *status_subscribe_rsp_data = OpenAPI_status_subscribe_rsp_data_parseFromJSON(json);
+            if (!status_subscribe_rsp_data) {
+                ogs_error("Response from MB-SMF, to subscription creation, is not a valid StatusSubscribeRspData");
+                error = true;
+            } else {
+                _priv_mbs_status_subscription_t *subsc = _mbs_session_find_subscription(sess,
+                                                                status_subscribe_rsp_data->subscription->notify_correlation_id);
+                if (!subsc) {
+                    ogs_error("Could not find matching subscription for response from MB-SMF to subscription creation");
+                    error = true;
+                } else {
+                    /* Set the resource id */
+                    char *location = strrchr(message->http.location, '/');
+                    if (subsc->id) ogs_free(subsc->id);
+                    if (location) {
+                        subsc->id = ogs_sbi_url_decode(location+1);
+                    } else {
+                        subsc->id = ogs_sbi_url_decode(message->http.location);
+                    }
+
+                    /* move from new_subscriptions to established subscriptions */
+                    _priv_mbs_status_subscription_t *node;
+                    ogs_list_for_each(&sess->new_subscriptions, node) {
+                        if (node == subsc) {
+                            ogs_list_remove(&sess->new_subscriptions, subsc);
+                            if (!sess->session.subscriptions) sess->session.subscriptions = ogs_hash_make();
+                            ogs_hash_set(sess->session.subscriptions, subsc->id, OGS_HASH_KEY_STRING,
+                                         _priv_mbs_status_subscription_to_public(subsc));
+                            break;
+                        }
+                    }
+
+                    /* send notifications */
+                    _nmbsmf_mbs_session_subscription_report_list_handler(subsc,
+                                                                         status_subscribe_rsp_data->event_list->event_report_list);
+                }
+            }
+        } else {
+            error = true;
+        }
+    }
+
+    if (error) {
+        /* TODO: What do we do on error?
+         *       1. Re-mark subscription for another attempt?
+         *          - max retries?
+         *       2. Add a callback to tell the app the subscription failed?
+         *          - delete subscription object?
+         *          - move to a list of failed subscriptions?
+         */
+    }
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

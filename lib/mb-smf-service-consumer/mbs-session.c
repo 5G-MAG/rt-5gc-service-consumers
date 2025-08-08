@@ -23,6 +23,19 @@
 
 #include "mbs-session.h"
 
+/* Private types, variables and function prototypes */
+
+typedef struct __mbs_session_find_subsc_filter_s {
+    const char *correlation_id;
+    _priv_mbs_status_subscription_t *found;
+} __mbs_session_find_subsc_filter_t;
+
+static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr *addr);
+static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_addr *addr);
+static int __mbs_session_find_subsc_hash_do(void *rec, const void *key, int klen, const void *value);
+static int __update_status_subscription(void *rec, const void *key, int klen, const void *value);
+static int __free_status_subscription(void *rec, const void *key, int klen, const void *value);
+
 /* SSM Type functions */
 MB_SMF_CLIENT_API bool mb_smf_sc_ssm_equal(const mb_smf_sc_ssm_addr_t *a, const mb_smf_sc_ssm_addr_t *b)
 {
@@ -250,8 +263,16 @@ MB_SMF_CLIENT_API const char *mb_smf_sc_mbs_session_get_resource_id(const mb_smf
 
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_changes(mb_smf_sc_mbs_session_t *session)
 {
+    if (!session) return false;
     _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
     return _mbs_session_push_changes(sess);
+}
+
+MB_SMF_CLIENT_API OpenAPI_mbs_session_id_t *mb_smf_sc_mbs_session_create_mbs_session_id(mb_smf_sc_mbs_session_t *session)
+{
+    if (!session) return NULL;
+    _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
+    return _mbs_session_create_mbs_session_id(sess);
 }
 
 /* protected functions */
@@ -343,18 +364,6 @@ bool _mbs_session_push_changes(_priv_mbs_session_t *sess)
     return true;
 }
 
-static int __update_status_subscription(void *rec, const void *key, int klen, const void *value)
-{
-    //_priv_mbs_session_t *sess = (_priv_mbs_session_t*)rec;
-    _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)value;
-    if (subsc->changed) {
-        // TODO: Send update subscription
-        ogs_warn("TODO: Send patch for status subscription [%p (%p)]", subsc, _priv_mbs_status_subscription_to_public(subsc));
-        subsc->changed = false;
-    }
-    return 1;
-}
-
 void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess)
 {
     _priv_mbs_status_subscription_t *next, *node;
@@ -377,15 +386,6 @@ void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess)
         ogs_list_remove(&sess->deleted_subscriptions, node);
         _mbs_status_subscription_delete(node);
     }
-}
-
-static int __free_status_subscription(void *rec, const void *key, int klen, const void *value)
-{
-    ogs_hash_t *hash = (ogs_hash_t*)rec;
-    _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)value;
-    ogs_hash_set(hash, key, klen, NULL);
-    _mbs_status_subscription_delete(subsc);
-    return 1;
 }
 
 void _mbs_session_delete(_priv_mbs_session_t *session)
@@ -503,26 +503,6 @@ void _mbs_session_send_subscription_create(_priv_mbs_session_t *session, _priv_m
     ogs_sbi_discover_and_send(xact);
 }
 
-typedef struct __mbs_session_find_subsc_filter_s {
-    const char *correlation_id;
-    _priv_mbs_status_subscription_t *found;
-} __mbs_session_find_subsc_filter_t;
-
-static int __mbs_session_find_subsc_hash_do(void *rec, const void *key, int klen, const void *value)
-{
-    _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)value;
-    __mbs_session_find_subsc_filter_t *filter = (__mbs_session_find_subsc_filter_t*)rec;
-    if (!filter->correlation_id && !subsc->correlation_id) {
-        filter->found = subsc;
-        return 0;
-    }
-    if (filter->correlation_id && subsc->correlation_id && !strcmp(filter->correlation_id, subsc->correlation_id)) {
-        filter->found = subsc;
-        return 0;
-    }
-    return 1;
-}
-
 _priv_mbs_status_subscription_t *_mbs_session_find_subscription(_priv_mbs_session_t *session, const char *correlation_id)
 {
     if (!session) return NULL;
@@ -545,6 +525,93 @@ _priv_mbs_status_subscription_t *_mbs_session_find_subscription(_priv_mbs_sessio
     }
 
     return NULL;
+}
+
+OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t *session)
+{
+    OpenAPI_mbs_session_id_t *mbs_session_id = NULL;
+    if (session->session.ssm || session->session.tmgi) {
+        mbs_session_id = OpenAPI_mbs_session_id_create(NULL /*tmgi*/, NULL /*ssm*/, NULL /*nid*/);
+    }
+    if (session->session.ssm) {
+        OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
+        if (session->session.ssm->family == AF_INET) {
+            src = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->source.ipv4);
+            dest = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->dest_mc.ipv4);
+        } else {
+            src = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->source.ipv6);
+            dest = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->dest_mc.ipv6);
+        }
+        mbs_session_id->ssm = OpenAPI_ssm_create(src, dest);
+    }
+    if (session->session.tmgi) {
+        OpenAPI_plmn_id_t *plmn_id = OpenAPI_plmn_id_create(ogs_plmn_id_mcc_string(&session->session.tmgi->plmn),
+                                                            ogs_plmn_id_mnc_string(&session->session.tmgi->plmn));
+        mbs_session_id->tmgi = OpenAPI_tmgi_create(ogs_strdup(session->session.tmgi->mbs_service_id), plmn_id);
+    }
+    return mbs_session_id;
+}
+
+/* Private functions */
+
+static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr *addr)
+{
+    OpenAPI_ip_addr_t *ret = NULL;
+    char addr_str[INET_ADDRSTRLEN];
+
+    if (inet_ntop(AF_INET, addr, addr_str, sizeof(addr_str))) {
+        ret = OpenAPI_ip_addr_create(ogs_strdup(addr_str), NULL, NULL);
+    }
+
+    return ret;
+}
+
+static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_addr *addr)
+{   
+    OpenAPI_ip_addr_t *ret = NULL;
+    char addr_str[INET6_ADDRSTRLEN];
+
+    if (inet_ntop(AF_INET6, addr, addr_str, sizeof(addr_str))) {
+        ret = OpenAPI_ip_addr_create(NULL, ogs_strdup(addr_str), NULL);
+    }
+
+    return ret;
+}
+
+static int __mbs_session_find_subsc_hash_do(void *rec, const void *key, int klen, const void *value)
+{
+    _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)value;
+    __mbs_session_find_subsc_filter_t *filter = (__mbs_session_find_subsc_filter_t*)rec;
+    if (!filter->correlation_id && !subsc->correlation_id) {
+        filter->found = subsc;
+        return 0;
+    }
+    if (filter->correlation_id && subsc->correlation_id && !strcmp(filter->correlation_id, subsc->correlation_id)) {
+        filter->found = subsc;
+        return 0;
+    }
+    return 1;
+}
+
+static int __update_status_subscription(void *rec, const void *key, int klen, const void *value)
+{
+    //_priv_mbs_session_t *sess = (_priv_mbs_session_t*)rec;
+    _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)value;
+    if (subsc->changed) {
+        // TODO: Send update subscription
+        ogs_warn("TODO: Send patch for status subscription [%p (%p)]", subsc, _priv_mbs_status_subscription_to_public(subsc));
+        subsc->changed = false;
+    }
+    return 1;
+}
+
+static int __free_status_subscription(void *rec, const void *key, int klen, const void *value)
+{
+    ogs_hash_t *hash = (ogs_hash_t*)rec;
+    _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)value;
+    ogs_hash_set(hash, key, klen, NULL);
+    _mbs_status_subscription_delete(subsc);
+    return 1;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

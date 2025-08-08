@@ -55,6 +55,7 @@ void _mbs_session_send_remove(_priv_mbs_session_t *session);
 void _mbs_session_send_subscription_create(_priv_mbs_session_t *session, _priv_mbs_status_subscription_t *subsc);
 void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess);
 _priv_mbs_status_subscription_t *_mbs_session_find_subscription(_priv_mbs_session_t *session, const char *correlation_id);
+OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t *session);
 
 #ifdef __cplusplus
 }

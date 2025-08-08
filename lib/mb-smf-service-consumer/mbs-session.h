@@ -88,6 +88,8 @@ MB_SMF_CLIENT_API const char *mb_smf_sc_mbs_session_get_resource_id(const mb_smf
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_changes(mb_smf_sc_mbs_session_t *);
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_all_changes();
 
+MB_SMF_CLIENT_API OpenAPI_mbs_session_id_t *mb_smf_sc_mbs_session_create_mbs_session_id(mb_smf_sc_mbs_session_t *);
+
 #ifdef __cplusplus
 }
 #endif

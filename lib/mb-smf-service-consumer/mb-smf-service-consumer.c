@@ -225,13 +225,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                             /* .../mbs-sessions/subscriptions */
                             SWITCH(xact->request->h.method)
                             CASE(OGS_SBI_HTTP_METHOD_POST)
-                                if (response->status >= 200 && response->status < 300) {
-                                    /* TODO: process the response to a create MBS Status Subscription request */
-                                    ogs_warn("TODO: react to the OK MBS Status Subscription create response");
-                                } else {
-                                    /* TODO: Process unsuccessful MBS Status Subscription join */
-                                    ogs_warn("TODO: Process unsuccessful MBS Status Subscription create");
-                                }
+                                _nmbsmf_mbs_session_subscription_response(sess, &message, response);
                                 break;
                             DEFAULT
                                 break;

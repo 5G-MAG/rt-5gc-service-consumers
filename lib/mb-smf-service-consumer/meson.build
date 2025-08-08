@@ -50,6 +50,7 @@ libscmbsmf_sources = files('''
 
     openapi_status_notify_req_data.c
     openapi_status_subscribe_req_data.c
+    openapi_status_subscribe_rsp_data.c
 '''.split())
 
 libscmbsmf_public_hdrs = files('''

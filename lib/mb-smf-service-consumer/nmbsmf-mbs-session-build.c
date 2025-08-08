@@ -338,26 +338,9 @@ static ogs_sbi_server_t *__new_sbi_server(const ogs_sockaddr_t *address)
 
 static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *session, OpenAPI_ssm_t **ssm_ptr)
 {
-    OpenAPI_mbs_session_id_t *mbs_session_id = NULL;
-    if (session->session.ssm || session->session.tmgi) {
-        mbs_session_id = OpenAPI_mbs_session_id_create(NULL /*tmgi*/, NULL /*ssm*/, NULL /*nid*/);
-    }
-    if (session->session.ssm) {
-        OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
-        if (session->session.ssm->family == AF_INET) {
-            src = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->source.ipv4);
-            dest = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->dest_mc.ipv4);
-        } else {
-            src = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->source.ipv6);
-            dest = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->dest_mc.ipv6);
-        }
-        mbs_session_id->ssm = OpenAPI_ssm_create(src, dest);
-        if (ssm_ptr) *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, mbs_session_id->ssm);
-    }
-    if (session->session.tmgi) {
-        OpenAPI_plmn_id_t *plmn_id = OpenAPI_plmn_id_create(ogs_plmn_id_mcc_string(&session->session.tmgi->plmn),
-                                                            ogs_plmn_id_mnc_string(&session->session.tmgi->plmn));
-        mbs_session_id->tmgi = OpenAPI_tmgi_create(ogs_strdup(session->session.tmgi->mbs_service_id), plmn_id);
+    OpenAPI_mbs_session_id_t *mbs_session_id = _mbs_session_create_mbs_session_id(session);
+    if (mbs_session_id && ssm_ptr) {
+        *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, mbs_session_id->ssm);
     }
     return mbs_session_id;
 }
