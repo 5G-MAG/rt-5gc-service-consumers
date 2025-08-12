@@ -13,6 +13,8 @@
 
 #include "ogs-core.h"
 #include "openapi/model/mbs_session_id.h"
+#include "openapi/model/create_req_data.h"
+#include "openapi/model/status_subscribe_req_data.h"
 
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
@@ -39,6 +41,7 @@ static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_ad
 void _mbs_status_subscription_free(_priv_mbs_status_subscription_t *subsc)
 {
     if (subsc) {
+        if (subsc->id) ogs_free(subsc->id);
         if (subsc->cache) {
             if (subsc->cache->repr_string) ogs_free(subsc->cache->repr_string);
             if (subsc->cache->notif_url) ogs_free(subsc->cache->notif_url);
@@ -57,6 +60,9 @@ void _mbs_session_free(_priv_mbs_session_t *session)
             ogs_list_remove(&session->new_subscriptions, node);
             _mbs_status_subscription_free(node);
         }
+        if (session->id) ogs_free(session->id);
+        if (session->session.ssm) ogs_free(session->session.ssm);
+        if (session->session.tmgi) ogs_free(session->session.tmgi);
         ogs_free(session);
     }
 }
@@ -124,7 +130,7 @@ static bool test_create_sess(unit_test_ctx *ctx)
         UT_STR_EQUAL(req->h.service.name, OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION);
         UT_STR_EQUAL(req->h.api.version, OGS_SBI_API_V1);
         UT_STR_EQUAL(req->h.resource.component[0], OGS_SBI_RESOURCE_NAME_MBS_SESSIONS);
-        UT_STR_IS_NULL(req->h.resource.component[1]);
+        UT_STR_NULL(req->h.resource.component[1]);
     } else {
         UT_STR_MATCHES(req->h.uri, "^https?://(?:[a-zA-Z0-9.]*|\\[[0-9A-Fa-f:]*\\])(?::[1-9][0-9]*)?/" OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION "/" OGS_SBI_API_V1 "/" OGS_SBI_RESOURCE_NAME_MBS_SESSIONS "$");
     }
@@ -140,7 +146,7 @@ static bool test_create_sess(unit_test_ctx *ctx)
         return false;
     }
     UT_PTR_NOT_NULL(create_req_data->mbs_session);
-    UT_BOOL_IS_TRUE(create_req_data->mbs_session->is_any_ue_ind);
+    UT_BOOL_TRUE(create_req_data->mbs_session->is_any_ue_ind);
     UT_INT_NOT_EQUAL(create_req_data->mbs_session->any_ue_ind, 0);
     UT_ENUM_EQUAL(create_req_data->mbs_session->service_type, OpenAPI_mbs_service_type_BROADCAST);
     UT_ENUM_EQUAL(create_req_data->mbs_session->activity_status, OpenAPI_mbs_session_activity_status_ACTIVE);
@@ -175,7 +181,7 @@ static bool test_create_sess_with_subsc(unit_test_ctx *ctx)
         UT_STR_EQUAL(req->h.service.name, OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION);
         UT_STR_EQUAL(req->h.api.version, OGS_SBI_API_V1);
         UT_STR_EQUAL(req->h.resource.component[0], OGS_SBI_RESOURCE_NAME_MBS_SESSIONS);
-        UT_STR_IS_NULL(req->h.resource.component[1]);
+        UT_STR_NULL(req->h.resource.component[1]);
     } else {
         UT_STR_MATCHES(req->h.uri, "^https?://(?:[a-zA-Z0-9.]*|\\[[0-9A-Fa-f:]*\\])(?::[1-9][0-9]*)?/" OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION "/" OGS_SBI_API_V1 "/" OGS_SBI_RESOURCE_NAME_MBS_SESSIONS "$");
     }
@@ -191,7 +197,7 @@ static bool test_create_sess_with_subsc(unit_test_ctx *ctx)
         return false;
     }
     UT_PTR_NOT_NULL(create_req_data->mbs_session);
-    UT_BOOL_IS_TRUE(create_req_data->mbs_session->is_any_ue_ind);
+    UT_BOOL_TRUE(create_req_data->mbs_session->is_any_ue_ind);
     UT_INT_NOT_EQUAL(create_req_data->mbs_session->any_ue_ind, 0);
     UT_ENUM_EQUAL(create_req_data->mbs_session->service_type, OpenAPI_mbs_service_type_BROADCAST);
     UT_ENUM_EQUAL(create_req_data->mbs_session->activity_status, OpenAPI_mbs_session_activity_status_ACTIVE);
@@ -209,6 +215,183 @@ static bool test_create_sess_with_subsc(unit_test_ctx *ctx)
     return true;
 }
 
+#define FAKE_SESSION_ID "12345678-9abc-4def-8123-456789abcdef"
+
+static bool test_update_sess(unit_test_ctx *ctx)
+{
+    // TODO: Implement once update builder implemented in the library
+    return true;
+}
+
+static bool test_delete_sess(unit_test_ctx *ctx)
+{
+    _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
+    session->id = ogs_strdup(FAKE_SESSION_ID);
+    session->changed = true;
+
+    ogs_sbi_request_t *req = _nmbsmf_mbs_session_build_remove((void*)session, NULL);
+
+    UT_STR_EQUAL(req->h.method, OGS_SBI_HTTP_METHOD_DELETE);
+    if (!req->h.uri) {
+        UT_STR_EQUAL(req->h.service.name, OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION);
+        UT_STR_EQUAL(req->h.api.version, OGS_SBI_API_V1);
+        UT_STR_EQUAL(req->h.resource.component[0], OGS_SBI_RESOURCE_NAME_MBS_SESSIONS);
+        UT_STR_EQUAL(req->h.resource.component[1], FAKE_SESSION_ID);
+        UT_STR_NULL(req->h.resource.component[2]);
+    } else {
+        UT_STR_MATCHES(req->h.uri, "^https?://(?:[a-zA-Z0-9.]*|\\[[0-9A-Fa-f:]*\\])(?::[1-9][0-9]*)?/" OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION "/" OGS_SBI_API_V1 "/" OGS_SBI_RESOURCE_NAME_MBS_SESSIONS "/" FAKE_SESSION_ID "$");
+    }
+    UT_PTR_NULL(req->http.content);
+    UT_SIZE_T_EQUAL(req->http.content_length, 0);
+
+    _mbs_session_free(session);
+    ogs_sbi_request_free(req);
+
+    return true;
+}
+
+static bool test_create_status_subsc(unit_test_ctx *ctx)
+{
+    _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
+    session->id = ogs_strdup(FAKE_SESSION_ID);
+    session->session.ssm = (mb_smf_sc_ssm_addr_t*)ogs_calloc(1, sizeof(*session->session.ssm));
+    session->session.ssm->family = AF_INET;
+    session->session.ssm->source.ipv4.s_addr = htonl(0xc0a80001); /* 192.168.0.1 */
+    session->session.ssm->dest_mc.ipv4.s_addr = htonl(0xe8000001); /* 232.0.0.1 */
+
+    _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)ogs_calloc(1, sizeof(*subsc));
+    subsc->cache = ogs_calloc(1, sizeof(*subsc->cache));
+    subsc->cache->notif_url = ogs_strdup("http://example.com/my-notifications");
+    subsc->session = session;
+    subsc->flags = -1;
+    subsc->correlation_id = ogs_strdup("test-correlation-id");
+    ogs_list_add(&session->new_subscriptions, subsc);
+
+    subsc->changed = true;
+    session->changed = true;
+
+    char *nf_instance_id = NF_INSTANCE_ID(ogs_sbi_self()->nf_instance);
+
+    ogs_sbi_request_t *req = _nmbsmf_mbs_session_build_status_subscription_create((void*)session, (void*)subsc);
+
+    UT_STR_EQUAL(req->h.method, OGS_SBI_HTTP_METHOD_POST);
+    if (!req->h.uri) {
+        UT_STR_EQUAL(req->h.service.name, OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION);
+        UT_STR_EQUAL(req->h.api.version, OGS_SBI_API_V1);
+        UT_STR_EQUAL(req->h.resource.component[0], OGS_SBI_RESOURCE_NAME_MBS_SESSIONS);
+        UT_STR_EQUAL(req->h.resource.component[1], OGS_SBI_RESOURCE_NAME_SUBSCRIPTIONS);
+        UT_STR_NULL(req->h.resource.component[2]);
+    } else {
+        UT_STR_MATCHES(req->h.uri, "^https?://(?:[a-zA-Z0-9.]*|\\[[0-9A-Fa-f:]*\\])(?::[1-9][0-9]*)?/" OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION "/" OGS_SBI_API_V1 "/" OGS_SBI_RESOURCE_NAME_MBS_SESSIONS "/" OGS_SBI_RESOURCE_NAME_SUBSCRIPTIONS "$");
+    }
+    
+    cJSON *json = cJSON_Parse(req->http.content);
+    if (!json) {
+        fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON");
+        return false;
+    }
+    OpenAPI_status_subscribe_req_data_t *status_subsc_req_data = OpenAPI_status_subscribe_req_data_parseFromJSON(json);
+    cJSON_Delete(json);
+    if (!status_subsc_req_data) {
+        fprintf(stderr, "expected req->http.content to be valid 3GPP StatusSubscribeReqData JSON, could not parse JSON as a StatusSubscribeReqData object");
+        return false;
+    }
+    /* StatusSubscribeReqData.subscription */
+    UT_PTR_NOT_NULL(status_subsc_req_data->subscription);
+
+    /* StatusSubscribeReqData.subscription.mbsSessionId */
+    UT_PTR_NOT_NULL(status_subsc_req_data->subscription->mbs_session_id);
+    UT_PTR_NULL(status_subsc_req_data->subscription->mbs_session_id->tmgi);
+    UT_PTR_NOT_NULL(status_subsc_req_data->subscription->mbs_session_id->ssm);
+    UT_PTR_NOT_NULL(status_subsc_req_data->subscription->mbs_session_id->ssm->source_ip_addr);
+    UT_STR_EQUAL(status_subsc_req_data->subscription->mbs_session_id->ssm->source_ip_addr->ipv4_addr, "192.168.0.1");
+    UT_STR_NULL(status_subsc_req_data->subscription->mbs_session_id->ssm->source_ip_addr->ipv6_addr);
+    UT_STR_NULL(status_subsc_req_data->subscription->mbs_session_id->ssm->source_ip_addr->ipv6_prefix);
+    UT_PTR_NOT_NULL(status_subsc_req_data->subscription->mbs_session_id->ssm->dest_ip_addr);
+    UT_STR_EQUAL(status_subsc_req_data->subscription->mbs_session_id->ssm->dest_ip_addr->ipv4_addr, "232.0.0.1");
+    UT_STR_NULL(status_subsc_req_data->subscription->mbs_session_id->ssm->dest_ip_addr->ipv6_addr);
+    UT_STR_NULL(status_subsc_req_data->subscription->mbs_session_id->ssm->dest_ip_addr->ipv6_prefix);
+    UT_STR_NULL(status_subsc_req_data->subscription->mbs_session_id->nid);
+
+    /* StatusSubscribeReqData.subscription.areaSessionId */
+    UT_BOOL_FALSE(status_subsc_req_data->subscription->is_area_session_id);
+
+    /* StatusSubscribeReqData.subscription.eventList */
+    UT_JSON_LIST_SIZE(status_subsc_req_data->subscription->event_list, 3);
+
+    /* StatusSubscribeReqData.subscription.notifyUri */
+    UT_STR_EQUAL(status_subsc_req_data->subscription->notify_uri, "http://example.com/my-notifications");
+
+    /* StatusSubscribeReqData.subscription.notifyCorrelationId */
+    UT_STR_EQUAL(status_subsc_req_data->subscription->notify_correlation_id, "test-correlation-id");
+
+    /* StatusSubscribeReqData.subscription.expiryTime */
+    UT_STR_NULL(status_subsc_req_data->subscription->expiry_time);
+
+    /* StatusSubscribeReqData.subscription.nfcInstanceId */
+    UT_STR_EQUAL(status_subsc_req_data->subscription->nfc_instance_id, nf_instance_id);
+
+    /* StatusSubscribeReqData.subscription.mbsSessionSubscUri */
+    UT_STR_NULL(status_subsc_req_data->subscription->mbs_session_subsc_uri);
+
+    OpenAPI_status_subscribe_req_data_free(status_subsc_req_data);
+    _mbs_session_free(session);
+    ogs_sbi_request_free(req);
+
+    return true;
+}
+
+#define FAKE_SUBSCRIPTION_ID "4b9c4f0f-ed28-4a59-b3bc-9acbefcffc4f"
+
+static bool test_update_status_subsc(unit_test_ctx *ctx)
+{
+    fprintf(stderr, "TODO: implement update builder test for MBS Session Status Subscriptions");
+    return true;
+}
+
+static bool test_delete_status_subsc(unit_test_ctx *ctx)
+{
+    _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
+    session->id = ogs_strdup(FAKE_SESSION_ID);
+    session->session.ssm = (mb_smf_sc_ssm_addr_t*)ogs_calloc(1, sizeof(*session->session.ssm));
+    session->session.ssm->family = AF_INET;
+    session->session.ssm->source.ipv4.s_addr = htonl(0xc0a80001); /* 192.168.0.1 */
+    session->session.ssm->dest_mc.ipv4.s_addr = htonl(0xe8000001); /* 232.0.0.1 */
+  
+    _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)ogs_calloc(1, sizeof(*subsc));
+    subsc->id = ogs_strdup(FAKE_SUBSCRIPTION_ID);
+    subsc->cache = ogs_calloc(1, sizeof(*subsc->cache));
+    subsc->cache->notif_url = ogs_strdup("http://example.com/my-notifications");
+    subsc->session = session;
+    subsc->flags = -1;
+    subsc->correlation_id = ogs_strdup("test-correlation-id");
+    ogs_list_add(&session->new_subscriptions, subsc);
+
+    ogs_sbi_request_t *req = _nmbsmf_mbs_session_build_status_subscription_delete((void*)session, (void*)subsc);
+
+    UT_STR_EQUAL(req->h.method, OGS_SBI_HTTP_METHOD_DELETE);
+    if (!req->h.uri) {
+        UT_STR_EQUAL(req->h.service.name, OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION);
+        UT_STR_EQUAL(req->h.api.version, OGS_SBI_API_V1);
+        UT_STR_EQUAL(req->h.resource.component[0], OGS_SBI_RESOURCE_NAME_MBS_SESSIONS);
+        UT_STR_EQUAL(req->h.resource.component[1], OGS_SBI_RESOURCE_NAME_SUBSCRIPTIONS);
+        UT_STR_EQUAL(req->h.resource.component[2], FAKE_SUBSCRIPTION_ID);
+        UT_STR_NULL(req->h.resource.component[3]);
+    } else {
+        UT_STR_MATCHES(req->h.uri, "^https?://(?:[a-zA-Z0-9.]*|\\[[0-9A-Fa-f:]*\\])(?::[1-9][0-9]*)?/" OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION "/" OGS_SBI_API_V1 "/" OGS_SBI_RESOURCE_NAME_MBS_SESSIONS "/" OGS_SBI_RESOURCE_NAME_SUBSCRIPTIONS "/" FAKE_SUBSCRIPTION_ID "$");
+    }
+    UT_STR_NULL(req->http.content);
+    UT_SIZE_T_EQUAL(req->http.content_length, 0);
+
+    _mbs_session_free(session);
+    ogs_sbi_request_free(req);
+
+    return true;
+}
+
+
+/** Test descriptors **/
+
 static const unit_test_t test_create_sess_with_subsc_desc = {
     .name = "nmbsmf-mbssession: create session with subscription builder",
     .fn = test_create_sess_with_subsc
@@ -219,11 +402,41 @@ static const unit_test_t test_create_sess_desc = {
     .fn = test_create_sess
 };
 
+static const unit_test_t test_update_sess_desc = {
+    .name = "nmbsmf-mbssession: update session",
+    .fn = test_update_sess
+};
+
+static const unit_test_t test_delete_sess_desc = {
+    .name = "nmbsmf-mbssession: delete session",
+    .fn = test_delete_sess
+};
+
+static const unit_test_t test_create_status_subsc_desc = {
+    .name = "nmbsmf-mbssession: create status subscription",
+    .fn = test_create_status_subsc
+};
+
+static const unit_test_t test_update_status_subsc_desc = {
+    .name = "nmbsmf-mbssession: update status subscription",
+    .fn = test_update_status_subsc
+};
+
+static const unit_test_t test_delete_status_subsc_desc = {
+    .name = "nmbsmf-mbssession: delete status subscription",
+    .fn = test_delete_status_subsc
+};
+
 __attribute__ ((constructor))
 static void _init_fn()
 {
     register_unit_test(&test_create_sess_desc);
     register_unit_test(&test_create_sess_with_subsc_desc);
+    register_unit_test(&test_update_sess_desc);
+    register_unit_test(&test_delete_sess_desc);
+    register_unit_test(&test_create_status_subsc_desc);
+    register_unit_test(&test_update_status_subsc_desc);
+    register_unit_test(&test_delete_status_subsc_desc);
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

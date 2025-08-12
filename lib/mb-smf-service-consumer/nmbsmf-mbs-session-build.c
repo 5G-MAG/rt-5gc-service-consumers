@@ -120,7 +120,7 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
                                                      notify_uri, /* notify_uri: write-only */
                                                      correlation_id, /* notify_correlation_id: write-only */
                                                      NULL, /* expiry_time (TODO) */
-                                                     NULL, /* nfc_instance_id: write-only (TODO - use app nf_instance if available) */
+                                                     ogs_strdup(NF_INSTANCE_ID(ogs_sbi_self()->nf_instance)), /* nfc_instance_id: write-only */
                                                      NULL /* mbs_session_subsc_uri: read-only */
                                                  );
         }
@@ -196,8 +196,25 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_status_subscription_create(void *co
     int area_session_id = subsc->area_session_id;
 
     OpenAPI_list_t *event_list = NULL;
+    static const struct {
+        mb_smf_sc_mbs_session_event_type_t t;
+        OpenAPI_mbs_session_event_type_e e;
+    } flags[] = {
+        {MBS_SESSION_EVENT_MBS_REL_TMGI_EXPIRY, OpenAPI_mbs_session_event_type_MBS_REL_TMGI_EXPIRY},
+        {MBS_SESSION_EVENT_BROADCAST_DELIVERY_STATUS, OpenAPI_mbs_session_event_type_BROADCAST_DELIVERY_STATUS},
+        {MBS_SESSION_EVENT_INGRESS_TUNNEL_ADD_CHANGE, OpenAPI_mbs_session_event_type_INGRESS_TUNNEL_ADD_CHANGE}
+    };
 
-    char *notify_uri = subsc->cache?subsc->cache->notif_url:NULL;
+    int i;
+    for (i = 0; i<sizeof(flags)/sizeof(flags[0]); i++) {
+        if (subsc->flags & flags[i].t) {
+            if (!event_list) event_list = OpenAPI_list_create();
+            OpenAPI_mbs_session_event_t *event = OpenAPI_mbs_session_event_create(flags[i].e);
+            OpenAPI_list_add(event_list, event);
+        }
+    }
+
+    char *notify_uri = (subsc->cache && subsc->cache->notif_url)?ogs_strdup(subsc->cache->notif_url):NULL;
 
     char *notify_correlation_id = subsc->correlation_id?ogs_strdup(subsc->correlation_id):NULL;
 
@@ -230,6 +247,8 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_status_subscription_create(void *co
     ogs_sbi_request_t *req = ogs_sbi_build_request(&msg);
     req->http.content = body;
     req->http.content_length = body?strlen(body):0;
+
+    OpenAPI_status_subscribe_req_data_free(req_data);
 
     return req;
 }

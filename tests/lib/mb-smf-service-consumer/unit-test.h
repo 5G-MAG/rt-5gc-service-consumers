@@ -50,14 +50,14 @@ extern bool register_unit_test(const unit_test_t *test);
 
 /** Boolean tests **/
 
-#define UT_BOOL_IS_TRUE(A) do { \
+#define UT_BOOL_TRUE(A) do { \
         if (!(A)) { \
             fprintf(stderr, "expected " #A " to be true, but " #A " is false\n"); \
             return false; \
         } \
     } while (0)
 
-#define UT_BOOL_IS_FALSE(A) do { \
+#define UT_BOOL_FALSE(A) do { \
         if (!!(A)) { \
             fprintf(stderr, "expected " #A " to be false, but " #A " is true\n"); \
             return false; \
@@ -76,15 +76,39 @@ extern bool register_unit_test(const unit_test_t *test);
 /** Integer tests **/
 
 #define UT_INT_EQUAL(A, B) do { \
-        if ((A) != (B)) { \
-            fprintf(stderr, "expected " #A " == " #B ", result %i != %i\n", (A), (B)); \
+        int a = (A); \
+        int b = (B); \
+        if (a != b) { \
+            fprintf(stderr, "expected " #A " == " #B ", result %i != %i\n", a, b); \
             return false; \
         } \
     } while (0)
 
 #define UT_INT_NOT_EQUAL(A, B) do { \
-        if ((A) == (B)) { \
-            fprintf(stderr, "expected " #A " != " #B ", result %i == %i\n", (A), (B)); \
+        int a = (A); \
+        int b = (B); \
+        if (a == b) { \
+            fprintf(stderr, "expected " #A " != " #B ", result %i == %i\n", a, b); \
+            return false; \
+        } \
+    } while (0)
+
+/** size_t tests **/
+
+#define UT_SIZE_T_EQUAL(A, B) do { \
+        size_t a_size = (A); \
+        size_t b_size = (B); \
+        if (a_size != b_size) { \
+            fprintf(stderr, "expected " #A " == " #B ", result %zu != %zu\n", a_size, b_size); \
+            return false; \
+        } \
+    } while (0)
+
+#define UT_SIZE_T_NOT_EQUAL(A, B) do { \
+        size_t a_size = (A); \
+        size_t b_size = (B); \
+        if (a_size == b_size) { \
+            fprintf(stderr, "expected " #A " != " #B ", result %zu == %zu\n", a_size, b_size); \
             return false; \
         } \
     } while (0)
@@ -101,14 +125,14 @@ extern bool register_unit_test(const unit_test_t *test);
         } \
     } while (0)
 
-#define UT_STR_IS_NULL(A) do { \
+#define UT_STR_NULL(A) do { \
         if (A) { \
             fprintf(stderr, "expected " #A " to be <null>, result \"%s\"\n", (A)); \
             return false; \
         } \
     } while (0)
 
-#define UT_STR_IS_NOT_NULL(A) do { \
+#define UT_STR_NOT_NULL(A) do { \
         if (!(A)) { \
             fprintf(stderr, "expected " #A " to be not <null>, result <null>\n"); \
             return false; \
