@@ -23,6 +23,7 @@ extern "C" {
 typedef struct mb_smf_sc_mbs_session_s mb_smf_sc_mbs_session_t;
 
 typedef enum mb_smf_sc_mbs_session_event_type_e {
+    MBS_SESSION_EVENT_ALL = -1,  /* All bits set to include every event type */
     MBS_SESSION_EVENT_OTHER = 0, /* signalled in a notification result when type not understood */
     MBS_SESSION_EVENT_MBS_REL_TMGI_EXPIRY = 1,
     MBS_SESSION_EVENT_BROADCAST_DELIVERY_STATUS = 2,

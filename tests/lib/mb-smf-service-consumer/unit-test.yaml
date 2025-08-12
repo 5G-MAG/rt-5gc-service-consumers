@@ -1,0 +1,7 @@
+logger:
+    level: info
+
+global:
+  max:
+    ue: 1024
+

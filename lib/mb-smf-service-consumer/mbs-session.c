@@ -154,9 +154,9 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_add_subscription(mb_smf_sc_mbs_sess
     if (subsc->id) {
         // Remove from active list of current mbs session
         ogs_hash_set(subsc->session->session.subscriptions, subsc->id, OGS_HASH_KEY_STRING, NULL);
-        // TODO: send remove subscription
-        ogs_warn("TODO: Send delete from old MbsSession [%p (%p)] for status subscription [%p (%p)]", sess, session,
-                  subsc, subscription);
+
+        _mbs_status_subscription_send_delete(subsc);
+
         // forget the assigned id
         ogs_free(subsc->id);
         subsc->id = NULL;
@@ -277,6 +277,7 @@ MB_SMF_CLIENT_API OpenAPI_mbs_session_id_t *mb_smf_sc_mbs_session_create_mbs_ses
 
 /* protected functions */
 
+#if 0
 mb_smf_sc_mbs_session_t *_priv_mbs_session_to_public(_priv_mbs_session_t *session)
 {
     return &session->session;
@@ -298,6 +299,7 @@ const _priv_mbs_session_t *_priv_mbs_session_from_public_const(const mb_smf_sc_m
     if (!session) return NULL;
     return ogs_container_of(session, _priv_mbs_session_t, session);
 }
+#endif
 
 bool _mbs_session_push_changes(_priv_mbs_session_t *sess)
 {
@@ -366,23 +368,23 @@ bool _mbs_session_push_changes(_priv_mbs_session_t *sess)
 
 void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess)
 {
+    /* Process subscription updates for the MBS Session */
     _priv_mbs_status_subscription_t *next, *node;
 
+    /* Add new ones that haven't been requested yet */
     ogs_list_for_each_safe(&sess->new_subscriptions, next, node) {
-        if (node->changed) _mbs_session_send_subscription_create(sess, node);
+        if (node->changed) _mbs_status_subscription_send_create(node);
         node->changed = false;
-        // Await response then:
-        // ogs_list_remove(&sess->new_subscriptions, node);
-        // ogs_hash_set(sess->session.subscriptions, node->id, OGS_HASH_KEY_STRING, node);
     }
 
+    /* Do any updates to existing subscriptions */
     ogs_hash_do(__update_status_subscription, sess, sess->session.subscriptions);
 
+    /* Remove any subscriptions pending deletion */
     ogs_list_for_each_safe(&sess->deleted_subscriptions, next, node) {
-        // TODO: Send delete status subscription
-        ogs_warn("TODO: Send delete status subscription for subscription [%p (%p)]",
-                 node, _priv_mbs_status_subscription_to_public(node));
+        _mbs_status_subscription_send_delete(node);
         node->changed = false;
+        // TODO: move this to response processing?
         ogs_list_remove(&sess->deleted_subscriptions, node);
         _mbs_status_subscription_delete(node);
     }
@@ -486,23 +488,6 @@ void _mbs_session_send_remove(_priv_mbs_session_t *session)
     ogs_sbi_discover_and_send(xact);
 }
 
-void _mbs_session_send_subscription_create(_priv_mbs_session_t *session, _priv_mbs_status_subscription_t *subsc)
-{
-    if (!session || !subsc) return;
-
-    ogs_debug("Send creation of MBS Status Subscription [%p (%p)] for MBS Session [%p (%p)]",
-              subsc, _priv_mbs_status_subscription_to_public(subsc),
-              session, _priv_mbs_session_to_public(session));
-
-    ogs_sbi_service_type_e service_type = OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION;
-
-    /* Shouldn't need discovery options as we are talking to previously discovered MB-SMF (details in session->sbi_object) */
-
-    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, &session->sbi_object, service_type, NULL,
-                                            _nmbsmf_mbs_session_build_status_subscription_create, session, subsc);
-    ogs_sbi_discover_and_send(xact);
-}
-
 _priv_mbs_status_subscription_t *_mbs_session_find_subscription(_priv_mbs_session_t *session, const char *correlation_id)
 {
     if (!session) return NULL;
@@ -598,8 +583,7 @@ static int __update_status_subscription(void *rec, const void *key, int klen, co
     //_priv_mbs_session_t *sess = (_priv_mbs_session_t*)rec;
     _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)value;
     if (subsc->changed) {
-        // TODO: Send update subscription
-        ogs_warn("TODO: Send patch for status subscription [%p (%p)]", subsc, _priv_mbs_status_subscription_to_public(subsc));
+        _mbs_status_subscription_send_update(subsc);
         subsc->changed = false;
     }
     return 1;

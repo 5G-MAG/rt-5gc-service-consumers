@@ -47,12 +47,35 @@ typedef struct _priv_mbs_status_subscription_s {
     }                          *cache;
 } _priv_mbs_status_subscription_t;
 
-mb_smf_sc_mbs_status_subscription_t *_priv_mbs_status_subscription_to_public(_priv_mbs_status_subscription_t *subscription);
-_priv_mbs_status_subscription_t *_priv_mbs_status_subscription_from_public(mb_smf_sc_mbs_status_subscription_t *subscription);
-const _priv_mbs_status_subscription_t *_priv_mbs_status_subscription_from_public_const(
-                                                                        const mb_smf_sc_mbs_status_subscription_t *subscription);
+static inline mb_smf_sc_mbs_status_subscription_t *_priv_mbs_status_subscription_to_public(
+                                                                        _priv_mbs_status_subscription_t *subscription)
+{
+    return (mb_smf_sc_mbs_status_subscription_t*)subscription;
+}
+
+static inline const mb_smf_sc_mbs_status_subscription_t *_priv_mbs_status_subscription_to_public_const(
+                                                                        const _priv_mbs_status_subscription_t *subscription)
+{
+    return (const mb_smf_sc_mbs_status_subscription_t*)subscription;
+}
+
+static inline _priv_mbs_status_subscription_t *_priv_mbs_status_subscription_from_public(
+                                                                        mb_smf_sc_mbs_status_subscription_t *subscription)
+{
+    return (_priv_mbs_status_subscription_t*)subscription;
+}
+
+static inline const _priv_mbs_status_subscription_t *_priv_mbs_status_subscription_from_public_const(
+                                                                        const mb_smf_sc_mbs_status_subscription_t *subscription)
+{
+    return (const _priv_mbs_status_subscription_t*)subscription;
+}
 
 void _mbs_status_subscription_delete(_priv_mbs_status_subscription_t *subscription);
+
+void _mbs_status_subscription_send_create(_priv_mbs_status_subscription_t *subscription);
+void _mbs_status_subscription_send_update(_priv_mbs_status_subscription_t *subscription);
+void _mbs_status_subscription_send_delete(_priv_mbs_status_subscription_t *subscription);
 
 #ifdef __cplusplus
 }

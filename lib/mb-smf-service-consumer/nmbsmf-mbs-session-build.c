@@ -29,6 +29,9 @@ static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *sess
 static ogs_sbi_server_t *fixed_port_notifications = NULL;
 
 /* Library Internals */
+
+// MBS Session builders
+
 ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
 {
     _priv_mbs_session_t *session = (_priv_mbs_session_t*)context;
@@ -76,7 +79,7 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
                                                                                 );
 
     /* Add first subscription */
-    _priv_mbs_status_subscription_t *subsc;
+    _priv_mbs_status_subscription_t *subsc = NULL;
     if (!ogs_list_empty(&session->new_subscriptions)) {
         subsc = ogs_list_first(&session->new_subscriptions);
     } else if (session->session.subscriptions && ogs_hash_count(session->session.subscriptions) > 0) {
@@ -145,6 +148,12 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
     return req;
 }
 
+ogs_sbi_request_t *_nmbsmf_mbs_session_build_update(void *context, void *data)
+{
+    ogs_warn("TODO: PATCH builder for MBS Session API");
+    return NULL;
+}
+
 ogs_sbi_request_t *_nmbsmf_mbs_session_build_remove(void *context, void *data)
 {
     _priv_mbs_session_t *session = (_priv_mbs_session_t*)context;
@@ -156,12 +165,14 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_remove(void *context, void *data)
     msg.h.service.name = (char*)OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION;
     msg.h.api.version = (char *)OGS_SBI_API_V1;
     msg.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_MBS_SESSIONS;
-    msg.h.resource.component[1] = ogs_strdup(session->id);
+    msg.h.resource.component[1] = session->id;
 
     ogs_sbi_request_t *req = ogs_sbi_build_request(&msg);
 
     return req;
 }
+
+// MBS Session Status Subscription builders
 
 ogs_sbi_request_t *_nmbsmf_mbs_session_build_status_subscription_create(void *context, void *data)
 {
@@ -219,6 +230,36 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_status_subscription_create(void *co
     ogs_sbi_request_t *req = ogs_sbi_build_request(&msg);
     req->http.content = body;
     req->http.content_length = body?strlen(body):0;
+
+    return req;
+}
+
+ogs_sbi_request_t *_nmbsmf_mbs_session_build_status_subscription_update(void *context, void *data)
+{
+    //_priv_mbs_session_t *session = (_priv_mbs_session_t*)context;
+    //_priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)data;
+
+    ogs_warn("TODO: update builder for MBS Session Status Subscription");
+
+    return NULL;
+}
+
+ogs_sbi_request_t *_nmbsmf_mbs_session_build_status_subscription_delete(void *context, void *data)
+{
+    //_priv_mbs_session_t *session = (_priv_mbs_session_t*)context;
+    _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)data;
+
+    ogs_sbi_message_t msg;
+
+    memset(&msg, 0, sizeof(msg));
+    msg.h.method = (char*)OGS_SBI_HTTP_METHOD_DELETE;
+    msg.h.service.name = (char*)OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION;
+    msg.h.api.version = (char *)OGS_SBI_API_V1;
+    msg.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_MBS_SESSIONS;
+    msg.h.resource.component[1] = (char *)OGS_SBI_RESOURCE_NAME_SUBSCRIPTIONS;
+    msg.h.resource.component[2] = subsc->id;
+
+    ogs_sbi_request_t *req = ogs_sbi_build_request(&msg);
 
     return req;
 }

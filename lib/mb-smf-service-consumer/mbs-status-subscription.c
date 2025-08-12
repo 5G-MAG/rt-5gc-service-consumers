@@ -235,6 +235,7 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_status_subscription_mbs
 
 /* Protected functions */
 
+#if 0
 mb_smf_sc_mbs_status_subscription_t *_priv_mbs_status_subscription_to_public(_priv_mbs_status_subscription_t *subscription) {
     return (mb_smf_sc_mbs_status_subscription_t*)subscription;
 }
@@ -249,6 +250,7 @@ const _priv_mbs_status_subscription_t *_priv_mbs_status_subscription_from_public
     if (!subscription) return NULL;
     return (const _priv_mbs_status_subscription_t*)subscription;
 }
+#endif
 
 void _mbs_status_subscription_delete(_priv_mbs_status_subscription_t *subsc)
 {
@@ -259,6 +261,70 @@ void _mbs_status_subscription_delete(_priv_mbs_status_subscription_t *subsc)
     if (subsc->cache->notif_server) _notification_server_free(subsc->cache->notif_server);
     ogs_free(subsc->cache);
     ogs_free(subsc);
+}
+
+void _mbs_status_subscription_send_create(_priv_mbs_status_subscription_t *subsc)
+{
+    if (!subsc) return;
+
+    _priv_mbs_session_t *session = subsc->session;
+    if (!session) {
+        ogs_error("Attempt to send create request for MBS Session Status Subscription that is not attached to a session");
+        return;
+    }
+
+    ogs_debug("Send creation of MBS Status Subscription [%p (%p)] for MBS Session [%p (%p)]",
+              subsc, _priv_mbs_status_subscription_to_public(subsc),
+              session, _priv_mbs_session_to_public(session));
+
+    ogs_sbi_service_type_e service_type = OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION;
+
+    /* Shouldn't need discovery options as we are talking to previously discovered MB-SMF (details in session->sbi_object) */
+
+    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, &session->sbi_object, service_type, NULL,
+                                            _nmbsmf_mbs_session_build_status_subscription_create, session, subsc);
+    ogs_sbi_discover_and_send(xact);
+
+}
+
+void _mbs_status_subscription_send_update(_priv_mbs_status_subscription_t *subsc)
+{
+    if (!subsc) return;
+
+    _priv_mbs_session_t *session = subsc->session;
+    if (!session) {
+        ogs_error("Attempt to update MBS Session Status Subscription that is not attached to a session");
+        return;
+    }
+
+    ogs_debug("Send update for MBS Status Subscription [%p (%p)] for MBS Session [%p (%p)]",
+              subsc, _priv_mbs_status_subscription_to_public(subsc),
+              session, _priv_mbs_session_to_public(session));
+
+    ogs_sbi_service_type_e service_type = OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION;
+    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, &session->sbi_object, service_type, NULL,
+                                            _nmbsmf_mbs_session_build_status_subscription_update, session, subsc);
+    ogs_sbi_discover_and_send(xact);
+}
+
+void _mbs_status_subscription_send_delete(_priv_mbs_status_subscription_t *subsc)
+{
+    if (!subsc) return;
+
+    _priv_mbs_session_t *session = subsc->session;
+    if (!session) {
+        ogs_error("Attempt to delete an MBS Session Status Subscription that is not attached to a session");
+        return;
+    }
+
+    ogs_debug("Send deletion of MBS Status Subscription [%p (%p)] for MBS Session [%p (%p)]",
+              subsc, _priv_mbs_status_subscription_to_public(subsc),
+              session, _priv_mbs_session_to_public(session));
+
+    ogs_sbi_service_type_e service_type = OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION;
+    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, &session->sbi_object, service_type, NULL,
+                                            _nmbsmf_mbs_session_build_status_subscription_delete, session, subsc);
+    ogs_sbi_discover_and_send(xact);
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

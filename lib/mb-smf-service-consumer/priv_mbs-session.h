@@ -42,10 +42,30 @@ typedef struct _priv_mbs_session_s {
     ogs_sbi_object_t        sbi_object;
 } _priv_mbs_session_t;
 
-mb_smf_sc_mbs_session_t *_priv_mbs_session_to_public(_priv_mbs_session_t *session);
-const mb_smf_sc_mbs_session_t *_priv_mbs_session_to_public_const(const _priv_mbs_session_t *session);
-_priv_mbs_session_t *_priv_mbs_session_from_public(mb_smf_sc_mbs_session_t *session);
-const _priv_mbs_session_t *_priv_mbs_session_from_public_const(const mb_smf_sc_mbs_session_t *session);
+static inline mb_smf_sc_mbs_session_t *_priv_mbs_session_to_public(_priv_mbs_session_t *session)
+{
+    if (session) return &session->session;
+    return NULL;
+}
+
+static inline const mb_smf_sc_mbs_session_t *_priv_mbs_session_to_public_const(const _priv_mbs_session_t *session)
+{
+    if (session) return &session->session;
+    return NULL;
+}
+
+static inline _priv_mbs_session_t *_priv_mbs_session_from_public(mb_smf_sc_mbs_session_t *session)
+{
+    if (session) return ogs_container_of(session, _priv_mbs_session_t, session);
+    return NULL;
+}
+
+static inline const _priv_mbs_session_t *_priv_mbs_session_from_public_const(const mb_smf_sc_mbs_session_t *session)
+{
+    if (session) return ogs_container_of(session, _priv_mbs_session_t, session);
+    return NULL;
+}
+
 
 void _mbs_session_delete(_priv_mbs_session_t *session);
 bool _mbs_session_push_changes(_priv_mbs_session_t *session);
