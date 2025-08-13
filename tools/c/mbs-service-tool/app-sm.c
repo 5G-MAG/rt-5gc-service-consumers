@@ -53,6 +53,7 @@ typedef struct app_local_event_s {
 
     mb_smf_sc_mbs_session_t *mbs_session;
     int result;
+    OpenAPI_problem_details_t *problem_details;
 
 } app_local_event_t;
 
@@ -61,12 +62,16 @@ static void app_state_running(ogs_fsm_t *sm, ogs_event_t *event);
 static void app_state_session_failed(ogs_fsm_t *sm, ogs_event_t *event);
 
 static void app_local_send_mbs_session_create();
-static void app_local_send_mbs_session_create_result(mb_smf_sc_mbs_session_t *session, int result);
-static void app_local_send_event(app_local_event_id_t event_id, mb_smf_sc_mbs_session_t *session, int result);
+static void app_local_send_mbs_session_create_result(mb_smf_sc_mbs_session_t *session, int result,
+                                                     const OpenAPI_problem_details_t *problem_details);
+static void app_local_send_event(app_local_event_id_t event_id, mb_smf_sc_mbs_session_t *session, int result,
+                                 const OpenAPI_problem_details_t *problem_details);
+static void app_local_clean(app_local_event_t *app_event);
 static const char *app_event_get_name(ogs_event_t *event);
 static const char *app_local_get_name(app_local_event_t *app_event);
 
-static void app_mbs_session_created_cb(mb_smf_sc_mbs_session_t *session, int result, void *data);
+static void app_mbs_session_created_cb(mb_smf_sc_mbs_session_t *session, int result,
+                                       const OpenAPI_problem_details_t *problem_details, void *data);
 static void app_mbs_session_notify_cb(const mb_smf_sc_mbs_status_notification_result_t *notification, void *data);
 static void app_mbs_session_create();
 
@@ -135,7 +140,25 @@ static void app_state_create_session(ogs_fsm_t *sm, ogs_event_t *event)
                     }
                     OGS_FSM_TRAN(sm, app_state_running);
                 } else {
-                    ogs_warn("MBS Session creation failed");
+                    if (app_event->problem_details) {
+                        if (app_event->problem_details->cause) {
+                            ogs_warn("MBS Session creation failed, caused by %s: %s: %s", app_event->problem_details->cause,
+                                     app_event->problem_details->title, app_event->problem_details->detail);
+                        } else {
+                            ogs_warn("MBS Session creation failed: %s: %s",
+                                     app_event->problem_details->title, app_event->problem_details->detail);
+                        }
+                        if (app_event->problem_details->invalid_params) {
+                            ogs_warn("    Parameter errors:");
+                            OpenAPI_lnode_t *node;
+                            OpenAPI_list_for_each(app_event->problem_details->invalid_params, node) {
+                                OpenAPI_invalid_param_t *param = (OpenAPI_invalid_param_t*)(node->data);
+                                ogs_warn("        %s: %s", param->param, param->reason);
+                            }
+                        }
+                    } else {
+                        ogs_warn("MBS Session creation failed, no reason given");
+                    }
                     OGS_FSM_TRAN(sm, app_state_session_failed);
                 }
                 break;
@@ -143,6 +166,7 @@ static void app_state_create_session(ogs_fsm_t *sm, ogs_event_t *event)
                 ogs_error("Unexpected local event: %s", app_event_get_name(event));
                 break;
             }
+            app_local_clean(app_event);
         }
         break;
 
@@ -177,6 +201,8 @@ static void app_state_running(ogs_fsm_t *sm, ogs_event_t *event)
                 ogs_error("Unexpected local event: %s", app_event_get_name(event));
                 break;
             }
+
+            app_local_clean(app_event);
         }
         break;
 
@@ -200,25 +226,41 @@ static void app_state_session_failed(ogs_fsm_t *sm, ogs_event_t *event)
     case OGS_FSM_EXIT_SIG:
         break;
 
+    case APP_LOCAL:
+        {
+            app_local_event_t *app_event = ogs_container_of(event, app_local_event_t, event);
+
+            switch (app_event->id) {
+            default:
+                ogs_error("Unexpected local event: %s", app_event_get_name(event));
+                break;
+            }
+
+            app_local_clean(app_event);
+        }
+        break;
+
     default:
         break;
     }
 }
 
-static void app_local_send_mbs_session_create_result(mb_smf_sc_mbs_session_t *session, int result)
+static void app_local_send_mbs_session_create_result(mb_smf_sc_mbs_session_t *session, int result,
+                                                     const OpenAPI_problem_details_t *problem_details)
 {
     /* send APP_LOCAL_EVENT_MBS_SESSION_CREATE_RESULT event */
-    app_local_send_event(APP_LOCAL_EVENT_MBS_SESSION_CREATE_RESULT, session, result);
+    app_local_send_event(APP_LOCAL_EVENT_MBS_SESSION_CREATE_RESULT, session, result, problem_details);
 }
 
 static void app_local_send_mbs_session_create()
 {
     /* send APP_LOCAL_EVENT_MBS_SESSION_CREATE event */
-    app_local_send_event(APP_LOCAL_EVENT_MBS_SESSION_CREATE, NULL, 0);
+    app_local_send_event(APP_LOCAL_EVENT_MBS_SESSION_CREATE, NULL, 0, NULL);
 }
 
 
-static void app_local_send_event(app_local_event_id_t event_id, mb_smf_sc_mbs_session_t *session, int result)
+static void app_local_send_event(app_local_event_id_t event_id, mb_smf_sc_mbs_session_t *session, int result,
+                                 const OpenAPI_problem_details_t *problem_details)
 {
     int rv;
     app_local_event_t *event;
@@ -230,6 +272,7 @@ static void app_local_send_event(app_local_event_id_t event_id, mb_smf_sc_mbs_se
     event->event.id = APP_LOCAL;
     event->mbs_session = session;
     event->result = result;
+    event->problem_details = OpenAPI_problem_details_copy(NULL, problem_details);
 
     rv = ogs_queue_push(ogs_app()->queue, &event->event);
     if (rv != OGS_OK) {
@@ -238,6 +281,13 @@ static void app_local_send_event(app_local_event_id_t event_id, mb_smf_sc_mbs_se
     }
     /* process the event queue */
     ogs_pollset_notify(ogs_app()->pollset);
+}
+
+static void app_local_clean(app_local_event_t *event)
+{
+    if (!event) return;
+
+    if (event->problem_details) OpenAPI_problem_details_free(event->problem_details);
 }
 
 static const char *app_event_get_name(ogs_event_t *event)
@@ -269,12 +319,13 @@ static const char *app_local_get_name(app_local_event_t *app_event)
     return "APP_LOCAL_EVENT Unknown";
 }
 
-static void app_mbs_session_created_cb(mb_smf_sc_mbs_session_t *session, int result, void *data)
+static void app_mbs_session_created_cb(mb_smf_sc_mbs_session_t *session, int result,
+                                       const OpenAPI_problem_details_t *problem_details, void *data)
 {
     /* callback for result of app_mbs_session_create() */
 
     /* queue result event */
-    app_local_send_mbs_session_create_result(session, result);
+    app_local_send_mbs_session_create_result(session, result, problem_details);
 }
 
 static void app_mbs_session_notify_cb(const mb_smf_sc_mbs_status_notification_result_t *notification, void *data)

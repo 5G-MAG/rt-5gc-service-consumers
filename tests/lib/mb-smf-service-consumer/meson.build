@@ -39,4 +39,4 @@ mb_smf_test_harness_exe = executable('mb-smf-sc-unit-tests', mb_smf_test_harness
                                      link_with: libcore,
                                      dependencies: [ libsbi_dep, libproto_dep, libsbi_openapi_dep, pcre2_dep ],
                                      include_directories: [ libcore_inc, libscmbsmf_inc, libinc ])
-test('mb-smf-sc-unit-tests', mb_smf_test_harness_exe, args: ['-c'] + files('unit-test.yaml'))
+test('mb-smf-sc-unit-tests', mb_smf_test_harness_exe, suite: 'unit', args: ['-c'] + files('unit-test.yaml'))

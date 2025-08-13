@@ -22,6 +22,7 @@
 
 typedef struct _context_s {
     ogs_list_t mbs_sessions; /* item type is _priv_mbs_session_t */
+    ogs_hash_t *tmgis;               /* map is plmn => _priv_tmgi_t */
     ogs_sockaddr_t *notification_bind_address;
 } _context_t;
 
@@ -136,6 +137,13 @@ int _context_parse_config(const char *local)
     return OGS_OK;
 }
 
+static int __hash_free_tmgi(void *rec, const void *key, int klen, const void *value)
+{
+    _priv_tmgi_t *tmgi = (_priv_tmgi_t*)value;
+    _tmgi_free(tmgi);
+    return 1;
+}
+
 void _context_destroy()
 {
     _priv_mbs_session_t *sess, *next;
@@ -144,6 +152,12 @@ void _context_destroy()
 
     ogs_list_for_each_safe(&__self->mbs_sessions, next, sess) {
         _context_remove_mbs_session(sess);
+    }
+
+    if (__self->tmgis) {
+        ogs_hash_do(__hash_free_tmgi, NULL, __self->tmgis);
+        ogs_hash_destroy(__self->tmgis);
+        __self->tmgis = NULL;
     }
 
     ogs_free(__self);
@@ -195,7 +209,7 @@ _priv_mbs_session_t *_context_sbi_object_to_session(ogs_sbi_object_t *sbi_object
 
     if (__self && sbi_object) {
         ogs_list_for_each(&__self->mbs_sessions, sess) {
-            if (&sess->sbi_object == sbi_object) return sess;
+            if (_ref_count_sbi_object_ptr(sess->sbi_object) == sbi_object) return sess;
         }
     }
 
@@ -299,6 +313,22 @@ _priv_mbs_status_subscription_t *_context_find_subscription(ogs_sbi_server_t *se
         }
     }
     return NULL;
+}
+
+bool _context_add_tmgi(_priv_tmgi_t *tmgi)
+{
+    if (!tmgi) return false;
+    if (!__self->tmgis) __self->tmgis = ogs_hash_make();
+    ogs_hash_set(__self->tmgis, &tmgi->tmgi.plmn, sizeof(&tmgi->tmgi.plmn), tmgi);
+    return true;
+}
+
+bool _context_remove_tmgi(_priv_tmgi_t *tmgi)
+{
+    if (!tmgi) return false;
+    if (!__self->tmgis) return false;
+    ogs_hash_set(__self->tmgis, &tmgi->tmgi.plmn, sizeof(&tmgi->tmgi.plmn), NULL);
+    return true;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

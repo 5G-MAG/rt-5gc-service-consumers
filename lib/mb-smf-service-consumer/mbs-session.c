@@ -16,10 +16,12 @@
 #include "macros.h"
 #include "context.h"
 #include "log.h"
+#include "mbs-tmgi.h"
 #include "mbs-status-subscription.h"
 #include "nmbsmf-mbs-session-build.h"
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
+#include "priv_mbs-tmgi.h"
 
 #include "mbs-session.h"
 
@@ -46,42 +48,12 @@ MB_SMF_CLIENT_API bool mb_smf_sc_ssm_equal(const mb_smf_sc_ssm_addr_t *a, const 
     return memcmp(a, b, sizeof(*a)) == 0;
 }
 
-/* TMGI Type functions */
-
-MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_new()
-{
-    return (mb_smf_sc_tmgi_t*)ogs_calloc(1, sizeof(mb_smf_sc_tmgi_t));
-}
-
-MB_SMF_CLIENT_API void mb_smf_sc_tmgi_free(mb_smf_sc_tmgi_t *tmgi)
-{
-    if (!tmgi) return;
-
-    if (tmgi->mbs_service_id) ogs_free(tmgi->mbs_service_id);
-
-    ogs_free(tmgi);
-}
-
-MB_SMF_CLIENT_API bool mb_smf_sc_tmgi_equal(const mb_smf_sc_tmgi_t *a, const mb_smf_sc_tmgi_t *b)
-{
-    if (a == b) return true;
-
-    if (!a || !b) return false;
-
-    if (a->mbs_service_id || b->mbs_service_id) {
-        if (!a->mbs_service_id || !b->mbs_service_id) return false;
-        if (strcmp(a->mbs_service_id, b->mbs_service_id) != 0) return false;
-    }
-
-    /* ignore expiry_time for equality comparison */
-
-    return memcmp(&a->plmn, &b->plmn, sizeof(a->plmn)) == 0;
-}
-
 /* MBS Session Type functions */
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new()
 {
-    return mb_smf_sc_mbs_session_new_ipv4(NULL, NULL);
+    mb_smf_sc_mbs_session_t *ret = mb_smf_sc_mbs_session_new_ipv4(NULL, NULL);
+    ret->tmgi_req = true; /* No SSM or TMGI, so we'll make the default to request a TMGI */
+    return ret;
 }
 
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv4(const struct in_addr *source, const struct in_addr *dest)
@@ -201,47 +173,30 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_remove_subscription(mb_smf_sc_mbs_s
     return true;
 }
 
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tmgi(mb_smf_sc_mbs_session_t *session, mb_smf_sc_tmgi_t *tmgi)
+{
+    _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
+    _priv_tmgi_t *t = _priv_tmgi_from_public(tmgi);
+    return _mbs_session_set_tmgi(sess, t);
+}
+
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tmgi_request(mb_smf_sc_mbs_session_t *session, bool request_tmgi)
 {
     _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
-
-    if (!sess || sess->deleted) return false;
-
-    if (session->tmgi_req == request_tmgi) return false;
-
-    session->tmgi_req = request_tmgi;
-    sess->changed = true;
-
-    return true;
+    return _mbs_session_set_tmgi_request(sess, request_tmgi);
 }
 
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tunnel_request(mb_smf_sc_mbs_session_t *session, bool request_udp_tunnel)
 {
     _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
-
-    if (!sess || sess->deleted) return false;
-
-    if (session->tunnel_req == request_udp_tunnel) return false;
-
-    session->tunnel_req = request_udp_tunnel;
-    sess->changed = true;
-
-    return true;
+    return _mbs_set_tunnel_request(sess, request_udp_tunnel);
 }
 
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_service_type(mb_smf_sc_mbs_session_t *session,
                                                               mb_smf_sc_mbs_service_type_e service_type)
 {
     _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
-
-    if (!sess || sess->deleted) return false;
-
-    if (session->service_type == service_type) return false;
-
-    session->service_type = service_type;
-    sess->changed = true;
-
-    return true;
+    return _mbs_session_set_service_type(sess, service_type);
 }
 
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_all_changes()
@@ -276,30 +231,6 @@ MB_SMF_CLIENT_API OpenAPI_mbs_session_id_t *mb_smf_sc_mbs_session_create_mbs_ses
 }
 
 /* protected functions */
-
-#if 0
-mb_smf_sc_mbs_session_t *_priv_mbs_session_to_public(_priv_mbs_session_t *session)
-{
-    return &session->session;
-}
-
-const mb_smf_sc_mbs_session_t *_priv_mbs_session_to_public_const(const _priv_mbs_session_t *session)
-{
-    return &session->session;
-}
-
-_priv_mbs_session_t *_priv_mbs_session_from_public(mb_smf_sc_mbs_session_t *session)
-{
-    if (!session) return NULL;
-    return ogs_container_of(session, _priv_mbs_session_t, session);
-}
-
-const _priv_mbs_session_t *_priv_mbs_session_from_public_const(const mb_smf_sc_mbs_session_t *session)
-{
-    if (!session) return NULL;
-    return ogs_container_of(session, _priv_mbs_session_t, session);
-}
-#endif
 
 bool _mbs_session_push_changes(_priv_mbs_session_t *sess)
 {
@@ -421,10 +352,7 @@ void _mbs_session_delete(_priv_mbs_session_t *session)
         session->session.ssm = NULL;
     }
 
-    if (session->session.tmgi) {
-        mb_smf_sc_tmgi_free(session->session.tmgi);
-        session->session.tmgi = NULL;
-    }
+    /* session->session.tmgi: TMGI held elsewhere in context, don't free here */
 
     if (session->id) {
         ogs_free(session->id);
@@ -441,8 +369,69 @@ void _mbs_session_delete(_priv_mbs_session_t *session)
         session->previous_tmgi = NULL;
     }
 
+    if (session->sbi_object) {
+        _ref_count_sbi_object_unref(session->sbi_object);
+        session->sbi_object = NULL;
+    }
+
     // session
     ogs_free(session);
+}
+
+bool _mbs_session_set_tmgi(_priv_mbs_session_t *session, _priv_tmgi_t *tmgi)
+{
+    if (!session || session->deleted) return false;
+    if (session->session.tmgi != _priv_tmgi_to_public(tmgi)) {
+        if (session->session.tmgi && tmgi && _tmgi_equal(tmgi, _priv_tmgi_from_public(session->session.tmgi))) return true;
+        if (session->session.tmgi) _tmgi_free(_priv_tmgi_from_public(session->session.tmgi));
+        session->session.tmgi = _priv_tmgi_to_public(tmgi);
+        if (tmgi) {
+            _ref_count_sbi_object_unref(session->sbi_object);
+            session->sbi_object = _ref_count_sbi_object_ref(tmgi->sbi_object);
+            session->session.tmgi_req = false;
+        }
+    }
+    return true;
+}
+
+bool _mbs_session_set_tmgi_request(_priv_mbs_session_t *session, bool request_tmgi)
+{
+    if (!session || session->deleted) return false;
+
+    if (session->session.tmgi_req == request_tmgi) return true;
+
+    session->session.tmgi_req = request_tmgi;
+    if (request_tmgi) {
+        /* forget the old TMGI if we are requesting a new one */
+        session->session.tmgi = NULL;
+    }
+    session->changed = true;
+
+    return true;
+}
+
+bool _mbs_set_tunnel_request(_priv_mbs_session_t *session, bool request_udp_tunnel)
+{
+    if (!session || session->deleted) return false;
+
+    if (session->session.tunnel_req == request_udp_tunnel) return false;
+
+    session->session.tunnel_req = request_udp_tunnel;
+    session->changed = true;
+
+    return true;
+}
+
+bool _mbs_session_set_service_type(_priv_mbs_session_t *session, mb_smf_sc_mbs_service_type_e service_type)
+{
+    if (!session || session->deleted) return false;
+
+    if (session->session.service_type == service_type) return false;
+
+    session->session.service_type = service_type;
+    session->changed = true;
+
+    return true;
 }
 
 void _mbs_session_send_create(_priv_mbs_session_t *session)
@@ -461,7 +450,11 @@ void _mbs_session_send_create(_priv_mbs_session_t *session)
         ogs_sbi_discovery_option_add_target_plmn_list(discovery_option, &session->session.tmgi->plmn);
     }
 
-    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, &session->sbi_object, service_type, discovery_option,
+    if (!session->sbi_object) session->sbi_object = _ref_count_sbi_object_new();
+
+    ogs_sbi_object_t *sbi_object = _ref_count_sbi_object_ptr(session->sbi_object);
+
+    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, sbi_object, service_type, discovery_option,
                                             _nmbsmf_mbs_session_build_create, session, NULL);
 
     ogs_sbi_discover_and_send(xact);
@@ -482,7 +475,8 @@ void _mbs_session_send_remove(_priv_mbs_session_t *session)
 
     /* Shouldn't need discovery options as we are talking to previously discovered MB-SMF (details in session->sbi_object) */
 
-    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, &session->sbi_object, service_type, NULL,
+    ogs_sbi_object_t *sbi_object = _ref_count_sbi_object_ptr(session->sbi_object);
+    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, sbi_object, service_type, NULL,
                                             _nmbsmf_mbs_session_build_remove, session, NULL);
 
     ogs_sbi_discover_and_send(xact);

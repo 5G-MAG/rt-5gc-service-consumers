@@ -16,6 +16,7 @@
 #include "macros.h"
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
+#include "priv_mbs-tmgi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,6 +28,8 @@ typedef struct ogs_sbi_object_s ogs_sbi_object_t;
 _context_t *_context_new();
 int _context_parse_config(const char *local);
 void _context_destroy();
+bool _context_add_tmgi(_priv_tmgi_t *tmgi);
+bool _context_remove_tmgi(_priv_tmgi_t *tmgi);
 bool _context_add_mbs_session(_priv_mbs_session_t *session);
 bool _context_remove_mbs_session(_priv_mbs_session_t *session);
 ogs_list_t *_context_mbs_sessions();

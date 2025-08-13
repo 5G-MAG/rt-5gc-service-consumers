@@ -13,6 +13,10 @@
 
 #include "ogs-core.h"
 #include "ogs-proto.h"
+#include "ogs-sbi.h"
+
+#include "macros.h"
+#include "mbs-tmgi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,13 +44,8 @@ typedef struct mb_smf_sc_ssm_addr_s {
     } dest_mc;
 } mb_smf_sc_ssm_addr_t;
 
-typedef struct mb_smf_sc_tmgi_s {
-    char *mbs_service_id;
-    ogs_plmn_id_t plmn;
-    time_t expiry_time;
-} mb_smf_sc_tmgi_t;
-
-typedef void (*mb_smf_sc_mbs_session_create_result_cb)(mb_smf_sc_mbs_session_t *session, int result, void *data);
+typedef void (*mb_smf_sc_mbs_session_create_result_cb)(mb_smf_sc_mbs_session_t *session, int result,
+                                                       const OpenAPI_problem_details_t *problem_details, void *data);
 
 typedef struct mb_smf_sc_mbs_session_s {
     mb_smf_sc_mbs_service_type_e service_type; /* Service type, broadcast or multicast */
@@ -63,15 +62,11 @@ typedef struct mb_smf_sc_mbs_session_s {
 /* mb_smf_sc_ssm Type functions */
 MB_SMF_CLIENT_API bool mb_smf_sc_ssm_equal(const mb_smf_sc_ssm_addr_t *a, const mb_smf_sc_ssm_addr_t *b);
 
-/* mb_smf_sc_tmgi Type functions */
-MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_new();
-MB_SMF_CLIENT_API void mb_smf_sc_tmgi_free(mb_smf_sc_tmgi_t *tmgi);
-MB_SMF_CLIENT_API bool mb_smf_sc_tmgi_equal(const mb_smf_sc_tmgi_t *a, const mb_smf_sc_tmgi_t *b);
-
 /* mb_smf_sc_mbs_session Type functions */
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new();
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv4(const struct in_addr *source, const struct in_addr *dest);
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv6(const struct in6_addr *source, const struct in6_addr *dest);
+MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_tmgi(mb_smf_sc_tmgi_t *tmgi);
 
 MB_SMF_CLIENT_API void mb_smf_sc_mbs_session_delete(mb_smf_sc_mbs_session_t *);
 
@@ -82,6 +77,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tmgi_request(mb_smf_sc_mbs_sess
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tunnel_request(mb_smf_sc_mbs_session_t *session, bool request_udp_tunnel);
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_service_type(mb_smf_sc_mbs_session_t *session,
                                                               mb_smf_sc_mbs_service_type_e service_type);
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tmgi(mb_smf_sc_mbs_session_t *session, mb_smf_sc_tmgi_t *tmgi);
 
 MB_SMF_CLIENT_API const char *mb_smf_sc_mbs_session_get_resource_id(const mb_smf_sc_mbs_session_t *session);
 

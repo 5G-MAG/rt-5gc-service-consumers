@@ -130,7 +130,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
             if (ogs_sbi_parse_header(&message, &response->h) != OGS_OK) {
                 ogs_error("Failed to parse header from client response for MB-SMF MBS Session transaction");
                 if (sess->session.create_result_cb) {
-                    sess->session.create_result_cb(_priv_mbs_session_to_public(sess), OGS_ERROR,
+                    sess->session.create_result_cb(_priv_mbs_session_to_public(sess), OGS_ERROR, NULL,
                                                    sess->session.create_result_cb_data);
                 }
                 ogs_sbi_message_free(&message);
@@ -193,7 +193,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                                 if (_nmbsmf_mbs_session_parse(&message, sess) == OGS_OK) {
                                     if (sess->session.create_result_cb) {
                                         ogs_debug("Forwarding creation result to calling application");
-                                        sess->session.create_result_cb(_priv_mbs_session_to_public(sess), OGS_OK,
+                                        sess->session.create_result_cb(_priv_mbs_session_to_public(sess), OGS_OK, NULL,
                                                                        sess->session.create_result_cb_data);
                                     }
                                     /* push pending changes (further subscriptions, etc) */
@@ -202,7 +202,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                                     ogs_warn("Errors in response from MB-SMF");
                                     if (sess->session.create_result_cb) {
                                         ogs_debug("Forwarding creation failure to calling application");
-                                        sess->session.create_result_cb(_priv_mbs_session_to_public(sess), OGS_ERROR,
+                                        sess->session.create_result_cb(_priv_mbs_session_to_public(sess), OGS_ERROR, NULL,
                                                                        sess->session.create_result_cb_data);
                                     }
                                 }
@@ -211,7 +211,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                                 if (sess->session.create_result_cb) {
                                     ogs_debug("Forwarding creation error to calling application");
                                     sess->session.create_result_cb(_priv_mbs_session_to_public(sess), OGS_ERROR,
-                                                                   sess->session.create_result_cb_data);
+                                                                   message.ProblemDetails, sess->session.create_result_cb_data);
                                 }
                             }
                             break;
@@ -290,7 +290,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                             ogs_warn("Create MBS Session request timed out");
                             if (sess->session.create_result_cb) {
                                 ogs_debug("Calling application callback for MBS Session creation with ETIMEDOUT");
-                                sess->session.create_result_cb(_priv_mbs_session_to_public(sess), OGS_ETIMEDOUT,
+                                sess->session.create_result_cb(_priv_mbs_session_to_public(sess), OGS_ETIMEDOUT, NULL,
                                                                sess->session.create_result_cb_data);
                             }
                             break;

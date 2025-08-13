@@ -16,6 +16,8 @@
 
 #include "macros.h"
 #include "mbs-session.h"
+#include "priv_mbs-tmgi.h"
+#include "ref_count_sbi_object.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,14 +34,14 @@ typedef struct _priv_mbs_session_s {
     mb_smf_sc_mbs_session_t session;
 
     /* private part */
-    char                   *id;
-    ogs_list_t              new_subscriptions;
-    ogs_list_t              deleted_subscriptions;
-    mb_smf_sc_ssm_addr_t   *previous_ssm;
-    mb_smf_sc_tmgi_t       *previous_tmgi;
-    bool                    changed;
-    bool                    deleted;
-    ogs_sbi_object_t        sbi_object;
+    char                    *id;
+    ogs_list_t               new_subscriptions;
+    ogs_list_t               deleted_subscriptions;
+    mb_smf_sc_ssm_addr_t    *previous_ssm;
+    _priv_tmgi_t            *previous_tmgi;
+    bool                     changed;
+    bool                     deleted;
+    _ref_count_sbi_object_t *sbi_object;
 } _priv_mbs_session_t;
 
 static inline mb_smf_sc_mbs_session_t *_priv_mbs_session_to_public(_priv_mbs_session_t *session)
@@ -68,6 +70,12 @@ static inline const _priv_mbs_session_t *_priv_mbs_session_from_public_const(con
 
 
 void _mbs_session_delete(_priv_mbs_session_t *session);
+
+bool _mbs_session_set_tmgi(_priv_mbs_session_t *session, _priv_tmgi_t *tmgi);
+bool _mbs_session_set_tmgi_request(_priv_mbs_session_t *session, bool request_tmgi);
+bool _mbs_set_tunnel_request(_priv_mbs_session_t *session, bool request_udp_tunnel);
+bool _mbs_session_set_service_type(_priv_mbs_session_t *session, mb_smf_sc_mbs_service_type_e service_type);
+
 bool _mbs_session_push_changes(_priv_mbs_session_t *session);
 void _mbs_session_send_create(_priv_mbs_session_t *session);
 void _mbs_session_send_update(_priv_mbs_session_t *session);

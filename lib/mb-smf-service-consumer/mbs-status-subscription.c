@@ -281,7 +281,9 @@ void _mbs_status_subscription_send_create(_priv_mbs_status_subscription_t *subsc
 
     /* Shouldn't need discovery options as we are talking to previously discovered MB-SMF (details in session->sbi_object) */
 
-    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, &session->sbi_object, service_type, NULL,
+    ogs_sbi_object_t *sbi_object = _ref_count_sbi_object_ptr(session->sbi_object);
+
+    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, sbi_object, service_type, NULL,
                                             _nmbsmf_mbs_session_build_status_subscription_create, session, subsc);
     ogs_sbi_discover_and_send(xact);
 
@@ -302,7 +304,8 @@ void _mbs_status_subscription_send_update(_priv_mbs_status_subscription_t *subsc
               session, _priv_mbs_session_to_public(session));
 
     ogs_sbi_service_type_e service_type = OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION;
-    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, &session->sbi_object, service_type, NULL,
+    ogs_sbi_object_t *sbi_object = _ref_count_sbi_object_ptr(session->sbi_object);
+    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, sbi_object, service_type, NULL,
                                             _nmbsmf_mbs_session_build_status_subscription_update, session, subsc);
     ogs_sbi_discover_and_send(xact);
 }
@@ -322,7 +325,8 @@ void _mbs_status_subscription_send_delete(_priv_mbs_status_subscription_t *subsc
               session, _priv_mbs_session_to_public(session));
 
     ogs_sbi_service_type_e service_type = OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION;
-    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, &session->sbi_object, service_type, NULL,
+    ogs_sbi_object_t *sbi_object = _ref_count_sbi_object_ptr(session->sbi_object);
+    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, sbi_object, service_type, NULL,
                                             _nmbsmf_mbs_session_build_status_subscription_delete, session, subsc);
     ogs_sbi_discover_and_send(xact);
 }

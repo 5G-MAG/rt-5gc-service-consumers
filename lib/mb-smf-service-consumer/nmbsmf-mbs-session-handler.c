@@ -21,6 +21,7 @@
 #include "log.h"
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
+#include "priv_mbs-tmgi.h"
 
 #include "nmbsmf-mbs-session-handler.h"
 
@@ -95,23 +96,16 @@ int _nmbsmf_mbs_session_parse(ogs_sbi_message_t *message, _priv_mbs_session_t *s
             ogs_error("TMGI requested but no TMGI in the response from the MB-SMF");
             return OGS_ERROR;
         }
-        /* allocate tmgi if we don't have one already */
-        if (!sess->session.tmgi) {
-            sess->session.tmgi = ogs_calloc(1, sizeof(*sess->session.tmgi));
-        }
-        /* replace tmgi contents with the received TMGI */
-        if (sess->session.tmgi->mbs_service_id) ogs_free(sess->session.tmgi->mbs_service_id);
-        sess->session.tmgi->mbs_service_id = ogs_strdup(mbs_session->tmgi->mbs_service_id);
-        ogs_plmn_id_build(&sess->session.tmgi->plmn, atoi(mbs_session->tmgi->plmn_id->mcc),
-                                                     atoi(mbs_session->tmgi->plmn_id->mnc),
-                                                     strlen(mbs_session->tmgi->plmn_id->mnc));
+        /* create new TMGI */
+        _priv_tmgi_t *tmgi = _tmgi_create(NULL, NULL);
+        _tmgi_set_mbs_service_id(tmgi, mbs_session->tmgi->mbs_service_id);
+        _tmgi_set_plmn(tmgi, atoi(mbs_session->tmgi->plmn_id->mcc), atoi(mbs_session->tmgi->plmn_id->mnc));
+        _tmgi_replace_sbi_object(tmgi, sess->sbi_object);
+        
+        sess->session.tmgi = _priv_tmgi_to_public(tmgi);
+        
         /* Copy new TMGI to previous record to detect app changes */
-        if (!sess->previous_tmgi) {
-            sess->previous_tmgi = ogs_calloc(1, sizeof(*sess->session.tmgi));
-        }
-        if (sess->previous_tmgi->mbs_service_id) ogs_free(sess->previous_tmgi->mbs_service_id);
-        sess->previous_tmgi->mbs_service_id = ogs_strdup(sess->session.tmgi->mbs_service_id);
-        memcpy(&sess->previous_tmgi->plmn, &sess->session.tmgi->plmn, sizeof(sess->previous_tmgi->plmn));
+        sess->previous_tmgi = _tmgi_copy(sess->previous_tmgi, tmgi);
     }
 
     if (mbs_session->mbs_session_id->ssm && mbs_session->mbs_session_id->ssm->source_ip_addr &&
