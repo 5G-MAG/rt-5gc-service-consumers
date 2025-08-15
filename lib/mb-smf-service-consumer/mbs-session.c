@@ -16,12 +16,12 @@
 #include "macros.h"
 #include "context.h"
 #include "log.h"
-#include "mbs-tmgi.h"
+#include "tmgi.h"
 #include "mbs-status-subscription.h"
 #include "nmbsmf-mbs-session-build.h"
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
-#include "priv_mbs-tmgi.h"
+#include "priv_tmgi.h"
 
 #include "mbs-session.h"
 
@@ -269,7 +269,7 @@ bool _mbs_session_push_changes(_priv_mbs_session_t *sess)
         return true;
     }
 
-    if (!mb_smf_sc_tmgi_equal(sess->previous_tmgi, sess->session.tmgi)) {
+    if (!_tmgi_equal(sess->previous_tmgi, _priv_tmgi_from_public_const(sess->session.tmgi))) {
         ogs_debug("TMGI changed, recreating MbsSession");
         /* TMGI change */
         if (sess->previous_tmgi) {
@@ -365,7 +365,7 @@ void _mbs_session_delete(_priv_mbs_session_t *session)
     }
 
     if (session->previous_tmgi) {
-        mb_smf_sc_tmgi_free(session->previous_tmgi);
+        _tmgi_free(session->previous_tmgi);
         session->previous_tmgi = NULL;
     }
 

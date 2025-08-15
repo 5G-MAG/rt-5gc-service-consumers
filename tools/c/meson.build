@@ -8,3 +8,4 @@
 
 subdir('pcf-policyauthorization')
 subdir('mbs-service-tool')
+subdir('tmgi-tool')

@@ -19,7 +19,9 @@
 #include "context.h"
 #include "log.h"
 #include "nmbsmf-mbs-session-build.h"
-#include "nmbsmf-mbs-session-handler.h"
+#include "nmbsmf-mbs-session-handle.h"
+#include "nmbsmf-tmgi-handle.h"
+#include "nnrf-disc-handle.h"
 
 /* Header for this implementation */
 #include "mb-smf-service-consumer.h"
@@ -54,6 +56,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
 
     switch (e->id) {
     case OGS_EVENT_SBI_SERVER:
+    {
         /* possible notification */
         ogs_sbi_request_t *request = e->sbi.request;
         if (!request) return false;
@@ -107,7 +110,9 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
         ogs_sbi_message_free(&message);
 
         break;
+    }
     case OGS_EVENT_SBI_CLIENT:
+    {
         response = e->sbi.response;
 
         ogs_pool_id_t xact_id = OGS_POINTER_TO_UINT(e->sbi.data);
@@ -117,16 +122,50 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
         if (!xact) return false;
 
         _priv_mbs_session_t *sess = _context_sbi_object_to_session(xact->sbi_object);
-        if (!sess) return false;
+        _priv_tmgi_t *tmgi = _context_sbi_object_to_tmgi(xact->sbi_object);
+        if (!sess && !tmgi) return false;
 
         /* This is one of ours, handle it */
 
         ogs_debug("Client response for session [%p (%p)]", sess, _priv_mbs_session_to_public(sess));
 
+        ogs_sbi_message_t message = {};
+
         switch (xact->service_type) {
+        case OGS_SBI_SERVICE_TYPE_NMBSMF_TMGI:
+            /* response to MB-SMF TMGI API request or discovery */
+            if (ogs_sbi_parse_response(&message, response) != OGS_OK) {
+                ogs_error("Failed to parse response from client response for MB-SMF TMGI transaction");
+                if (tmgi->callback) {
+                    tmgi->callback(_priv_tmgi_to_public(tmgi), OGS_ERROR, NULL, tmgi->callback_data);
+                }
+                ogs_sbi_message_free(&message);
+                break;
+            }
+
+            SWITCH(message.h.service.name)
+            CASE(OGS_SBI_SERVICE_NAME_NNRF_DISC)
+                if (_nnrf_disc_handle(xact, &message, response) == OGS_OK) xact = NULL;
+                break;
+            CASE(OGS_SBI_SERVICE_NAME_NMBSMF_TMGI)
+                /* process response to TMGI request */
+                SWITCH (message.h.method)
+                CASE(OGS_SBI_HTTP_METHOD_POST)
+                    _nmbsmf_tmgi_allocated(xact, &message);
+                    break;
+                CASE(OGS_SBI_HTTP_METHOD_DELETE)
+                    _nmbsmf_tmgi_deallocated(xact, &message);
+                    break;
+                DEFAULT
+                    break;
+                END
+                break;
+            DEFAULT
+                break;
+            END
+            break;
         case OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION:
             /* response to MB-SMF MBS SESSION API request or discovery */
-            ogs_sbi_message_t message = {};
             if (ogs_sbi_parse_header(&message, &response->h) != OGS_OK) {
                 ogs_error("Failed to parse header from client response for MB-SMF MBS Session transaction");
                 if (sess->session.create_result_cb) {
@@ -138,44 +177,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
             }
             SWITCH(message.h.service.name)
             CASE(OGS_SBI_SERVICE_NAME_NNRF_DISC)
-                /* Process NRF discovery and forward transaction to found nf_instance */
-                ogs_debug("NRF Discovery response for MB-SMF MBS Session API");
-                SWITCH(message.h.resource.component[0])
-                CASE(OGS_SBI_RESOURCE_NAME_NF_INSTANCES)
-                    ogs_debug("NRF NF Instance API");
-                    SWITCH(message.h.method)
-                    CASE(OGS_SBI_HTTP_METHOD_GET)
-                        ogs_debug("NRF NF Instance GET response");
-                        __upgrade_to_full_response_parse(&message, response);
-                        ogs_sbi_object_t *object = xact->sbi_object;
-                        OpenAPI_nf_type_e target_nf_type = ogs_sbi_service_type_to_nf_type(xact->service_type);
-                        OpenAPI_nf_type_e requester_nf_type = xact->requester_nf_type;
-                        ogs_sbi_discovery_option_t *discovery_option = xact->discovery_option;
-                        OpenAPI_search_result_t *SearchResult = message.SearchResult;
-                        if (!SearchResult) {
-                            ogs_error("No SearchResult");
-                            break;
-                        }
-                        ogs_nnrf_disc_handle_nf_discover_search_result(SearchResult);
-                        ogs_sbi_nf_instance_t *nf_instance = ogs_sbi_nf_instance_find_by_discovery_param(
-                                                                        target_nf_type, requester_nf_type, discovery_option);
-                        if (!nf_instance) {
-                            ogs_error("(NF discover) No [%s:%s]", ogs_sbi_service_type_to_name(xact->service_type),
-                                          OpenAPI_nf_type_ToString(requester_nf_type));
-                            break;
-                        }
-                        OGS_SBI_SETUP_NF_INSTANCE(object->service_type_array[xact->service_type], nf_instance);
-                        ogs_debug("Sending transaction to SMF instance");
-                        ogs_expect(true == ogs_sbi_send_request_to_nf_instance(nf_instance, xact));
-                        xact = NULL; /* preserve xact for next request */
-                        break;
-                    DEFAULT
-                        break;
-                    END
-                    break;
-                DEFAULT
-                    break;
-                END
+                if (_nnrf_disc_handle(xact, &message, response) == OGS_OK) xact = NULL;
                 break;
             CASE(OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION)
                 /* process response to MBS Session request */
@@ -259,12 +261,14 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
         if (response) ogs_sbi_response_free(response);
 
         break;
-
+    }
     case OGS_EVENT_SBI_TIMER:
+    {
         ogs_debug("Timer id = %i (%s)", e->timer_id, ogs_timer_get_name(e->timer_id));
 
         switch (e->timer_id) {
         case OGS_TIMER_SBI_CLIENT_WAIT:
+        {
             /* client call timed out */
             ogs_pool_id_t xact_id = OGS_POINTER_TO_UINT(e->sbi.data);
             if (xact_id < OGS_MIN_POOL_ID || xact_id > OGS_MAX_POOL_ID) return false;
@@ -273,12 +277,42 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
             if (!xact) return false;
 
             _priv_mbs_session_t *sess = _context_sbi_object_to_session(xact->sbi_object);
+            _priv_tmgi_t *tmgi = _context_sbi_object_to_tmgi(xact->sbi_object);
             if (!sess) return false;
 
             ogs_debug("Client response timeout for MBS Session [%p (%p)]", sess, _priv_mbs_session_to_public(sess));
 
             switch (xact->service_type) {
+            case OGS_SBI_SERVICE_TYPE_NMBSMF_TMGI:
+            {
+                SWITCH(xact->request->h.resource.component[0])
+                CASE(OGS_SBI_RESOURCE_NAME_TMGI)
+                    SWITCH(xact->request->h.resource.component[1])
+                    CASE("OGS_SWITCH_NULL")
+                        /* .../tmgi */
+                        SWITCH(xact->request->h.method)
+                        CASE(OGS_SBI_HTTP_METHOD_POST)
+                            /* Allocate/Refresh TMGIs */
+                            ogs_warn("Allocate TMGI request timed out");
+                            if (tmgi->callback) {
+                                tmgi->callback(_priv_tmgi_to_public(tmgi), OGS_ETIMEDOUT, NULL, tmgi->callback_data);
+                            }
+                            break;
+                        DEFAULT
+                            break;
+                        END
+                        break;
+                    DEFAULT
+                        break;
+                    END
+                    break;
+                DEFAULT
+                    break;
+                END
+                break;
+            }
             case OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION:
+            {
                 SWITCH(xact->request->h.resource.component[0])
                 CASE(OGS_SBI_RESOURCE_NAME_MBS_SESSIONS)
                     SWITCH(xact->request->h.resource.component[1])
@@ -306,14 +340,17 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                     break;
                 END
                 break;
+            }
             default:
                 break;
             }
             break;
+        }
         default:
             break;
         }
         break;
+    }
     default:
         return false;
     }

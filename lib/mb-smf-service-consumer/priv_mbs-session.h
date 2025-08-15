@@ -16,7 +16,7 @@
 
 #include "macros.h"
 #include "mbs-session.h"
-#include "priv_mbs-tmgi.h"
+#include "priv_tmgi.h"
 #include "ref_count_sbi_object.h"
 
 #ifdef __cplusplus
@@ -67,7 +67,6 @@ static inline const _priv_mbs_session_t *_priv_mbs_session_from_public_const(con
     if (session) return ogs_container_of(session, _priv_mbs_session_t, session);
     return NULL;
 }
-
 
 void _mbs_session_delete(_priv_mbs_session_t *session);
 

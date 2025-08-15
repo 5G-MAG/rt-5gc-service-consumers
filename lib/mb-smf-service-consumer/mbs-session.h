@@ -16,7 +16,7 @@
 #include "ogs-sbi.h"
 
 #include "macros.h"
-#include "mbs-tmgi.h"
+#include "tmgi.h"
 
 #ifdef __cplusplus
 extern "C" {

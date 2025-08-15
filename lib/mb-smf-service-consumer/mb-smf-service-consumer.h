@@ -15,6 +15,7 @@
 
 /* Library public API includes */
 #include "macros.h"
+#include "tmgi.h"
 #include "mbs-session.h"
 #include "mbs-status-subscription.h"
 

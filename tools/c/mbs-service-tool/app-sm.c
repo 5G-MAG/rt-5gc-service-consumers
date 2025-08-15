@@ -272,7 +272,9 @@ static void app_local_send_event(app_local_event_id_t event_id, mb_smf_sc_mbs_se
     event->event.id = APP_LOCAL;
     event->mbs_session = session;
     event->result = result;
-    event->problem_details = OpenAPI_problem_details_copy(NULL, problem_details);
+    if (problem_details) {
+        event->problem_details = OpenAPI_problem_details_copy(NULL, (OpenAPI_problem_details_t*)problem_details);
+    }
 
     rv = ogs_queue_push(ogs_app()->queue, &event->event);
     if (rv != OGS_OK) {

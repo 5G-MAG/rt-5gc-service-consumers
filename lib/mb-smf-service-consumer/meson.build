@@ -36,22 +36,26 @@ libscmbsmf_sources = files('''
     mbs-status-notification-result.h
     mbs-status-subscription.c
     mbs-status-subscription.h
-    mbs-tmgi.c
-    mbs-tmgi.h
     nmbsmf-mbs-session-build.c
     nmbsmf-mbs-session-build.h
-    nmbsmf-mbs-session-handler.c
-    nmbsmf-mbs-session-handler.h
+    nmbsmf-mbs-session-handle.c
+    nmbsmf-mbs-session-handle.h
     nmbsmf-mbs-session-path.c
     nmbsmf-mbs-session-path.h
     nmbsmf-mbs-session-process.c
     nmbsmf-mbs-session-process.h
     nmbsmf-tmgi-build.c
     nmbsmf-tmgi-build.h
+    nmbsmf-tmgi-handle.c
+    nmbsmf-tmgi-handle.h
+    nnrf-disc-handle.c
+    nnrf-disc-handle.h
     priv_mbs-session.h
     priv_mbs-status-subscription.h
-    priv_mbs-tmgi.h
+    priv_tmgi.h
     ref_count_sbi_object.h
+    tmgi.c
+    tmgi.h
     utils.c
     utils.h
 

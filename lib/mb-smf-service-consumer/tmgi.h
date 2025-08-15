@@ -33,13 +33,19 @@ typedef void (*mb_smf_sc_tmgi_create_result_cb)(mb_smf_sc_tmgi_t *tmgi, int resu
                                                 const OpenAPI_problem_details_t *problem_details, void *data);
 
 /* mb_smf_sc_tmgi Type functions */
-MB_SMF_CLIENT_API void mb_smf_sc_tmgi_create(mb_smf_sc_tmgi_create_result_cb callback, void *callback_data);
+MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_create(mb_smf_sc_tmgi_create_result_cb callback, void *callback_data);
+MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_new();
 MB_SMF_CLIENT_API void mb_smf_sc_tmgi_free(mb_smf_sc_tmgi_t *tmgi);
 MB_SMF_CLIENT_API bool mb_smf_sc_tmgi_equal(const mb_smf_sc_tmgi_t *a, const mb_smf_sc_tmgi_t *b);
 
 MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_set_mbs_service_id(mb_smf_sc_tmgi_t *tmgi, const char *mbs_service_id);
 MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_set_plmn(mb_smf_sc_tmgi_t *tmgi, uint16_t mcc, uint16_t mnc);
 MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_set_expiry_time(mb_smf_sc_tmgi_t *tmgi, time_t expiry_time);
+
+MB_SMF_CLIENT_API const char *mb_smf_sc_tmgi_repr(mb_smf_sc_tmgi_t *tmgi);
+
+MB_SMF_CLIENT_API void mb_smf_sc_tmgi_send_allocate(mb_smf_sc_tmgi_t *tmgi);
+MB_SMF_CLIENT_API void mb_smf_sc_tmgi_send_deallocate(mb_smf_sc_tmgi_t *tmgi);
 
 #ifdef __cplusplus
 }

@@ -17,14 +17,21 @@
 #include "nmbsmf-tmgi-build.h"
 #include "utils.h"
 
-#include "mbs-tmgi.h"
-#include "priv_mbs-tmgi.h"
+#include "tmgi.h"
+#include "priv_tmgi.h"
 
 /* mb_smf_sc_tmgi Type functions */
-MB_SMF_CLIENT_API void mb_smf_sc_tmgi_create(mb_smf_sc_tmgi_create_result_cb callback, void *callback_data)
+MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_create(mb_smf_sc_tmgi_create_result_cb callback, void *callback_data)
 {
     _priv_tmgi_t *tmgi = _tmgi_create(callback, callback_data);
-    _tmgi_send_create(tmgi);
+    _tmgi_send_allocate(tmgi);
+    return _priv_tmgi_to_public(tmgi);
+}
+
+MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_new()
+{
+    _priv_tmgi_t *tmgi = _tmgi_create(NULL, NULL);
+    return _priv_tmgi_to_public(tmgi);
 }
 
 MB_SMF_CLIENT_API void mb_smf_sc_tmgi_free(mb_smf_sc_tmgi_t *tmgi)
@@ -53,6 +60,21 @@ MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_set_expiry_time(mb_smf_sc_tmg
 {
     _tmgi_set_expiry_time(_priv_tmgi_from_public(tmgi), expiry_time);
     return tmgi;
+}
+
+MB_SMF_CLIENT_API const char *mb_smf_sc_tmgi_repr(mb_smf_sc_tmgi_t *tmgi)
+{
+    return _tmgi_repr(_priv_tmgi_from_public(tmgi));
+}
+
+MB_SMF_CLIENT_API void mb_smf_sc_tmgi_send_allocate(mb_smf_sc_tmgi_t *tmgi)
+{
+    _tmgi_send_allocate(_priv_tmgi_from_public(tmgi));
+}
+
+MB_SMF_CLIENT_API void mb_smf_sc_tmgi_send_deallocate(mb_smf_sc_tmgi_t *tmgi)
+{
+    _tmgi_send_deallocate(_priv_tmgi_from_public(tmgi));
 }
 
 /* internal library functions */
@@ -87,6 +109,8 @@ void _tmgi_free(_priv_tmgi_t *tmgi)
 
 _priv_tmgi_t *_tmgi_set_mbs_service_id(_priv_tmgi_t *tmgi, const char *mbs_service_id)
 {
+    tmgi->allocated = true;
+
     if (tmgi->tmgi.mbs_service_id == mbs_service_id) return tmgi;
 
     if (!tmgi->tmgi.mbs_service_id || !mbs_service_id || strcmp(tmgi->tmgi.mbs_service_id, mbs_service_id)) {
@@ -104,6 +128,8 @@ _priv_tmgi_t *_tmgi_set_mbs_service_id(_priv_tmgi_t *tmgi, const char *mbs_servi
 
 _priv_tmgi_t *_tmgi_set_plmn(_priv_tmgi_t *tmgi, uint16_t mcc, uint16_t mnc)
 {
+    tmgi->allocated = true;
+
     if (ogs_plmn_id_mcc(&tmgi->tmgi.plmn) != mcc || ogs_plmn_id_mnc(&tmgi->tmgi.plmn) != mnc) {
         uint16_t mnc_len = (mnc < 100)?2:3;
 
@@ -117,6 +143,8 @@ _priv_tmgi_t *_tmgi_set_plmn(_priv_tmgi_t *tmgi, uint16_t mcc, uint16_t mnc)
 
 _priv_tmgi_t *_tmgi_set_expiry_time(_priv_tmgi_t *tmgi, time_t expiry_time)
 {
+    tmgi->allocated = true;
+
     if (tmgi->tmgi.expiry_time != expiry_time) {
         _tmgi_clear_repr(tmgi);
         tmgi->tmgi.expiry_time = expiry_time;
@@ -132,13 +160,27 @@ void _tmgi_clear_repr(_priv_tmgi_t *tmgi)
     tmgi->cache->repr = NULL;
 }
 
-void _tmgi_send_create(_priv_tmgi_t *tmgi)
+void _tmgi_send_allocate(_priv_tmgi_t *tmgi)
 {
     if (!tmgi) return;
 
     ogs_list_t new_list = {};
     ogs_list_add(&new_list, tmgi);
-    _tmgi_list_send_create(&new_list, NULL);
+    _tmgi_list_send_allocate(&new_list, NULL);
+}
+
+void _tmgi_send_allocate_all()
+{    
+    const ogs_list_t *tmgis = _context_tmgis();
+    ogs_list_t new_list = {};
+    ogs_lnode_t *node;
+    ogs_list_for_each(tmgis, node) {
+        _priv_tmgi_t *tmgi = _priv_tmgi_from_private_lnode(node);
+        if (!tmgi->allocated) {
+            ogs_list_add(&new_list, tmgi);
+        }
+    }
+    _tmgi_list_send_allocate(&new_list, NULL);
 }
 
 void _tmgi_send_refresh(_priv_tmgi_t *tmgi)
@@ -147,19 +189,54 @@ void _tmgi_send_refresh(_priv_tmgi_t *tmgi)
 
     ogs_list_t refresh_list = {};
     ogs_list_add(&refresh_list, tmgi);
-    _tmgi_list_send_create(NULL, &refresh_list);
+    _tmgi_list_send_allocate(NULL, &refresh_list);
 }
 
-void _tmgi_send_delete(_priv_tmgi_t *tmgi)
+void _tmgi_send_refresh_all()
+{
+    const ogs_list_t *tmgis = _context_tmgis();
+    ogs_list_t refresh_list = {};
+    ogs_lnode_t *node;
+    time_t now = time(NULL);
+    ogs_list_for_each(tmgis, node) {
+        _priv_tmgi_t *tmgi = _priv_tmgi_from_private_lnode(node);
+        if (tmgi->allocated && tmgi->tmgi.expiry_time && tmgi->tmgi.expiry_time <= now) {
+            ogs_list_add(&refresh_list, tmgi);
+        }
+    }
+    _tmgi_list_send_allocate(NULL, &refresh_list);
+}
+
+void _tmgi_send_allocate_and_refresh_all()
+{
+    const ogs_list_t *tmgis = _context_tmgis();
+    ogs_list_t new_list = {};
+    ogs_list_t refresh_list = {};
+    ogs_lnode_t *node;
+    time_t now = time(NULL);
+    ogs_list_for_each(tmgis, node) {
+        _priv_tmgi_t *tmgi = _priv_tmgi_from_private_lnode(node);
+        if (tmgi->allocated) {
+            if (tmgi->tmgi.expiry_time && tmgi->tmgi.expiry_time <= now) {
+                ogs_list_add(&refresh_list, tmgi);
+            }
+        } else {
+            ogs_list_add(&new_list, tmgi);
+        }
+    }
+    _tmgi_list_send_allocate(&new_list, &refresh_list);
+}
+
+void _tmgi_send_deallocate(_priv_tmgi_t *tmgi)
 {
     if (!tmgi) return;
 
     ogs_list_t del_list = {};
     ogs_list_add(&del_list, tmgi);
-    _tmgi_list_send_delete(&del_list);
+    _tmgi_list_send_deallocate(&del_list);
 }
 
-void _tmgi_list_send_create(const ogs_list_t *new_tmgis, const ogs_list_t *refresh_tmgis)
+void _tmgi_list_send_allocate(const ogs_list_t *new_tmgis, const ogs_list_t *refresh_tmgis)
 {
     if (!new_tmgis && !refresh_tmgis) return;
 
@@ -200,7 +277,7 @@ void _tmgi_list_send_create(const ogs_list_t *new_tmgis, const ogs_list_t *refre
     ogs_sbi_discover_and_send(xact);
 }
 
-void _tmgi_list_send_delete(const ogs_list_t *tmgis)
+void _tmgi_list_send_deallocate(const ogs_list_t *tmgis)
 {
     if (!tmgis || ogs_list_empty(tmgis)) return;
 
@@ -316,6 +393,34 @@ _priv_tmgi_t *_tmgi_copy(_priv_tmgi_t *old, _priv_tmgi_t *src)
     _tmgi_clear_repr(old);
 
     return old;
+}
+
+_priv_tmgi_t *_tmgi_find_matching_openapi_type(const OpenAPI_tmgi_t *api_tmgi)
+{
+    const ogs_list_t *tmgis = _context_tmgis();
+    _priv_tmgi_t *ret = NULL;
+    if (tmgis) {
+        ogs_lnode_t *node;
+        ogs_list_for_each(tmgis, node) {
+            _priv_tmgi_t *tmgi = _priv_tmgi_from_private_lnode(node);
+            if (api_tmgi->mbs_service_id) {
+                if (tmgi->tmgi.mbs_service_id) {
+                    if (strcmp(api_tmgi->mbs_service_id, tmgi->tmgi.mbs_service_id)) continue;
+                } else {
+                    continue;
+                }
+            } else {
+                if (tmgi->tmgi.mbs_service_id) continue;
+            }
+
+            if (strcmp(api_tmgi->plmn_id->mcc, ogs_plmn_id_mcc_string(&tmgi->tmgi.plmn))) continue;
+            if (strcmp(api_tmgi->plmn_id->mnc, ogs_plmn_id_mnc_string(&tmgi->tmgi.plmn))) continue;
+
+            ret = tmgi;
+            break;
+        }
+    }
+    return ret;
 }
 
 void _tmgi_replace_sbi_object(_priv_tmgi_t *tmgi, _ref_count_sbi_object_t *sbi_object)

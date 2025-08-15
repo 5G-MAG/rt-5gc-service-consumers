@@ -16,7 +16,7 @@
 #include "macros.h"
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
-#include "priv_mbs-tmgi.h"
+#include "priv_tmgi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,11 +30,13 @@ int _context_parse_config(const char *local);
 void _context_destroy();
 bool _context_add_tmgi(_priv_tmgi_t *tmgi);
 bool _context_remove_tmgi(_priv_tmgi_t *tmgi);
+const ogs_list_t *_context_tmgis();
 bool _context_add_mbs_session(_priv_mbs_session_t *session);
 bool _context_remove_mbs_session(_priv_mbs_session_t *session);
 ogs_list_t *_context_mbs_sessions();
 bool _context_active_sessions_exists(_priv_mbs_session_t *session);
 _priv_mbs_session_t *_context_sbi_object_to_session(ogs_sbi_object_t *sbi_object);
+_priv_tmgi_t *_context_sbi_object_to_tmgi(ogs_sbi_object_t *sbi_object);
 const ogs_sockaddr_t *_context_get_notification_address();
 bool _context_is_notification_server(ogs_sbi_server_t *server);
 _priv_mbs_status_subscription_t *_context_find_subscription(ogs_sbi_server_t *server, const char *url_path);

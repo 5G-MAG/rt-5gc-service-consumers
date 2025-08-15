@@ -14,7 +14,7 @@
 #include "ogs-proto.h"
 #include "ogs-sbi.h"
 
-#include "mbs-tmgi.h"
+#include "tmgi.h"
 #include "ref_count_sbi_object.h"
 
 #ifdef __cplusplus
@@ -26,6 +26,7 @@ extern "C" {
 /* Data types */
 typedef struct _priv_tmgi_s {
     ogs_lnode_t node;
+    ogs_lnode_t context_lnode; /* private lnode used by the mb-smf-sc context */
     mb_smf_sc_tmgi_t tmgi;
     mb_smf_sc_tmgi_create_result_cb callback;
     void *callback_data;
@@ -33,6 +34,7 @@ typedef struct _priv_tmgi_s {
     struct {
         char *repr;
     } *cache;
+    bool allocated; /* has this TMGI been allocated? */
 } _priv_tmgi_t;
 
 /* internal library functions */
@@ -60,6 +62,18 @@ static inline const mb_smf_sc_tmgi_t *_priv_tmgi_to_public_const(const _priv_tmg
     return NULL;
 }
 
+static inline ogs_lnode_t *_priv_tmgi_to_private_lnode(_priv_tmgi_t *tmgi)
+{
+    if (tmgi) return &tmgi->context_lnode;
+    return NULL;
+}
+
+static inline _priv_tmgi_t *_priv_tmgi_from_private_lnode(ogs_lnode_t *lnode)
+{
+    if (lnode) return ogs_container_of(lnode, _priv_tmgi_t, context_lnode);
+    return NULL;
+}
+
 _priv_tmgi_t *_tmgi_create(mb_smf_sc_tmgi_create_result_cb callback, void *callback_data);
 void _tmgi_free(_priv_tmgi_t *tmgi);
 
@@ -69,12 +83,15 @@ _priv_tmgi_t *_tmgi_set_expiry_time(_priv_tmgi_t *tmgi, time_t expiry_time);
 
 void _tmgi_clear_repr(_priv_tmgi_t *tmgi);
 
-void _tmgi_send_create(_priv_tmgi_t *tmgi);
+void _tmgi_send_allocate(_priv_tmgi_t *tmgi);
+void _tmgi_send_allocate_all(); /**< Send allocate request for all unallocated TMGIs in the library context */
 void _tmgi_send_refresh(_priv_tmgi_t *tmgi);
-void _tmgi_send_delete(_priv_tmgi_t *tmgi);
+void _tmgi_send_refresh_all(); /**< Send allocate request for all allocated and expired TMGIs in the library context */
+void _tmgi_send_allocate_and_refresh_all(); /**< Send allocate request for all unallocated TMGIs and expired TMGIs in the library context */
+void _tmgi_send_deallocate(_priv_tmgi_t *tmgi);
 
-void _tmgi_list_send_create(const ogs_list_t *new_tmgis, const ogs_list_t *refresh_tmgis);
-void _tmgi_list_send_delete(const ogs_list_t *tmgis);
+void _tmgi_list_send_allocate(const ogs_list_t *new_tmgis, const ogs_list_t *refresh_tmgis);
+void _tmgi_list_send_deallocate(const ogs_list_t *tmgis);
 char *_tmgi_list_repr(const ogs_list_t *tmgis);
 
 bool _tmgi_equal(const _priv_tmgi_t *a, const _priv_tmgi_t *b);
@@ -83,6 +100,7 @@ const char *_tmgi_repr(const _priv_tmgi_t *tmgi);
 _priv_tmgi_t *_tmgi_copy(_priv_tmgi_t *old, _priv_tmgi_t *src);
 
 OpenAPI_tmgi_t *_tmgi_to_openapi_type(const _priv_tmgi_t *tmgi);
+_priv_tmgi_t *_tmgi_find_matching_openapi_type(const OpenAPI_tmgi_t *api_tmgi);
 void _tmgi_replace_sbi_object(_priv_tmgi_t *tmgi, _ref_count_sbi_object_t *sbi_object);
 
 #ifdef __cplusplus

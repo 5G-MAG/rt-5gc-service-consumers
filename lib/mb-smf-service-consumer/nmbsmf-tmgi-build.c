@@ -11,7 +11,7 @@
 #include "ogs-core.h"
 #include "ogs-sbi.h"
 
-#include "priv_mbs-tmgi.h"
+#include "priv_tmgi.h"
 
 /* Library Internals */
 ogs_sbi_request_t *_nmbsmf_tmgi_build_create(void *context, void *data)
