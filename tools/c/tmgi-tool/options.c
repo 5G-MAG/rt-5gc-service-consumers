@@ -24,7 +24,6 @@
 static void _print_help(bool is_error);
 static void _split_address_and_port(const char *str, char **address, short int *port);
 static void _split_mcc_and_mnc(const char *str, struct options_plmn *plmn);
-static void _split_ssm_address(const char *str, struct options_ssm *ssm);
 
 app_options_t* app_options_parse(int *argc, char ***argv)
 {
@@ -146,7 +145,7 @@ static void _print_help(bool is_error)
     dprintf(fd,
             "Syntax: tmgi-tool -h\n"
             "        tmgi-tool (-n <nrf-address>:<nrf-port>|-s <scp-address>:<scp-port>)\n"
-            "        tmgi-tool -d [-t <mbs-service-id>] -p <mcc>-<mnc> (-n <nrf-address>:<nrf-port>|-s <scp-address>:<scp-port>)\n"
+            "        tmgi-tool -d [-M <mbs-service-id>] -p <mcc>-<mnc> (-n <nrf-address>:<nrf-port>|-s <scp-address>:<scp-port>)\n"
             "\n"
             "Options:\n"
             " -h          --help                 Show this help\n"
