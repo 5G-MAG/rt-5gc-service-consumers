@@ -102,14 +102,15 @@ int _nmbsmf_mbs_session_parse(ogs_sbi_message_t *message, _priv_mbs_session_t *s
         _tmgi_set_mbs_service_id(tmgi, mbs_session->tmgi->mbs_service_id);
         _tmgi_set_plmn(tmgi, atoi(mbs_session->tmgi->plmn_id->mcc), atoi(mbs_session->tmgi->plmn_id->mnc));
 
-        struct tm tmgi_expire_tm = {};
-        char *rest = ogs_strptime(mbs_session->expiration_time, "%Y-%m-%dT%H:%M:%SZ", &tmgi_expire_tm);
-        if (!rest || rest[0]) {
-            ogs_error("MBS Session TMGI expiry time has a bad timestamp: %s", mbs_session->expiration_time);
-            _context_remove_tmgi(tmgi);
-            return OGS_ERROR;
+        if (mbs_session->expiration_time) {
+            ogs_time_t exp_time;
+            if (!ogs_sbi_time_from_string(&exp_time, mbs_session->expiration_time)) {
+                ogs_error("MBS Session TMGI expiry time has a bad timestamp: %s", mbs_session->expiration_time);
+                _context_remove_tmgi(tmgi);
+                return OGS_ERROR;
+            }
+            _tmgi_set_expiry_time(tmgi, ogs_time_to_sec(exp_time));
         }
-        _tmgi_set_expiry_time(tmgi, ogs_mktime(&tmgi_expire_tm));
         
         _tmgi_replace_sbi_object(tmgi, sess->sbi_object);
         

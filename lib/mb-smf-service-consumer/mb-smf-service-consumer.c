@@ -189,9 +189,9 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                         SWITCH(xact->request->h.method)
                         CASE(OGS_SBI_HTTP_METHOD_POST)
                             /* Create MBS Session */
+                            __upgrade_to_full_response_parse(&message, response);
                             if (response->status >= 200 && response->status < 300) {
                                 ogs_debug("Client response for Create MBS Session received");
-                                __upgrade_to_full_response_parse(&message, response);
                                 if (_nmbsmf_mbs_session_parse(&message, sess) == OGS_OK) {
                                     if (sess->session.create_result_cb) {
                                         ogs_debug("Forwarding creation result to calling application");
