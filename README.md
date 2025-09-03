@@ -7,7 +7,9 @@
 
 ## Introduction
 
-The 5G Core presents several Network Functions, each of which has its own set of service interfaces. This is a collection of reusable service consumer libraries designed to talk to the 5G Core Network Functions using some of these service interfaces.
+The 5G Core presents several Network Functions, each of which has its own set of service interfaces. This is a collection of
+reusable service consumer libraries designed to talk to the 5G Core Network Functions using some of these service interfaces.
+These interfaces are based upon Open5GS v2.7.2.
 
 In addition, command line tools are provided to demonstrate the use of these service consumer libraries.
 
@@ -37,6 +39,15 @@ The `libscpcf` library allows an application to connect to a PCF and request an 
 This library implements the service consumer end of the following service-based APIs:
 - *Npcf_PolicyAuthorization*
 
+### `libscmbsmf` - Multicast/Broadcast Session Management Function (MB-SMF) service consumer library
+
+The Multicast/Broadcast Session Management Function (MB-SMF) is responsible for allocating and deallocating Temporary Mobile Group Identities (TMGIs) and for the management of Multicast/Broadcast Services (MBS) on the Multicast/Broadcast User Plane Function (MB-UPF). The *Nmbsmf_TMGI* service API is used at reference point Nmb1 for the allocation and deallocation of TMGIs, and the *Nmbsmf_MBSSession* service API is used to reference point Nmb1 for the creation, modification and destruction of MBS Sessions and for the management of notification subscriptions to events arising on those MBS Sessions. This provides a Network Function with the ability to setup MBS Sessions for Multicast/Broadcast distribution to UEs and to remove those MBS Sessions once the Multicast/Broadcast channel is no longer needed.
+
+The `libscmbsmf` library provides a simple create/destroy interface for TMGI management and an MBS Session and notifications subscriptions model for management of MBS Sessions.
+
+This library implements the service consumer end of the following service-based APIs:
+- *Nmbsmf_TMGI*
+- *Nmbsmf_MBSSession*
 
 ## Command line tools
 
@@ -46,6 +57,13 @@ The `pcf-policyauthorization` tool manipulates the network Quality of Service pa
 
 The PCF address can be explicitly specified at the command line if this is already known. Alternatively, the tool can also use the **BSF service consumer library** to look up which PCF instance is managing the PDU Session of interest (based on the IP address of a UE registered with the AMF).
 
+### `tmgi-tool`
+
+The `tmgi-tool` provides a simple command line interface to either request the creation or destruction of a TMGI using the interfaces provided by the **MB-SMF service consumer library** to invoke operations on the *Nmbsmf_TMGI* service API.
+
+### `mbs-session-tool`
+
+The `mbs-session-tool` can register an MBS Session and will then wait for notifications for that MBS Session. It does this by using the interfaces provided by the **MB-SMF service consumer library** to invoke operations on the *Nmbsmf_MBSSession* service API.
 
 ## Install dependencies
 
