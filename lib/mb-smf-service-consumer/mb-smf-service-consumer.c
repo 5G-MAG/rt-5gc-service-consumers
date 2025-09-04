@@ -347,7 +347,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
             break;
         }
         default:
-            break;
+            return false;
         }
         break;
     }
