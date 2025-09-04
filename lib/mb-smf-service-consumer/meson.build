@@ -18,6 +18,8 @@ libscmbsmf_version_minor = 0
 libscmbsmf_version_micro = 0
 
 libscmbsmf_version = '@0@.@1@.@2@'.format(libscmbsmf_version_major,libscmbsmf_version_minor,libscmbsmf_version_micro)
+libscmbsmf_title = 'MB-SMF service consumer library'
+libscmbsmf_description = 'Library that provides a C language API for communicating, as a client, with the MB-SMF using the Nmbsmf_Tmgi and Nmbsmf_MBSSession APIs via reference point Nmb1.'
 
 libscmbsmf_sources = files('''
     mb-smf-service-consumer.c
@@ -70,6 +72,7 @@ libscmbsmf_public_hdrs = files('''
     mbs-session.h
     mbs-status-notification-result.h
     mbs-status-subscription.h
+    tmgi.h
 '''.split())
 
 libscmbsmf_inc = include_directories('.')

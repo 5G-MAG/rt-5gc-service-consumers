@@ -16,7 +16,8 @@ libscpcf_version_minor = 0
 libscpcf_version_micro = 0
 
 libscpcf_version = '@0@.@1@.@2@'.format(libscpcf_version_major,libscpcf_version_minor,libscpcf_version_micro)
-
+libscpcf_title = 'PCF service consumer library'
+libscpcf_description = 'Library that provides a C language API for communicating as a client NF with a PCF via the Npcf_PolicyAuthorization API at reference point N5'
 
 libscpcf_sources = files('''
     init.c
@@ -40,6 +41,9 @@ libscpcf_sources = files('''
     utils.c
 '''.split())
 
+libscpcf_public_hdrs = files('''
+    pcf-service-consumer.h
+'''.split())
 
 libscpcf_inc = include_directories('.')
 

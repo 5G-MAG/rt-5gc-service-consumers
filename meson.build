@@ -9,7 +9,7 @@
 project('rt-5gc-service-consumers', 'c',
     version : '2.0.0',
     license : '5G-MAG Public',
-    meson_version : '>= 0.59.0',
+    meson_version : '>= 1.4.0',
     default_options : [
         'c_std=gnu89',
     ],
@@ -18,10 +18,15 @@ project('rt-5gc-service-consumers', 'c',
 open5gs_project=subproject('open5gs',required:true)
 
 build_tests = open5gs_project.get_variable('build_tests')
+build_docs = get_variable('build_docs', true)
 
 subdir('lib')
 subdir('tools')
 
 if build_tests
     subdir('tests')
+endif
+
+if build_docs
+    subdir('docs')
 endif

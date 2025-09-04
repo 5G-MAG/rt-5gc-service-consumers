@@ -16,6 +16,8 @@ libscbsf_version_minor = 0
 libscbsf_version_micro = 0
 
 libscbsf_version = '@0@.@1@.@2@'.format(libscbsf_version_major,libscbsf_version_minor,libscbsf_version_micro)
+libscbsf_title = 'BSF service consumer library'
+libscbsf_description = 'Library that provides a C language API for communicating, as a client, with a BSF using the Nbsf_Management API.'
 
 libscbsf_sources = files('''
     bsf-service-consumer.c
@@ -40,6 +42,10 @@ libscbsf_sources = files('''
     pcf-bindings-cache.h
     utils.c
     utils.h
+'''.split())
+
+libscbsf_public_hdrs = files('''
+    bsf-service-consumer.h
 '''.split())
 
 libscbsf_inc = include_directories('.')

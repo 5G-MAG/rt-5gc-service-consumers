@@ -24,9 +24,44 @@ extern "C" {
 #endif
 
 // service consumer lifecycle
+
+/** 
+ * @defgroup Lifecycle MB-SMF service consumer library lifecycle
+ * @{
+ */
+
+/** Initialise and parse configuration
+ *
+ * This must be the first function called in the library and must be only called once.
+ * This initialises the library context and parsing the configuration.
+ *
+ * @param mb_smf_client_sect The top level section name in the YAML configuration that holds the configuration for the MB-SMF
+ *                           service consumer library.
+ * @return `true` if the library was initialised and the configuration parsed without errors.
+ */
 MB_SMF_CLIENT_API bool mb_smf_sc_parse_config(const char *mb_smf_client_sect);
+
+/** Terminate the MB-SMF service consumer
+ *
+ * This should be called before the controlling app finishes using the MB-SMF service consumer library. This will release all
+ * resources reserved in the library context.
+ *
+ * mb_smf_sc_parse_config() may be called again after this function has been called to initialise a new library context.
+ */
 MB_SMF_CLIENT_API void mb_smf_sc_terminate(void);
+
+/** Event processing
+ *
+ * Process an `ogs_event_t`. This will check if the event is the result of an action from the MB-SMF service consumer library and
+ * will handle the event if it is. If this function returns `true` then the app should do no further processing of the event as
+ * it has already handled the event and tidied up any event resources.
+ *
+ * @param e The event to process.
+ * @return `true` if the library has handled the event, `false` otherwise.
+ */
 MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e);
+
+/**@}*/
 
 #ifdef __cplusplus
 }
