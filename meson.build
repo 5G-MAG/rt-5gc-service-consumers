@@ -18,7 +18,6 @@ project('rt-5gc-service-consumers', 'c',
 open5gs_project=subproject('open5gs',required:true)
 
 build_tests = open5gs_project.get_variable('build_tests')
-build_docs = get_variable('build_docs', true)
 
 subdir('lib')
 subdir('tools')
@@ -27,6 +26,4 @@ if build_tests
     subdir('tests')
 endif
 
-if build_docs
-    subdir('docs')
-endif
+subdir('docs')
