@@ -98,6 +98,26 @@ meson build
 ninja -C build
 ```
 
+### Building documentation
+
+You can optionally build documentation. For this you will need `doxygen` installed. If you want diagrams in the documentation you
+will also need `dot` and `plantuml`.
+
+To install the documentation dependencies on Ubuntu use the command:
+
+```bash
+sudo apt install doxygen graphviz plantuml
+```
+
+To build the documentation:
+
+```bash
+cd ~/rt-5gc-service-consumers
+ninja -C build docs
+```
+
+The documentation will then be found under the `~/rt-5gc-service-consumers/build/docs` directory.
+
 ## Installing
 
 To install the built libraries and tools:
