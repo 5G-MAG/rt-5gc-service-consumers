@@ -33,19 +33,12 @@ libscmbsmf_sources = files('''
     macros.h
     mbs-session.c
     mbs-session.h
-    mbs-status-notification.c
-    mbs-status-notification.h
-    mbs-status-notification-result.h
     mbs-status-subscription.c
     mbs-status-subscription.h
     nmbsmf-mbs-session-build.c
     nmbsmf-mbs-session-build.h
     nmbsmf-mbs-session-handle.c
     nmbsmf-mbs-session-handle.h
-    nmbsmf-mbs-session-path.c
-    nmbsmf-mbs-session-path.h
-    nmbsmf-mbs-session-process.c
-    nmbsmf-mbs-session-process.h
     nmbsmf-tmgi-build.c
     nmbsmf-tmgi-build.h
     nmbsmf-tmgi-handle.c
@@ -70,7 +63,6 @@ libscmbsmf_public_hdrs = files('''
     macros.h
     mb-smf-service-consumer.h
     mbs-session.h
-    mbs-status-notification-result.h
     mbs-status-subscription.h
     tmgi.h
 '''.split())

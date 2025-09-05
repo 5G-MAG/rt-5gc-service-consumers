@@ -10,12 +10,11 @@
 #include "ogs-sbi.h"
 
 #include "macros.h"
-#include "mbs-status-notification-result.h"
 #include "nmbsmf-mbs-session-build.h"
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
 
-#include "mbs-status-notification.h"
+#include "mbs-status-subscription.h"
 
 MB_SMF_CLIENT_API mb_smf_sc_mbs_status_subscription_t *mb_smf_sc_mbs_status_subscription_new(
                                                                             uint16_t area_session_id,
