@@ -98,7 +98,8 @@ To build and use the service consumer libraries and accompanying command line to
 following packages:
 
 ```bash
-sudo apt install git ninja-build build-essential flex bison libsctp-dev libgnutls28-dev libgcrypt-dev libssl-dev libidn11-dev libmongoc-dev libbson-dev libyaml-dev libnghttp2-dev libmicrohttpd-dev libcurl4-gnutls-dev libnghttp2-dev libtins-dev libtalloc-dev meson cmake
+sudo apt install git ninja-build build-essential flex bison libsctp-dev libgnutls28-dev libgcrypt-dev libssl-dev libidn11-dev libmongoc-dev libbson-dev libyaml-dev libnghttp2-dev libmicrohttpd-dev libcurl4-gnutls-dev libnghttp2-dev libtins-dev libtalloc-dev meson cmake libpcre2-dev pkg-config
+
 ```
 
 ## Downloading
@@ -142,6 +143,7 @@ To build the documentation:
 
 ```bash
 cd ~/rt-5gc-service-consumers
+meson setup --reconfigure build -Dbuild_docs=true
 ninja -C build docs
 ```
 
@@ -183,4 +185,23 @@ switch to the `development` branch before starting the implementation of a new f
 
 Development of the BSF and PCF service consumer libraries was funded by the UK Government through
 the [REASON](https://reason-open-networks.ac.uk/) project.
+
+## Troubleshooting
+
+### Wrong meson version
+
+In case the `meson` version that is installed via `apt` does not fulfill the version requirements you can install
+`meson` via `pipx`. As an example, you might get the following error when building the project:
+
+`meson.build:12:20: ERROR: Meson version is 1.3.2 but project requires >= 1.4.0`
+
+In this case remove the previously installed `meson` version and reinstall via `pipx`:
+
+``` 
+sudo apt-get remove meson
+pipx install meson
+pipx ensurepath
+```
+
+Restart your shell and then run `meson build` again.
 
