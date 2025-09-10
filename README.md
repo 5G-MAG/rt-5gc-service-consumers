@@ -190,18 +190,16 @@ the [REASON](https://reason-open-networks.ac.uk/) project.
 
 ### Wrong meson version
 
-In case the `meson` version that is installed via `apt` does not fulfill the version requirements you can install
-`meson` via `pipx`. As an example, you might get the following error when building the project:
+In case the `meson` version that is installed via `apt` does not fulfill the version requirements of this project you
+will get an error like this during the build process:
 
 `meson.build:12:20: ERROR: Meson version is 1.3.2 but project requires >= 1.4.0`
 
-In this case remove the previously installed `meson` version and reinstall via `pipx`:
+In this case you can run the following command to upgrade `meson` via `python3`:
 
 ``` 
 sudo apt-get remove meson
-pipx install meson
-pipx ensurepath
+sudo python3 -m pip install --break-system-packages --upgrade meson
 ```
 
-Restart your shell and then run `meson build` again.
 
