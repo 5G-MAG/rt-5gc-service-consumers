@@ -86,9 +86,9 @@ The `tmgi-tool` provides a simple command line interface to either request the c
 the interfaces provided by the **MB-SMF service consumer library** to invoke operations on the *Nmbsmf_TMGI* service
 API.
 
-### `mbs-session-tool`
+### `mbs-service-tool`
 
-The `mbs-session-tool` can register an MBS Session and will then wait for notifications for that MBS Session. It does
+The `mbs-service-tool` can register an MBS Session and will then wait for notifications for that MBS Session. It does
 this by using the interfaces provided by the **MB-SMF service consumer library** to invoke operations on the
 *Nmbsmf_MBSSession* service API.
 
@@ -159,7 +159,11 @@ sudo meson install --no-rebuild
 
 ## Running
 
+In the following examples `98.76.54.32:1234` is used as the address and port number for the NRF API.
+
 ### PCF PolicyAuthorization tool
+
+The PCF PolicyAuthorization tool can request a QoS policy and will then wait and report notifications for the QoS policy session.
 
 The PCF PolicyAuthorization tool can be run with a command like:
 
@@ -171,6 +175,43 @@ To get the full command help for the PCF PolicyAuthorization tool use the comman
 
 ```bash
 /usr/local/bin/pcf-policyauthorization -h
+```
+
+### TMGI Allocation/Deallocation tool
+
+The TMGI Allocation and Deallocation tool can request the allocation or deallocation of a TMGI.
+It will then display the result and exit.
+
+The TMGI Allocation and Deallocation tool can be run with an allocation command like:
+```bash
+/usr/local/bin/tmgi-tool -n 98.76.54.32:1234
+```
+
+...and a deallocation command like (for an allocated TMGI with PLMN of 001-01):
+```bash
+/usr/local/bin/tmgi-tool -d -p 001-01 -n 98.76.54.32:1234
+```
+
+To get the full command help for the TMGI Allocation and Deallocation tool use the command:
+
+```bash
+/usr/local/bin/tmgi-tool -h
+```
+
+### MBS Service tool
+
+The MBS Service tool will create an MBS Session and then report notifications for that MBS Session.
+
+The MBS Service tool can be run with a command like:
+
+```bash
+/usr/local/bin/mbs-service-tool -TMu -S 192.168.0.1:232.0.0.59 -n 98.76.54.32:1234
+```
+
+To get the full command help for the MBS Service tool use the command:
+
+```bash
+/usr/local/bin/mbs-service-tool -h
 ```
 
 ## Development
