@@ -11,7 +11,7 @@ libcrypt_dep = open5gs_project.get_variable('libcrypt_dep')
 libsbi_dep = open5gs_project.get_variable('libsbi_dep')
 libinc = open5gs_project.get_variable('libinc')
 
-libscbsf_version_major = 1
+libscbsf_version_major = 2
 libscbsf_version_minor = 0
 libscbsf_version_micro = 0
 
