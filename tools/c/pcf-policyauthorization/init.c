@@ -63,6 +63,8 @@ static char *_port_clause(const unsigned short int port);
 /**** Public functions ****/
 /**************************/
 
+#define APP_NAME "pcf-policyauth"
+
 bool pcf_policyauth_init(int argc, char *argv[])
 {
     ogs_sbi_nf_instance_t *nf_instance;
@@ -83,9 +85,15 @@ bool pcf_policyauth_init(int argc, char *argv[])
     /* initialise logging */
     app_log_init();
 
+    /* initialise local settings */
+    int rv = ogs_app_parse_local_conf(APP_NAME);
+    if (rv != OGS_OK) {
+        ogs_fatal("Unable to parse local configuration");
+    }
+
     /* Setup Open5GS SBI library */
     ogs_sbi_context_init(OpenAPI_nf_type_AF);
-    ogs_sbi_context_parse_config(NULL, g_app_context->options->nrf_address?"nrf":NULL, NULL);
+    ogs_sbi_context_parse_config(APP_NAME, g_app_context->options->nrf_address?"nrf":NULL, NULL);
     nf_instance = ogs_sbi_self()->nf_instance;
     ogs_assert(nf_instance);
     ogs_sbi_nf_fsm_init(nf_instance);
@@ -331,7 +339,7 @@ static void _write_app_yaml_config()
         "  client:\n"
         "    no_tls: true\n"
         "\n"
-        "pcf-policyauth:\n"
+        APP_NAME ":\n"
         "  discovery:\n"
         "    delegated: auto\n"
         "  sbi:\n"
@@ -346,7 +354,7 @@ static void _write_app_yaml_config()
     if (!tmpdir) tmpdir = P_tmpdir;
 #endif
     if (!tmpdir) tmpdir = OGS_DIR_SEPARATOR_S "tmp";
-    g_app_context->app_config_filename = ogs_msprintf("%s%cpcf-policyauth-yaml.XXXXXX", tmpdir, OGS_DIR_SEPARATOR);
+    g_app_context->app_config_filename = ogs_msprintf("%s%c" APP_NAME "-yaml.XXXXXX", tmpdir, OGS_DIR_SEPARATOR);
     fd = mkostemp(g_app_context->app_config_filename, O_CREAT|O_WRONLY|O_TRUNC|O_CLOEXEC);
 
     if (fd < 0) {

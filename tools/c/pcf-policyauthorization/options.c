@@ -140,6 +140,7 @@ app_options_t* app_options_parse(int *argc, char ***argv)
 
 void app_options_final(app_options_t *options, int argc, char **argv)
 {
+    if (options->nrf_address) ogs_free(options->nrf_address);
     if (options->pcf_address) ogs_free(options->pcf_address);
     if (options->ue_address) ogs_free(options->ue_address);
     ogs_free(options);
