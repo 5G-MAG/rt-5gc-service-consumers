@@ -242,7 +242,7 @@ sudo apt-get remove meson
 sudo python3 -m pip install --break-system-packages --upgrade meson
 ```
 
-### libscbsf.so.2 not sound
+### libscbsf.so.2 not found
 
 In case the `libscbsf.so.2` library is not found when trying to run one of the tools you can run the following command to find the library:
 
