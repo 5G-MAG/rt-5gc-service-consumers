@@ -242,4 +242,27 @@ sudo apt-get remove meson
 sudo python3 -m pip install --break-system-packages --upgrade meson
 ```
 
+### libscbsf.so.2 not sound
 
+In case the `libscbsf.so.2` library is not found when trying to run one of the tools you can run the following command to find the library:
+
+```
+find /usr/local -name 'libscbsf.so*' 2>/dev/null
+```
+
+This should return the location of the library, e.g:
+
+``` 
+/usr/local/lib/x86_64-linux-gnu/libscbsf.so.1.0.0
+/usr/local/lib/x86_64-linux-gnu/libscbsf.so.2.0.0
+/usr/local/lib/x86_64-linux-gnu/libscbsf.so
+/usr/local/lib/x86_64-linux-gnu/libscbsf.so.2
+/usr/local/lib/x86_64-linux-gnu/libscbsf.so.1
+```
+
+Now add the path to the configuration file to make it available to the dynamic linker:
+
+```
+echo '/usr/local/lib/x86_64-linux-gnu' | sudo tee /etc/ld.so.conf.d/usr-local-x86_64.conf
+sudo ldconfig
+```
