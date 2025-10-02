@@ -159,17 +159,22 @@ sudo meson install --no-rebuild
 
 ## Running
 
-In the following examples `98.76.54.32:1234` is used as the address and port number for the NRF API.
+In the following examples `127.0.0.10:7777` is used as the address and port number for the NRF API (Open5GS default).
+The address `12.34.56.78` is the UE's IP address as assigned by the 5G Core.
+
+Please substitute these IP addresses for the ones you are using with your network.
 
 ### PCF PolicyAuthorization tool
 
 The PCF PolicyAuthorization tool can request a QoS policy and will then wait and report notifications for the QoS policy session.
 
-The PCF PolicyAuthorization tool can be run with a command like:
+The PCF PolicyAuthorization tool can be run with a command like (requests QoS settings for video Media-Type with a minimum guarenteed 2.5Mbps downlink):
 
 ```bash
-/usr/local/bin/pcf-policyauthorization -a 12.34.56.78 -n 98.76.54.32:1234
+/usr/local/bin/pcf-policyauthorization -a 12.34.56.78 -n 127.0.0.10:7777 -t video -d 2.5e6 
 ```
+
+**Note:** This will only work if you have defined a PCC Rule for 5QI 2 (video) defaults
 
 To get the full command help for the PCF PolicyAuthorization tool use the command:
 
@@ -184,12 +189,12 @@ It will then display the result and exit.
 
 The TMGI Allocation and Deallocation tool can be run with an allocation command like:
 ```bash
-/usr/local/bin/tmgi-tool -n 98.76.54.32:1234
+/usr/local/bin/tmgi-tool -n 127.0.0.10:7777
 ```
 
 ...and a deallocation command like (for an allocated TMGI with PLMN of 001-01):
 ```bash
-/usr/local/bin/tmgi-tool -d -p 001-01 -n 98.76.54.32:1234
+/usr/local/bin/tmgi-tool -d -p 001-01 -n 127.0.0.10:7777
 ```
 
 To get the full command help for the TMGI Allocation and Deallocation tool use the command:
@@ -205,7 +210,7 @@ The MBS Service tool will create an MBS Session and then report notifications fo
 The MBS Service tool can be run with a command like:
 
 ```bash
-/usr/local/bin/mbs-service-tool -TMu -S 192.168.0.1:232.0.0.59 -n 98.76.54.32:1234
+/usr/local/bin/mbs-service-tool -TMu -S 192.168.0.1:232.0.0.59 -n 127.0.0.10:7777
 ```
 
 To get the full command help for the MBS Service tool use the command:
@@ -266,3 +271,10 @@ Now add the path to the configuration file to make it available to the dynamic l
 echo '/usr/local/lib/x86_64-linux-gnu' | sudo tee /etc/ld.so.conf.d/usr-local-x86_64.conf
 sudo ldconfig
 ```
+
+### pcf-policyauthorization: PCF rejecting AppSessionContext
+
+If you are using the Open5GS PCF, it will reject AppSessionContext requests if the Media-Type in the requested QoS is not set to
+`audio`, `video` or `control`. It will also reject if a default PCC Rule for the 5QI associated with the Media-Type has not been
+configured in the Open5GS Core. You will need a default PCC Rule for 5QI 1 for audio Media-Type, 2 for video Media-Type and 5 for
+control Media-Type. You can use the Open5GS WebUI to configure the default PCC Rules for a subscriber UE.
