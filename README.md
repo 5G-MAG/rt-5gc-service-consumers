@@ -159,61 +159,23 @@ sudo meson install --no-rebuild
 
 ## Running
 
-In the following examples `127.0.0.10:7777` is used as the address and port number for the NRF API (Open5GS default).
-The address `12.34.56.78` is the UE's IP address as assigned by the 5G Core.
+Please refer to the [**Tuturials**](https://5g-mag.github.io/Getting-Started/pages/5g-core-service-consumers/tutorial/using-5gc-service-consumers.html) for contextual information on the use of the different libraries.
 
-Please substitute these IP addresses for the ones you are using with your network.
+The full command help for the different tools provide information on how to use the tools:
 
-### PCF PolicyAuthorization tool
-
-The PCF PolicyAuthorization tool can request a QoS policy and will then wait and report notifications for the QoS policy session.
-
-The PCF PolicyAuthorization tool can be run with a command like (requests QoS settings for video Media-Type with a minimum guarenteed 2.5Mbps downlink):
-
-```bash
-/usr/local/bin/pcf-policyauthorization -a 12.34.56.78 -n 127.0.0.10:7777 -t video -d 2.5e6 
-```
-
-**Note:** This will only work if you have defined a PCC Rule for 5QI 2 (video) defaults
-
-To get the full command help for the PCF PolicyAuthorization tool use the command:
+For the **PCF PolicyAuthorization** tool use the command: 
 
 ```bash
 /usr/local/bin/pcf-policyauthorization -h
 ```
 
-### TMGI Allocation/Deallocation tool
-
-The TMGI Allocation and Deallocation tool can request the allocation or deallocation of a TMGI.
-It will then display the result and exit.
-
-The TMGI Allocation and Deallocation tool can be run with an allocation command like:
-```bash
-/usr/local/bin/tmgi-tool -n 127.0.0.10:7777
-```
-
-...and a deallocation command like (for an allocated TMGI with PLMN of 001-01):
-```bash
-/usr/local/bin/tmgi-tool -d -p 001-01 -n 127.0.0.10:7777
-```
-
-To get the full command help for the TMGI Allocation and Deallocation tool use the command:
+For the **TMGI Allocation and Deallocation** tool use the command:
 
 ```bash
 /usr/local/bin/tmgi-tool -h
 ```
 
-### MBS Service tool
-
-The MBS Service tool will create an MBS Session and then report notifications for that MBS Session.
-
-The MBS Service tool can be run with a command like:
-
-```bash
-/usr/local/bin/mbs-service-tool -TMu -S 192.168.0.1:232.0.0.59 -n 127.0.0.10:7777
-```
-
-To get the full command help for the MBS Service tool use the command:
+For the **MBS Service** tool use the command:
 
 ```bash
 /usr/local/bin/mbs-service-tool -h
