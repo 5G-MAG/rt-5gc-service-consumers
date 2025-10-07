@@ -159,7 +159,7 @@ sudo meson install --no-rebuild
 
 ## Running
 
-Please refer to the [**Tuturials**](https://5g-mag.github.io/Getting-Started/pages/5g-core-service-consumers/tutorial/using-5gc-service-consumers.html) for contextual information on the use of the different libraries.
+Please refer to the [**Tutorials**](https://5g-mag.github.io/Getting-Started/pages/5g-core-service-consumers/tutorial/using-5gc-service-consumers.html) for contextual information on the use of the different libraries.
 
 The full command help for the different tools provide information on how to use the tools:
 
