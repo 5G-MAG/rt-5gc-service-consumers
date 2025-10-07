@@ -15,7 +15,7 @@ These interfaces are based upon Open5GS v2.7.2.
 
 In addition, command line tools are provided to demonstrate the use of these service consumer libraries.
 
-Additional information can be found at: https://5g-mag.github.io/Getting-Started/pages/5g-core-network-components/
+Additional information can be found at: https://5g-mag.github.io/Getting-Started/pages/5g-core-service-consumers/
 
 ### About the implementation
 
