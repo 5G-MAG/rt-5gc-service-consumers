@@ -407,14 +407,18 @@ _priv_tmgi_t *_tmgi_find_matching_openapi_type(const OpenAPI_tmgi_t *api_tmgi)
                 if (tmgi->tmgi.mbs_service_id) {
                     if (strcmp(api_tmgi->mbs_service_id, tmgi->tmgi.mbs_service_id)) continue;
                 } else {
-                    continue;
+                    /* mbs-service-id could be allocated, so check if this tmgi has already been allocated */
+                    if (tmgi->allocated) continue;
                 }
             } else {
                 if (tmgi->tmgi.mbs_service_id) continue;
             }
 
-            if (strcmp(api_tmgi->plmn_id->mcc, ogs_plmn_id_mcc_string(&tmgi->tmgi.plmn))) continue;
-            if (strcmp(api_tmgi->plmn_id->mnc, ogs_plmn_id_mnc_string(&tmgi->tmgi.plmn))) continue;
+            if (tmgi->allocated) {
+                /* Check PLMN for match if this is an allocated TMGI */
+                if (strcmp(api_tmgi->plmn_id->mcc, ogs_plmn_id_mcc_string(&tmgi->tmgi.plmn))) continue;
+                if (strcmp(api_tmgi->plmn_id->mnc, ogs_plmn_id_mnc_string(&tmgi->tmgi.plmn))) continue;
+            }
 
             ret = tmgi;
             break;
