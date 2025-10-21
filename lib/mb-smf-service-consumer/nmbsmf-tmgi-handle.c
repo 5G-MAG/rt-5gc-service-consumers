@@ -32,12 +32,11 @@ int _nmbsmf_tmgi_allocated(ogs_sbi_xact_t *xact, ogs_sbi_message_t *message)
 
         time_t expiry_time = 0;
         if (message->TmgiAllocated->expiration_time) {
-            struct tm expiry_tm = {};
-            char *rest = ogs_strptime(message->TmgiAllocated->expiration_time, "%Y-%m-%dT%H:%M:%SZ", &expiry_tm);
-            if (!rest || rest[0]) {
+            ogs_time_t expiry_ogs_time;
+            if (!ogs_sbi_time_from_string(&expiry_ogs_time, message->TmgiAllocated->expiration_time)) {
                 ogs_warn("TmgiAllocated.expirationTime format not understood: %s", message->TmgiAllocated->expiration_time);
             } else {
-                expiry_time = ogs_mktime(&expiry_tm);
+                expiry_time = ogs_time_sec(expiry_ogs_time);
             }
         }
 
@@ -52,7 +51,7 @@ int _nmbsmf_tmgi_allocated(ogs_sbi_xact_t *xact, ogs_sbi_message_t *message)
             if (!tmgi) {
                 char *api_tmgi_str = ogs_msprintf("%s %s", api_tmgi->plmn_id->mcc, api_tmgi->plmn_id->mnc);
                 if (api_tmgi->mbs_service_id) {
-                    api_tmgi_str = ogs_mstrcatf(api_tmgi_str, "mbs-service-id = %s", api_tmgi->mbs_service_id);
+                    api_tmgi_str = ogs_mstrcatf(api_tmgi_str, ", mbs-service-id = %s", api_tmgi->mbs_service_id);
                 }
                 ogs_warn("Could not find new TMGI or existing TMGI matching %s", api_tmgi_str);
                 ogs_free(api_tmgi_str);
