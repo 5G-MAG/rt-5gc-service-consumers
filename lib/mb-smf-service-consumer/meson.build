@@ -26,8 +26,6 @@ libscmbsmf_sources = files('''
     mb-smf-service-consumer.h
     context.c
     context.h
-    local.c
-    local.h
     log.c
     log.h
     macros.h
