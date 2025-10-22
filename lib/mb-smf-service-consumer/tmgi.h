@@ -37,7 +37,7 @@ typedef struct mb_smf_sc_tmgi_s {
     time_t expiry_time;    /**< The expiry time for this TMGI */
 } mb_smf_sc_tmgi_t;
 
-/** TMGI allocation callback
+/** TMGI result callback
  *
  * @param tmgi The TMGI the callback refers to.
  * @param result `OGS_OK` on successful allocation or re-allocation of a TMGI, `OGS_TIMEDOUT` if the request timed out and
@@ -49,6 +49,15 @@ typedef struct mb_smf_sc_tmgi_s {
  */
 typedef void (*mb_smf_sc_tmgi_result_cb)(mb_smf_sc_tmgi_t *tmgi, int result,
                                                 const OpenAPI_problem_details_t *problem_details, void *data);
+
+/** TMGI allocation callback (backward compatibility)
+ * @deprecated
+ * 
+ * This is maintained for backward compatibility. New code should use mb_smf_sc_tmgi_result_cb instead.
+ *
+ * @see mb_smf_sc_tmgi_result_cb
+ */
+typedef mb_smf_sc_tmgi_result_cb mb_smf_sc_tmgi_create_result_cb;
 
 /* mb_smf_sc_tmgi Type functions */
 
