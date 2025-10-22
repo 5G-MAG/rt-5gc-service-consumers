@@ -546,7 +546,7 @@ static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr
 }
 
 static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_addr *addr)
-{   
+{
     OpenAPI_ip_addr_t *ret = NULL;
     char addr_str[INET6_ADDRSTRLEN];
 

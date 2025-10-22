@@ -48,6 +48,7 @@ static inline _ref_count_sbi_object_t *_ref_count_sbi_object_ref(_ref_count_sbi_
 
 static inline ogs_sbi_object_t *_ref_count_sbi_object_ptr(_ref_count_sbi_object_t *ref_obj)
 {
+    if (!ref_obj) return NULL;
     return &ref_obj->sbi_object;
 }
 

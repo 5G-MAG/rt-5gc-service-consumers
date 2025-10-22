@@ -25,6 +25,8 @@ char *_sockaddr_string(const ogs_sockaddr_t *addr)
 
 char *_time_string(ogs_time_t t)
 {
+    return ogs_sbi_gmtime_string(t);
+#if 0
     char timestamp[32];
     struct tm ts_tm;
 
@@ -32,6 +34,7 @@ char *_time_string(ogs_time_t t)
     ogs_strftime(timestamp, sizeof(timestamp), "%c", &ts_tm);
 
     return ogs_strdup(timestamp);
+#endif
 }
 
 ogs_time_t _response_to_expiry_time(ogs_sbi_response_t *response)

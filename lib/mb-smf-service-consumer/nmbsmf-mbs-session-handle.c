@@ -111,11 +111,11 @@ int _nmbsmf_mbs_session_parse(ogs_sbi_message_t *message, _priv_mbs_session_t *s
             }
             _tmgi_set_expiry_time(tmgi, ogs_time_to_sec(exp_time));
         }
-        
+
         _tmgi_replace_sbi_object(tmgi, sess->sbi_object);
-        
+
         sess->session.tmgi = _priv_tmgi_to_public(tmgi);
-        
+
         /* Copy new TMGI to previous record to detect app changes */
         sess->previous_tmgi = _tmgi_copy(sess->previous_tmgi, tmgi);
     }

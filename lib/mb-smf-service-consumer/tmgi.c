@@ -21,7 +21,7 @@
 #include "priv_tmgi.h"
 
 /* mb_smf_sc_tmgi Type functions */
-MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_create(mb_smf_sc_tmgi_create_result_cb callback, void *callback_data)
+MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_create(mb_smf_sc_tmgi_result_cb callback, void *callback_data)
 {
     _priv_tmgi_t *tmgi = _tmgi_create(callback, callback_data);
     _tmgi_send_allocate(tmgi);
@@ -62,6 +62,13 @@ MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_set_expiry_time(mb_smf_sc_tmg
     return tmgi;
 }
 
+MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_set_callback(mb_smf_sc_tmgi_t *tmgi,
+                                                                mb_smf_sc_tmgi_result_cb callback, void *callback_data)
+{
+    _tmgi_set_callback(_priv_tmgi_from_public(tmgi), callback, callback_data);
+    return tmgi;
+}
+
 MB_SMF_CLIENT_API const char *mb_smf_sc_tmgi_repr(mb_smf_sc_tmgi_t *tmgi)
 {
     return _tmgi_repr(_priv_tmgi_from_public(tmgi));
@@ -78,10 +85,10 @@ MB_SMF_CLIENT_API void mb_smf_sc_tmgi_send_deallocate(mb_smf_sc_tmgi_t *tmgi)
 }
 
 /* internal library functions */
-_priv_tmgi_t *_tmgi_create(mb_smf_sc_tmgi_create_result_cb callback, void *callback_data)
+_priv_tmgi_t *_tmgi_create(mb_smf_sc_tmgi_result_cb callback, void *callback_data)
 {
     _priv_tmgi_t *tmgi = ogs_calloc(1, sizeof(*tmgi));
-    
+
     tmgi->callback = callback;
     tmgi->callback_data = callback_data;
     tmgi->cache = ogs_calloc(1, sizeof(*tmgi->cache));
@@ -153,6 +160,13 @@ _priv_tmgi_t *_tmgi_set_expiry_time(_priv_tmgi_t *tmgi, time_t expiry_time)
     return tmgi;
 }
 
+_priv_tmgi_t *_tmgi_set_callback(_priv_tmgi_t *tmgi, mb_smf_sc_tmgi_result_cb callback, void *callback_data)
+{
+    tmgi->callback = callback;
+    tmgi->callback_data = callback_data;
+    return tmgi;
+}
+
 void _tmgi_clear_repr(_priv_tmgi_t *tmgi)
 {
     if (!tmgi || !tmgi->cache || !tmgi->cache->repr) return;
@@ -170,7 +184,7 @@ void _tmgi_send_allocate(_priv_tmgi_t *tmgi)
 }
 
 void _tmgi_send_allocate_all()
-{    
+{
     const ogs_list_t *tmgis = _context_tmgis();
     ogs_list_t new_list = {};
     ogs_lnode_t *node;
@@ -289,6 +303,9 @@ void _tmgi_list_send_deallocate(const ogs_list_t *tmgis)
 
     ogs_sbi_service_type_e service_type = OGS_SBI_SERVICE_TYPE_NMBSMF_TMGI;
     _priv_tmgi_t *first_tmgi = ogs_list_first(tmgis);
+    if (!first_tmgi->sbi_object) {
+        first_tmgi->sbi_object = _ref_count_sbi_object_new();
+    }
     ogs_sbi_object_t *sbi_object = _ref_count_sbi_object_ptr(first_tmgi->sbi_object);
 
     ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, sbi_object, service_type, NULL, _nmbsmf_tmgi_build_remove,
@@ -302,7 +319,7 @@ char *_tmgi_list_repr(const ogs_list_t *tmgis)
     char *tmgi_list_str = ogs_strdup("");
 
     if (tmgis) {
-        const char *sep = ""; 
+        const char *sep = "";
         _priv_tmgi_t *node;
         ogs_list_for_each(tmgis, node) {
             tmgi_list_str = ogs_mstrcatf(tmgi_list_str, "%s{%s}", sep, _tmgi_repr(node));
@@ -355,7 +372,7 @@ const char *_tmgi_repr(const _priv_tmgi_t *tmgi)
         }
 
         if (tmgi->tmgi.expiry_time) {
-            char *exp_time_str = _time_string(tmgi->tmgi.expiry_time);
+            char *exp_time_str = _time_string(ogs_time_from_sec(tmgi->tmgi.expiry_time));
             tmgi->cache->repr = ogs_mstrcatf(tmgi->cache->repr, ", expiry_time=%s", exp_time_str);
             ogs_free(exp_time_str);
         }
@@ -397,6 +414,7 @@ _priv_tmgi_t *_tmgi_copy(_priv_tmgi_t *old, _priv_tmgi_t *src)
 
 _priv_tmgi_t *_tmgi_find_matching_openapi_type(const OpenAPI_tmgi_t *api_tmgi)
 {
+    if (!api_tmgi) return NULL;
     const ogs_list_t *tmgis = _context_tmgis();
     _priv_tmgi_t *ret = NULL;
     if (tmgis) {
