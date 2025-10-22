@@ -61,6 +61,16 @@ MB_SMF_CLIENT_API void mb_smf_sc_terminate(void);
  */
 MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e);
 
+/** Event name
+ *
+ * Get the nul terminated string containing the event name or NULL if the event is unknown. This will also return standard
+ * Open5GS event names, as returned by ogs_event_get_name(), if the event is one of the default Open5GS ones.
+ *
+ * @param e The event to get the name of.
+ * @return The event name string or NULL if the event type is unknown to this library.
+ */
+MB_SMF_CLIENT_API const char *mb_smf_sc_event_get_name(ogs_event_t *e);
+
 /**@}*/
 
 #ifdef __cplusplus

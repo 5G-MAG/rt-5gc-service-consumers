@@ -52,7 +52,14 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
 
     if (!e) return false;
 
-    ogs_debug("Processing event %p [%s]", e, ogs_event_get_name(e));
+    {
+        const char *evt_name = mb_smf_sc_event_get_name(e);
+        if (evt_name) {
+            ogs_debug("Processing event %p [%s]", e, evt_name);
+        } else {
+            ogs_debug("Processing event %p (event name not known)", e);
+        }
+    }
 
     switch (e->id) {
     case OGS_EVENT_SBI_SERVER:
@@ -358,6 +365,16 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
     if (xact) ogs_sbi_xact_remove(xact);
 
     return true;
+}
+
+MB_SMF_CLIENT_API const char *mb_smf_sc_event_get_name(ogs_event_t *e)
+{
+    if (ogs_likely(e)) {
+        if (e->id < OGS_MAX_NUM_OF_PROTO_EVENT)
+            return ogs_event_get_name(e);
+        /* If we have local event types, get name here */
+    }
+    return NULL;
 }
 
 /* Private functions */

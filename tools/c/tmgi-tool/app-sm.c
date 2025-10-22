@@ -323,15 +323,20 @@ static void app_local_clean(app_local_event_t *event)
 
 static const char *app_event_get_name(ogs_event_t *event)
 {
-    app_local_event_t *app_event;
-
     if (ogs_unlikely(!event)) return "*** No Event ***";
 
-    if (event->id != APP_LOCAL) return ogs_event_get_name(event);
+    if (event->id == APP_LOCAL) {
+        app_local_event_t *app_event;
+        app_event = ogs_container_of(event, app_local_event_t, event);
+        return app_local_get_name(app_event);
+    } else {
+        /* Ask the MB-SMF service consumer library for the event name */
+        const char *name;
+        name = mb_smf_sc_event_get_name(event);
+        if (name) return name;
+    }
 
-    app_event = ogs_container_of(event, app_local_event_t, event);
-
-    return app_local_get_name(app_event);
+    return "Unknown Event in App context";
 }
 
 static const char *app_local_get_name(app_local_event_t *app_event)
