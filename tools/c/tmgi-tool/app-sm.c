@@ -77,7 +77,9 @@ static void app_local_clean(app_local_event_t *app_event);
 static const char *app_event_get_name(ogs_event_t *event);
 static const char *app_local_get_name(app_local_event_t *app_event);
 
-static void app_tmgi_cb(mb_smf_sc_tmgi_t *session, int result,
+static void app_tmgi_allocate_cb(mb_smf_sc_tmgi_t *session, int result,
+                        const OpenAPI_problem_details_t *problem_details, void *data);
+static void app_tmgi_deallocate_cb(mb_smf_sc_tmgi_t *session, int result,
                         const OpenAPI_problem_details_t *problem_details, void *data);
 
 static void app_tmgi_allocate();
@@ -192,7 +194,7 @@ static void app_state_delete_tmgi(ogs_fsm_t *sm, ogs_event_t *event)
                 app_tmgi_deallocate();
                 break;
             case APP_LOCAL_EVENT_TMGI_DEALLOCATED:
-                if (app_event->result == OGS_OK) {
+                if (app_event->result == OGS_DONE) {
                     ogs_info("%s deleted", mb_smf_sc_tmgi_repr(app_event->tmgi));
                 } else {
                     if (app_event->problem_details) {
@@ -279,7 +281,7 @@ static void app_local_send_tmgi_allocate()
 static void app_local_send_tmgi_deallocated(mb_smf_sc_tmgi_t *tmgi, int result, const OpenAPI_problem_details_t *problem_details)
 {
     /* send APP_LOCAL_EVENT_TMGI_DEALLOCATED event */
-    app_local_send_event(APP_LOCAL_EVENT_TMGI_ALLOCATED, tmgi, result, problem_details);
+    app_local_send_event(APP_LOCAL_EVENT_TMGI_DEALLOCATED, tmgi, result, problem_details);
 }
 
 static void app_local_send_tmgi_deallocate()
@@ -359,16 +361,20 @@ static const char *app_local_get_name(app_local_event_t *app_event)
     return "APP_LOCAL_EVENT Unknown";
 }
 
-static void app_tmgi_cb(mb_smf_sc_tmgi_t *tmgi, int result, const OpenAPI_problem_details_t *problem_details, void *data)
+static void app_tmgi_allocate_cb(mb_smf_sc_tmgi_t *tmgi, int result, const OpenAPI_problem_details_t *problem_details, void *data)
 {
     /* callback for result of app_tmgi_allocate() */
 
     /* queue result event */
-    if (result == OGS_DONE) { /* OGS_DONE is used to confirm deletions */
-        app_local_send_tmgi_deallocated(tmgi, result, problem_details);
-    } else {
-        app_local_send_tmgi_allocated(tmgi, result, problem_details);
-    }
+    app_local_send_tmgi_allocated(tmgi, result, problem_details);
+}
+
+static void app_tmgi_deallocate_cb(mb_smf_sc_tmgi_t *tmgi, int result, const OpenAPI_problem_details_t *problem_details, void *data)
+{
+    /* callback for result of app_tmgi_deallocate() */
+
+    /* queue result event */
+    app_local_send_tmgi_deallocated(tmgi, result, problem_details);
 }
 
 static void app_tmgi_allocate(ogs_fsm_t *sm)
@@ -376,7 +382,7 @@ static void app_tmgi_allocate(ogs_fsm_t *sm)
     ogs_debug("app_tmgi_allocate");
 
     /* create an mb_smf_sc_tmgi_t object and send allocate request*/
-    mb_smf_sc_tmgi_create(app_tmgi_cb, NULL);
+    mb_smf_sc_tmgi_create(app_tmgi_allocate_cb, NULL);
 }
 
 static void app_tmgi_deallocate(ogs_fsm_t *sm)
@@ -390,11 +396,13 @@ static void app_tmgi_deallocate(ogs_fsm_t *sm)
     mb_smf_sc_tmgi_t *tmgi = mb_smf_sc_tmgi_new();
 
     /* Set the MBS Service ID */
-    if (options->mbs_service_id)
-        mb_smf_sc_tmgi_set_mbs_service_id(tmgi, options->mbs_service_id);
+    mb_smf_sc_tmgi_set_mbs_service_id(tmgi, options->mbs_service_id);
 
     /* Set the PLMN */
     mb_smf_sc_tmgi_set_plmn(tmgi, atoi(options->plmn.mcc), atoi(options->plmn.mnc));
+
+    /* Make sure we get a callback on completion */
+    mb_smf_sc_tmgi_set_callback(tmgi, app_tmgi_deallocate_cb, tmgi);
 
     /* Send the deallocate request */
     mb_smf_sc_tmgi_send_deallocate(tmgi);

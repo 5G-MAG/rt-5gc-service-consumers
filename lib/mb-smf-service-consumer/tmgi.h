@@ -47,7 +47,7 @@ typedef struct mb_smf_sc_tmgi_s {
  *
  * @see mb_smf_sc_tmgi_create()
  */
-typedef void (*mb_smf_sc_tmgi_create_result_cb)(mb_smf_sc_tmgi_t *tmgi, int result,
+typedef void (*mb_smf_sc_tmgi_result_cb)(mb_smf_sc_tmgi_t *tmgi, int result,
                                                 const OpenAPI_problem_details_t *problem_details, void *data);
 
 /* mb_smf_sc_tmgi Type functions */
@@ -63,9 +63,9 @@ typedef void (*mb_smf_sc_tmgi_create_result_cb)(mb_smf_sc_tmgi_t *tmgi, int resu
  * @param callback The callback to use to report the result of the new allocation.
  * @param callback_data The pointer to pass to @p callback in the @p data parameter.
  *
- * @see mb_smf_sc_tmgi_create_result_cb
+ * @see mb_smf_sc_tmgi_result_cb
  */
-MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_create(mb_smf_sc_tmgi_create_result_cb callback, void *callback_data);
+MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_create(mb_smf_sc_tmgi_result_cb callback, void *callback_data);
 
 /** Create a new TMGI
  * @memberof mb_smf_sc_tmgi_s
@@ -141,6 +141,20 @@ MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_set_plmn(mb_smf_sc_tmgi_t *tm
  * @return @p tmgi.
  */
 MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_set_expiry_time(mb_smf_sc_tmgi_t *tmgi, time_t expiry_time);
+
+/** Set the callback function for operation results
+ * @memberof mb_smf_sc_tmgi_s
+ * @public
+ *
+ * Sets the TMGI callback function for results of create, refresh or delete operations
+ * @param tmgi The TMGI to set the callback for.
+ * @param callback The callback to use to report the result of the new allocation.
+ * @param callback_data The pointer to pass to @p callback in the @p data parameter.
+ *
+ * @return @p tmgi.
+ */
+MB_SMF_CLIENT_API mb_smf_sc_tmgi_t *mb_smf_sc_tmgi_set_callback(mb_smf_sc_tmgi_t *tmgi,
+                                                                mb_smf_sc_tmgi_result_cb callback, void *callback_data);
 
 /** Get a string representation of the TMGI
  * @memberof mb_smf_sc_tmgi_s

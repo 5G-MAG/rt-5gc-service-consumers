@@ -28,7 +28,7 @@ typedef struct _priv_tmgi_s {
     ogs_lnode_t node;
     ogs_lnode_t context_lnode; /* private lnode used by the mb-smf-sc context */
     mb_smf_sc_tmgi_t tmgi;
-    mb_smf_sc_tmgi_create_result_cb callback;
+    mb_smf_sc_tmgi_result_cb callback;
     void *callback_data;
     _ref_count_sbi_object_t *sbi_object;
     struct {
@@ -74,12 +74,13 @@ static inline _priv_tmgi_t *_priv_tmgi_from_private_lnode(ogs_lnode_t *lnode)
     return NULL;
 }
 
-_priv_tmgi_t *_tmgi_create(mb_smf_sc_tmgi_create_result_cb callback, void *callback_data);
+_priv_tmgi_t *_tmgi_create(mb_smf_sc_tmgi_result_cb callback, void *callback_data);
 void _tmgi_free(_priv_tmgi_t *tmgi);
 
 _priv_tmgi_t *_tmgi_set_mbs_service_id(_priv_tmgi_t *tmgi, const char *mbs_service_id);
 _priv_tmgi_t *_tmgi_set_plmn(_priv_tmgi_t *tmgi, uint16_t mcc, uint16_t mnc);
 _priv_tmgi_t *_tmgi_set_expiry_time(_priv_tmgi_t *tmgi, time_t expiry_time);
+_priv_tmgi_t *_tmgi_set_callback(_priv_tmgi_t *tmgi, mb_smf_sc_tmgi_result_cb callback, void *callback_data);
 
 void _tmgi_clear_repr(_priv_tmgi_t *tmgi);
 

@@ -134,7 +134,8 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
 
         /* This is one of ours, handle it */
 
-        ogs_debug("Client response for session [%p (%p)]", sess, _priv_mbs_session_to_public(sess));
+        if (sess) ogs_debug("Client response for session [%p (%p)]", sess, _priv_mbs_session_to_public(sess));
+        if (tmgi) ogs_debug("Client response for tmgi [%p (%p)]", tmgi, _priv_tmgi_to_public(tmgi));
 
         ogs_sbi_message_t message = {};
 

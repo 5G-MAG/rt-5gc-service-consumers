@@ -25,7 +25,7 @@ extern "C" {
 
 // service consumer lifecycle
 
-/** 
+/**
  * @defgroup Lifecycle MB-SMF service consumer library lifecycle
  * @{
  */

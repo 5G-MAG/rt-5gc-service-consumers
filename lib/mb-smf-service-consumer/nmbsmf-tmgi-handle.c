@@ -13,8 +13,11 @@
 
 #include "context.h"
 #include "priv_tmgi.h"
+#include "log.h"
 
 #include "nmbsmf-tmgi-handle.h"
+
+static void __do_tmgi_remove(cJSON *json, ogs_sbi_message_t *message);
 
 /* Library Internals */
 int _nmbsmf_tmgi_allocated(ogs_sbi_xact_t *xact, ogs_sbi_message_t *message)
@@ -53,20 +56,47 @@ int _nmbsmf_tmgi_allocated(ogs_sbi_xact_t *xact, ogs_sbi_message_t *message)
                 if (api_tmgi->mbs_service_id) {
                     api_tmgi_str = ogs_mstrcatf(api_tmgi_str, ", mbs-service-id = %s", api_tmgi->mbs_service_id);
                 }
+                if (expiry_time) {
+                    char *t = ogs_sbi_gmtime_string(ogs_time_from_sec(expiry_time));
+                    api_tmgi_str = ogs_mstrcatf(api_tmgi_str, ", expires = %s", t);
+                    ogs_free(t);
+                }
                 ogs_warn("Could not find new TMGI or existing TMGI matching %s", api_tmgi_str);
                 ogs_free(api_tmgi_str);
                 continue;
             }
-            tmgi->tmgi.expiry_time = expiry_time;
+            _tmgi_set_mbs_service_id(tmgi, api_tmgi->mbs_service_id);
+            _tmgi_set_plmn(tmgi, (uint16_t)ogs_uint64_from_string(api_tmgi->plmn_id->mcc),
+                                 (uint16_t)ogs_uint64_from_string(api_tmgi->plmn_id->mnc));
+            _tmgi_set_expiry_time(tmgi, expiry_time);
             if (tmgi->callback) {
                 tmgi->callback(_priv_tmgi_to_public(tmgi), OGS_OK, NULL, tmgi->callback_data);
             }
         }
     } else {
-        /* error response:
-         *  - use callbacks to inform app about error
-         *    - how do I find the lists of tmgis from the request? xact->id?
-         */
+        cJSON *json = cJSON_Parse(xact->request->http.content);
+        if (ogs_unlikely(!json)) {
+            ogs_error("Original TmgiAllocate request JSON not recognised");
+            return OGS_ERROR;
+        }
+        OpenAPI_tmgi_allocate_t *api_tmgi_allocate = OpenAPI_tmgi_allocate_parseFromJSON(json);
+        if (ogs_unlikely(!api_tmgi_allocate)) {
+            ogs_error("Original TmgiAllocate request not recognised");
+            return OGS_ERROR;
+        }
+        OpenAPI_lnode_t *node;
+        OpenAPI_list_for_each(api_tmgi_allocate->tmgi_list, node) {
+            /* for each TMGI being refreshed */
+            OpenAPI_tmgi_t *api_tmgi = (OpenAPI_tmgi_t*)node->data;
+            if (ogs_unlikely(!api_tmgi)) continue;
+            _priv_tmgi_t *tmgi = _tmgi_find_matching_openapi_type(api_tmgi);
+            if (tmgi) {
+                if (tmgi->callback) {
+                    tmgi->callback(_priv_tmgi_to_public(tmgi), OGS_ERROR, message->ProblemDetails, tmgi->callback_data);
+                }
+            }
+        }
+        /* TODO: Also send errors back for api_tmgi_allocate->tmgi_number new TMGIs */
     }
 
     return OGS_OK;
@@ -74,6 +104,7 @@ int _nmbsmf_tmgi_allocated(ogs_sbi_xact_t *xact, ogs_sbi_message_t *message)
 
 int _nmbsmf_tmgi_deallocated(ogs_sbi_xact_t *xact, ogs_sbi_message_t *message)
 {
+    ogs_debug("nmbsmf_tmgi_deallocated");
     const char *tmgi_list_param = ogs_hash_get(xact->request->http.params, "tmgi-list", OGS_HASH_KEY_STRING);
     if (tmgi_list_param) {
         cJSON *json = cJSON_Parse(tmgi_list_param);
@@ -81,33 +112,59 @@ int _nmbsmf_tmgi_deallocated(ogs_sbi_xact_t *xact, ogs_sbi_message_t *message)
             if (cJSON_IsArray(json)) {
                 cJSON *elem;
                 cJSON_ArrayForEach(elem, json) {
-                    OpenAPI_tmgi_t *api_tmgi = OpenAPI_tmgi_parseFromJSON(elem);
-                    _priv_tmgi_t *tmgi = _tmgi_find_matching_openapi_type(api_tmgi);
-                    if (tmgi) {
-                        if (message->res_status >= 200 && message->res_status < 300) {
-                            if (tmgi->callback) tmgi->callback(_priv_tmgi_to_public(tmgi), OGS_DONE, NULL, tmgi->callback_data);
-                        } else {
-                            if (tmgi->callback) tmgi->callback(_priv_tmgi_to_public(tmgi), OGS_ERROR, message->ProblemDetails, tmgi->callback_data);
-                        }
-                        _context_remove_tmgi(tmgi);
-                    }
+                    __do_tmgi_remove(elem, message);
                 }
             } else if (cJSON_IsObject(json)) {
-                OpenAPI_tmgi_t *api_tmgi = OpenAPI_tmgi_parseFromJSON(json);
-                _priv_tmgi_t *tmgi = _tmgi_find_matching_openapi_type(api_tmgi);
-                if (tmgi) {
-                    if (message->res_status >= 200 && message->res_status < 300) {
-                        if (tmgi->callback) tmgi->callback(_priv_tmgi_to_public(tmgi), OGS_DONE, NULL, tmgi->callback_data);
-                    } else {
-                        if (tmgi->callback) tmgi->callback(_priv_tmgi_to_public(tmgi), OGS_ERROR, message->ProblemDetails, tmgi->callback_data);
-                    }
-                    _context_remove_tmgi(tmgi);
-                }
+                __do_tmgi_remove(json, message);
+            } else {
+                char *str = cJSON_Print(json);
+                ogs_error("tmgi-list structure not understood: %s", str);
+                cJSON_free(str);
             }
         }
+    } else {
+        ogs_warn("TMGI deallocate with no TMGI list");
     }
     return OGS_OK;
 }
+
+/*** private functions ***/
+
+static void __do_tmgi_remove(cJSON *json, ogs_sbi_message_t *message)
+{
+    if (!json) return;
+
+#if 0
+    {
+        char *str = cJSON_Print(json);
+        ogs_debug("Remove TMGI matching %s", str);
+        cJSON_free(str);
+    }
+#endif
+
+    OpenAPI_tmgi_t *api_tmgi = OpenAPI_tmgi_parseFromJSON(json);
+    _priv_tmgi_t *tmgi = _tmgi_find_matching_openapi_type(api_tmgi);
+    if (tmgi) {
+        if (message->res_status >= 200 && message->res_status < 300) {
+            if (tmgi->callback) tmgi->callback(_priv_tmgi_to_public(tmgi), OGS_DONE, NULL, tmgi->callback_data);
+        } else {
+            if (tmgi->callback) tmgi->callback(_priv_tmgi_to_public(tmgi), OGS_ERROR, message->ProblemDetails, tmgi->callback_data);
+        }
+        _context_remove_tmgi(tmgi);
+    } else {
+        if (api_tmgi) {
+            char *api_tmgi_str = ogs_msprintf("%s %s", api_tmgi->plmn_id->mcc, api_tmgi->plmn_id->mnc);
+            if (api_tmgi->mbs_service_id) {
+                api_tmgi_str = ogs_mstrcatf(api_tmgi_str, ", mbs-service-id = %s", api_tmgi->mbs_service_id);
+            }
+            ogs_warn("Could not find TMGI matching %s", api_tmgi_str);
+            ogs_free(api_tmgi_str);
+        } else {
+            ogs_error("TMGI not understood");
+        }
+    }
+}
+
 
 /* vim:ts=8:sts=4:sw=4:expandtab:
  */

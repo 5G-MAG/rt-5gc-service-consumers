@@ -99,10 +99,16 @@ app_options_t* app_options_parse(int *argc, char ***argv)
     }
 
     if (app_opts->delete_tmgi) {
+        int ret = 0;
+        if (!app_opts->mbs_service_id) {
+            dprintf(2, "Must specify an MBS Service ID when requesting deletion.\n");
+            ret = 1;
+        }
         if (!app_opts->plmn.mcc || !app_opts->plmn.mnc) {
             dprintf(2, "Must specify a PLMN when requesting deletion.\n");
-            exit(1);
+            ret = 1;
         }
+        if (ret) exit(ret);
     } else {
         if (app_opts->plmn.mcc || app_opts->plmn.mnc || app_opts->mbs_service_id) {
             dprintf(2, "Cannot specify PLMN or MBS Service Id when allocating a TMGI.\n");
@@ -145,7 +151,7 @@ static void _print_help(bool is_error)
     dprintf(fd,
             "Syntax: tmgi-tool -h\n"
             "        tmgi-tool (-n <nrf-address>:<nrf-port>|-s <scp-address>:<scp-port>)\n"
-            "        tmgi-tool -d [-M <mbs-service-id>] -p <mcc>-<mnc> (-n <nrf-address>:<nrf-port>|-s <scp-address>:<scp-port>)\n"
+            "        tmgi-tool -d -M <mbs-service-id> -p <mcc>-<mnc> (-n <nrf-address>:<nrf-port>|-s <scp-address>:<scp-port>)\n"
             "\n"
             "Options:\n"
             " -h          --help                 Show this help\n"
