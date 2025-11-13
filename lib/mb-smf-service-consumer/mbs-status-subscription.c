@@ -85,7 +85,6 @@ MB_SMF_CLIENT_API void mb_smf_sc_mbs_status_subscription_set_area_session_id(mb_
     }
 
     subsc->changed = true;
-    if (subsc->session) subsc->session->changed = true;
 }
 
 MB_SMF_CLIENT_API int mb_smf_sc_mbs_status_subscription_get_event_type_flags(
@@ -111,7 +110,6 @@ MB_SMF_CLIENT_API void mb_smf_sc_mbs_status_subscription_set_event_type_flags(mb
     }
 
     subsc->changed = true;
-    if (subsc->session) subsc->session->changed = true;
 }
 
 MB_SMF_CLIENT_API const char *mb_smf_sc_mbs_status_subscription_get_correlation_id(
@@ -142,7 +140,6 @@ MB_SMF_CLIENT_API void mb_smf_sc_mbs_status_subscription_set_correlation_id(mb_s
     }
 
     subsc->changed = true;
-    if (subsc->session) subsc->session->changed = true;
 }
 
 MB_SMF_CLIENT_API time_t mb_smf_sc_mbs_status_subscription_get_expiry_time(
@@ -168,7 +165,6 @@ MB_SMF_CLIENT_API void mb_smf_sc_mbs_status_subscription_set_expiry_time(mb_smf_
     }
 
     subsc->changed = true;
-    if (subsc->session) subsc->session->changed = true;
 }
 
 MB_SMF_CLIENT_API void mb_smf_sc_mbs_status_subscription_set_notification_callback(

@@ -22,6 +22,7 @@
 #include "log.h"
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
+#include "priv_ssm-addr.h"
 #include "priv_tmgi.h"
 
 #include "nmbsmf-mbs-session-handle.h"
@@ -115,9 +116,6 @@ int _nmbsmf_mbs_session_parse(ogs_sbi_message_t *message, _priv_mbs_session_t *s
         _tmgi_replace_sbi_object(tmgi, sess->sbi_object);
 
         sess->session.tmgi = _priv_tmgi_to_public(tmgi);
-
-        /* Copy new TMGI to previous record to detect app changes */
-        sess->previous_tmgi = _tmgi_copy(sess->previous_tmgi, tmgi);
     }
 
     if (mbs_session->mbs_session_id->ssm && mbs_session->mbs_session_id->ssm->source_ip_addr &&
@@ -149,11 +147,9 @@ int _nmbsmf_mbs_session_parse(ogs_sbi_message_t *message, _priv_mbs_session_t *s
         } else {
             ogs_warn("Unable to extract SSM details from the MbsSession");
         }
-        if (!sess->previous_ssm) {
-            sess->previous_ssm = (mb_smf_sc_ssm_addr_t*)ogs_malloc(sizeof(*sess->previous_ssm));
-        }
-        memcpy(sess->previous_ssm, sess->session.ssm, sizeof(*sess->previous_ssm));
     }
+
+    _mbs_session_public_copy(&sess->previous_session, &sess->session);
 
     OpenAPI_mbs_session_event_report_list_t *event_list = create_rsp_data->event_list;
     if (event_list && event_list->event_report_list) {
@@ -307,9 +303,8 @@ void _nmbsmf_mbs_session_subscription_response(_priv_mbs_session_t *sess, ogs_sb
                     ogs_list_for_each(&sess->new_subscriptions, node) {
                         if (node == subsc) {
                             ogs_list_remove(&sess->new_subscriptions, subsc);
-                            if (!sess->session.subscriptions) sess->session.subscriptions = ogs_hash_make();
-                            ogs_hash_set(sess->session.subscriptions, subsc->id, OGS_HASH_KEY_STRING,
-                                         _priv_mbs_status_subscription_to_public(subsc));
+                            if (!sess->active_subscriptions) sess->active_subscriptions = ogs_hash_make();
+                            ogs_hash_set(sess->active_subscriptions, subsc->id, OGS_HASH_KEY_STRING, subsc);
                             break;
                         }
                     }

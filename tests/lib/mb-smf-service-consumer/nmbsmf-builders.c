@@ -16,8 +16,19 @@
 #include "openapi/model/create_req_data.h"
 #include "openapi/model/status_subscribe_req_data.h"
 
+#include "priv_civic-address.h"
+#include "priv_flow-description.h"
+#include "priv_ncgi-tai.h"
+#include "priv_ncgi.h"
+#include "priv_tai.h"
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
+#include "priv_ssm-addr.h"
+#include "priv_ext-mbs-service-area.h"
+#include "priv_mbs-service-area.h"
+#include "priv_mbs-service-info.h"
+#include "priv_mbs-media-comp.h"
+#include "priv_mbs-media-info.h"
 #include "nmbsmf-mbs-session-build.h"
 #include "nmbsmf-tmgi-build.h"
 
@@ -93,6 +104,11 @@ void _mbs_session_free(_priv_mbs_session_t *session)
         if (session->session.tmgi) ogs_free(session->session.tmgi);
         ogs_free(session);
     }
+}
+
+ogs_list_t *_mbs_session_patch_list(const _priv_mbs_session_t *session)
+{
+    return NULL;
 }
 
 OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t *session)
@@ -322,7 +338,6 @@ end_test_delete_tmgi:
 static bool test_create_sess(unit_test_ctx *ctx)
 {
     _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
-    session->changed = true;
 
     ogs_sbi_request_t *req = _nmbsmf_mbs_session_build_create((void*)session, NULL);
 
@@ -347,10 +362,9 @@ static bool test_create_sess(unit_test_ctx *ctx)
         return false;
     }
     UT_PTR_NOT_NULL(create_req_data->mbs_session);
-    UT_BOOL_TRUE(create_req_data->mbs_session->is_any_ue_ind);
-    UT_INT_NOT_EQUAL(create_req_data->mbs_session->any_ue_ind, 0);
+    UT_BOOL_FALSE(create_req_data->mbs_session->is_any_ue_ind);
     UT_ENUM_EQUAL(create_req_data->mbs_session->service_type, OpenAPI_mbs_service_type_BROADCAST);
-    UT_ENUM_EQUAL(create_req_data->mbs_session->activity_status, OpenAPI_mbs_session_activity_status_ACTIVE);
+    UT_ENUM_EQUAL(create_req_data->mbs_session->activity_status, OpenAPI_mbs_session_activity_status_NULL);
 
     UT_PTR_NULL(create_req_data->mbs_session->mbs_session_subsc);
 
@@ -373,7 +387,6 @@ static bool test_create_sess_with_subsc(unit_test_ctx *ctx)
     subsc->correlation_id = ogs_strdup("test-correlation-id");
     ogs_list_add(&session->new_subscriptions, subsc);
     subsc->changed = true;
-    session->changed = true;
 
     ogs_sbi_request_t *req = _nmbsmf_mbs_session_build_create((void*)session, NULL);
 
@@ -398,10 +411,9 @@ static bool test_create_sess_with_subsc(unit_test_ctx *ctx)
         return false;
     }
     UT_PTR_NOT_NULL(create_req_data->mbs_session);
-    UT_BOOL_TRUE(create_req_data->mbs_session->is_any_ue_ind);
-    UT_INT_NOT_EQUAL(create_req_data->mbs_session->any_ue_ind, 0);
+    UT_BOOL_FALSE(create_req_data->mbs_session->is_any_ue_ind);
     UT_ENUM_EQUAL(create_req_data->mbs_session->service_type, OpenAPI_mbs_service_type_BROADCAST);
-    UT_ENUM_EQUAL(create_req_data->mbs_session->activity_status, OpenAPI_mbs_session_activity_status_ACTIVE);
+    UT_ENUM_EQUAL(create_req_data->mbs_session->activity_status, OpenAPI_mbs_session_activity_status_NULL);
     
     UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_session_subsc);
     UT_STR_EQUAL(create_req_data->mbs_session->mbs_session_subsc->notify_correlation_id, "test-correlation-id");
@@ -411,6 +423,313 @@ static bool test_create_sess_with_subsc(unit_test_ctx *ctx)
 
     OpenAPI_create_req_data_free(create_req_data);
     _mbs_session_free(session);
+    ogs_sbi_request_free(req);
+
+    return true;
+}
+
+static bool test_create_sess_all_fields(unit_test_ctx *ctx)
+{
+    mb_smf_sc_ssm_addr_t ssm = {
+            .family = AF_INET,
+            .source.ipv4.s_addr = htonl(0xC0A80102) /* 192.168.1.2 */,
+            .dest_mc.ipv4.s_addr = htonl(0xE8000001) /* 232.0.0.1 */
+    };
+
+    char mbs_service_id[] = "test-mbs-service-id";
+    _priv_tmgi_t tmgi = {
+        .tmgi.mbs_service_id = mbs_service_id,
+        .tmgi.plmn = { .mcc1 = 1, .mcc2 = 2, .mcc3 = 3, .mnc1 = 4, .mnc2 = 5, .mnc3 = 6 },
+        .tmgi.expiry_time = 0 /* read-only */
+    };
+
+    mb_smf_sc_mbs_service_area_t mbs_service_area = {};
+    uint64_t ncgi_tai_nid1 = 0x123456789AB;
+    uint64_t ncgi_tai_nid2 = 0xBA987654321;
+    uint64_t ncgi_tai_nid3 = 0x456789ABCDE;
+    mb_smf_sc_ncgi_tai_t ncgi_tai1 = {
+        .tai.plmn_id = { .mcc1 = 2, .mcc2 = 3, .mcc3 = 4, .mnc1 = 5, .mnc2 = 6, .mnc3 = 7 },
+        .tai.tac = 0x123456,
+        .tai.nid = &ncgi_tai_nid1
+    };
+    mb_smf_sc_ncgi_t ncgi1 = {
+        .plmn_id = { .mcc1 = 3, .mcc2 = 4, .mcc3 = 5, .mnc1 = 6, .mnc2 = 7, .mnc3 = 8 },
+        .nr_cell_id = 0x123456789,
+        .nid = &ncgi_tai_nid2
+    };
+    ogs_list_add(&ncgi_tai1.ncgis, &ncgi1);
+    ogs_list_add(&mbs_service_area.ncgi_tais, &ncgi_tai1);
+    mb_smf_sc_tai_t tai1 = {
+        .plmn_id = { .mcc1 = 4, .mcc2 = 5, .mcc3 = 6, .mnc1 = 7, .mnc2 = 8, .mnc3 = 9 },
+        .tac = 0x654321,
+        .nid = &ncgi_tai_nid3
+    };
+    ogs_list_add(&mbs_service_area.tais, &tai1);
+
+    mb_smf_sc_ext_mbs_service_area_t ext_mbs_service_area = {};
+    mb_smf_sc_civic_address_t addr1 = {
+        .country = (char*)"UK",
+        .a = {
+            (char*)"State/County",
+            (char*)"Province",
+            (char*)"City/Town",
+            (char*)"Borough",
+            (char*)"Neighbourhood",
+            (char*)"Group of streets"
+        },
+        .prd = (char*)"N.",
+        .pod = (char*)"SW",
+        .sts = (char*)"Ave",
+        .hno = (char*)"123",
+        .hns = (char*)"A",
+        .lmk = (char*)"Madeup University",
+        .loc = (char*)"West Wing",
+        .nam = (char*)"Occupant",
+        .pc = (char*)"Postcode",
+        .bld = (char*)"Building",
+        .unit = (char*)"Appartment 3",
+        .flr = (char*)"5",
+        .room = (char*)"Room 505",
+        .plc = (char*)"Place type",
+        .pcn = (char*)"Postal community name",
+        .pobox = (char*)"12345",
+        .addcode = (char*)"additional-code",
+        .seat = (char*)"desk location",
+        .rd = (char*)"Road name",
+        .rdsec = (char*)"Road section",
+        .rdbr = (char*)"Branch road name",
+        .rdsubbr = (char*)"Sub-branch road name",
+        .prm = (char*)"Road pre-modifier (e.g. Old)",
+        .pom = (char*)"Road post-modifier (e.g. Service)",
+        .usage_rules = (char*)"<retransmission-allowed xmlns=\"urn:ietf:params:xml:ns:pidf:geopriv10\">no</retransmission-allowed><retention-expiry xmlns=\"urn:ietf:params:xml:ns:pidf:geopriv10\">2003-06-23T04:57:29Z</retention-expiry>",
+        .method = (char*)"GPS",
+        .provided_by = (char*)"Provider"
+    };
+    ogs_list_add(&ext_mbs_service_area.civic_addresses, &addr1);
+
+    char dnn[] = "network-id";
+
+    ogs_s_nssai_t snssai = {
+        .sst = 123,
+        .sd.v = 0x123456
+    };
+
+    ogs_time_t start_time = ogs_time_from_sec(1763394645); /* 2025-11-17T15:50:45Z */
+    ogs_time_t term_time = ogs_time_from_sec(1763394686); /* 2025-11-17T15:51:26Z */
+
+    char af_app_id[] = "application-id";
+    uint64_t mbs_session_ambr = 1000000;
+    mb_smf_sc_mbs_service_info_t mbs_service_info = {
+        .mbs_media_comps = ogs_hash_make(),
+        .af_app_id = af_app_id,
+        .mbs_session_ambr = &mbs_session_ambr,
+        .mbs_sdf_reserve_priority = 1
+    };
+    OGS_LIST(flow_descs);
+    mb_smf_sc_flow_description_t flow1 = {
+        .string = "flow-description-1"
+    };
+    ogs_list_add(&flow_descs, &flow1);
+    uint64_t max_requested_mbs_bandwidth_downlink = 1000000;
+    uint64_t min_requested_mbs_bandwidth_downlink = 1000;
+    mb_smf_sc_mbs_media_info_t media_info = {
+        .mbs_media_type = MEDIA_TYPE_VIDEO,
+        .max_requested_mbs_bandwidth_downlink = &max_requested_mbs_bandwidth_downlink,
+        .min_requested_mbs_bandwidth_downlink = &min_requested_mbs_bandwidth_downlink,
+        .codecs = { (char*)"Codec1-string", (char*)"Codec2-string" }
+    };
+    mb_smf_sc_mbs_media_comp_t media_comp1 = {
+        .id = 42,
+        .flow_descriptions = &flow_descs,
+        .mbs_sdf_reserve_priority = 2,
+        .media_info = &media_info,
+        .qos_ref = NULL,    /* only one of media_info, qos_ref and mbs_qos_req may be present */
+        .mbs_qos_req = NULL /* only one of media_info, qos_ref and mbs_qos_req may be present */
+    };
+    ogs_hash_set(mbs_service_info.mbs_media_comps, &media_comp1.id, sizeof(media_comp1.id), &media_comp1);
+
+    _priv_mbs_session_t session = {
+        .session.service_type = MBS_SERVICE_TYPE_MULTICAST,
+        .session.ssm = &ssm,
+        .session.tmgi = &tmgi.tmgi,
+        .session.mb_upf_udp_tunnel = NULL, /* read-only */
+        .session.tunnel_req = true,
+        .session.tmgi_req = false,
+        .session.location_dependent = true,
+        .session.any_ue_ind = true,
+        .session.contact_pcf_ind = true,
+        .session.area_session_id = NULL, /* read-only */
+        .session.mbs_service_area = &mbs_service_area,
+        .session.ext_mbs_service_area = &ext_mbs_service_area,
+        .session.dnn = dnn,
+        .session.snssai = &snssai,
+        .session.start_time = &start_time,
+        .session.termination_time = &term_time,
+        .session.mbs_service_info = &mbs_service_info,
+        .session.activity_status = MBS_SESSION_ACTIVITY_STATUS_ACTIVE,
+        /* .session.mbs_fsa_ids */
+        .session.associated_session_id = NULL
+        /* mbs_security_context missing */
+        /* area_session_policy_id missing */
+    };
+
+    ogs_sbi_request_t *req = _nmbsmf_mbs_session_build_create((void*)&session, NULL);
+
+    cJSON *json = cJSON_Parse(req->http.content);
+    if (!json) {
+        fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON");
+        return false;
+    }
+    OpenAPI_create_req_data_t *create_req_data = OpenAPI_create_req_data_parseFromJSON(json);
+    cJSON_Delete(json);
+    if (!create_req_data) {
+        fprintf(stderr, "expected req->http.content to be valid 3GPP CreateReqData JSON, could not parse JSON as a CreateReqData object");
+        return false;
+    }
+    
+    UT_PTR_NOT_NULL(create_req_data->mbs_session);
+
+    UT_ENUM_EQUAL(create_req_data->mbs_session->service_type, OpenAPI_mbs_service_type_MULTICAST);
+
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_session_id);
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_session_id->ssm);
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_session_id->ssm->source_ip_addr);
+    UT_STR_EQUAL(create_req_data->mbs_session->mbs_session_id->ssm->source_ip_addr->ipv4_addr, "192.168.1.2");
+    UT_STR_NULL(create_req_data->mbs_session->mbs_session_id->ssm->source_ip_addr->ipv6_addr);
+    UT_STR_NULL(create_req_data->mbs_session->mbs_session_id->ssm->source_ip_addr->ipv6_prefix);
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_session_id->ssm->dest_ip_addr);
+    UT_STR_EQUAL(create_req_data->mbs_session->mbs_session_id->ssm->dest_ip_addr->ipv4_addr, "232.0.0.1");
+    UT_STR_NULL(create_req_data->mbs_session->mbs_session_id->ssm->dest_ip_addr->ipv6_addr);
+    UT_STR_NULL(create_req_data->mbs_session->mbs_session_id->ssm->dest_ip_addr->ipv6_prefix);
+
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_session_id->tmgi);
+    UT_STR_EQUAL(create_req_data->mbs_session->mbs_session_id->tmgi->mbs_service_id, "test-mbs-service-id");
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_session_id->tmgi->plmn_id);
+    UT_STR_EQUAL(create_req_data->mbs_session->mbs_session_id->tmgi->plmn_id->mcc, "123");
+    UT_STR_EQUAL(create_req_data->mbs_session->mbs_session_id->tmgi->plmn_id->mnc, "456");
+
+    UT_PTR_NULL(create_req_data->mbs_session->tmgi); /* read-only */
+    UT_STR_NULL(create_req_data->mbs_session->expiration_time); /* read-only */
+
+    UT_PTR_NULL(create_req_data->mbs_session->ingress_tun_addr);
+
+    UT_BOOL_TRUE(create_req_data->mbs_session->is_ingress_tun_addr_req);
+    UT_INT_EQUAL(create_req_data->mbs_session->ingress_tun_addr_req, 1);
+
+    UT_BOOL_FALSE(create_req_data->mbs_session->is_tmgi_alloc_req);
+
+    UT_BOOL_TRUE(create_req_data->mbs_session->is_location_dependent);
+    UT_INT_EQUAL(create_req_data->mbs_session->location_dependent, 1);
+
+    UT_BOOL_TRUE(create_req_data->mbs_session->is_any_ue_ind);
+    UT_INT_EQUAL(create_req_data->mbs_session->any_ue_ind, 1);
+
+    UT_BOOL_FALSE(create_req_data->mbs_session->is_contact_pcf_ind); /* contact_pcf_ind not used in create */
+
+    /* area_session_id not present in OpenAPI model also read-only */
+
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_service_area);
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_service_area->ncgi_list);
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_service_area->tai_list);
+    UT_JSON_LIST_SIZE(create_req_data->mbs_session->mbs_service_area->ncgi_list, 1);
+    UT_JSON_LIST_SIZE(create_req_data->mbs_session->mbs_service_area->tai_list, 1);
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_service_area->ncgi_list->first->data);
+    OpenAPI_ncgi_tai_t *ncgi_tai_item = create_req_data->mbs_session->mbs_service_area->ncgi_list->first->data;
+    UT_PTR_NOT_NULL(ncgi_tai_item->tai);
+    UT_PTR_NOT_NULL(ncgi_tai_item->tai->plmn_id);
+    UT_STR_EQUAL(ncgi_tai_item->tai->plmn_id->mcc, "234");
+    UT_STR_EQUAL(ncgi_tai_item->tai->plmn_id->mnc, "567");
+    UT_STR_EQUAL(ncgi_tai_item->tai->tac, "123456");
+    UT_STR_EQUAL(ncgi_tai_item->tai->nid, "123456789AB");
+    UT_PTR_NOT_NULL(ncgi_tai_item->cell_list);
+    UT_JSON_LIST_SIZE(ncgi_tai_item->cell_list, 1);
+    UT_PTR_NOT_NULL(ncgi_tai_item->cell_list->first->data);
+    OpenAPI_ncgi_t *ncgi_item = ncgi_tai_item->cell_list->first->data;
+    UT_PTR_NOT_NULL(ncgi_item->plmn_id);
+    UT_STR_EQUAL(ncgi_item->plmn_id->mcc, "345");
+    UT_STR_EQUAL(ncgi_item->plmn_id->mnc, "678");
+    UT_STR_EQUAL(ncgi_item->nr_cell_id, "123456789");
+    UT_STR_EQUAL(ncgi_item->nid, "BA987654321");
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_service_area->tai_list->first->data);
+    OpenAPI_tai_t *tai_item = create_req_data->mbs_session->mbs_service_area->tai_list->first->data;
+    UT_PTR_NOT_NULL(tai_item->plmn_id);
+    UT_STR_EQUAL(tai_item->plmn_id->mcc, "456");
+    UT_STR_EQUAL(tai_item->plmn_id->mnc, "789");
+    UT_STR_EQUAL(tai_item->tac, "654321");
+    UT_STR_EQUAL(tai_item->nid, "456789ABCDE");
+
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->ext_mbs_service_area);
+    UT_PTR_NULL(create_req_data->mbs_session->ext_mbs_service_area->geographic_area_list);
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->ext_mbs_service_area->civic_address_list);
+    UT_JSON_LIST_SIZE(create_req_data->mbs_session->ext_mbs_service_area->civic_address_list, 1);
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->ext_mbs_service_area->civic_address_list->first->data);
+    OpenAPI_civic_address_t *api_civic_addr =
+                    (OpenAPI_civic_address_t*)create_req_data->mbs_session->ext_mbs_service_area->civic_address_list->first->data;
+    UT_STR_EQUAL(api_civic_addr->country, "UK");
+    UT_STR_EQUAL(api_civic_addr->a1, "State/County");
+    UT_STR_EQUAL(api_civic_addr->a2, "Province");
+    UT_STR_EQUAL(api_civic_addr->a3, "City/Town");
+    UT_STR_EQUAL(api_civic_addr->a4, "Borough");
+    UT_STR_EQUAL(api_civic_addr->a5, "Neighbourhood");
+    UT_STR_EQUAL(api_civic_addr->a6, "Group of streets");
+    UT_STR_EQUAL(api_civic_addr->prd, "N.");
+    UT_STR_EQUAL(api_civic_addr->pod, "SW");
+    UT_STR_EQUAL(api_civic_addr->sts, "Ave");
+    UT_STR_EQUAL(api_civic_addr->hno, "123");
+    UT_STR_EQUAL(api_civic_addr->hns, "A");
+    UT_STR_EQUAL(api_civic_addr->lmk, "Madeup University");
+    UT_STR_EQUAL(api_civic_addr->loc, "West Wing");
+    UT_STR_EQUAL(api_civic_addr->nam, "Occupant");
+    UT_STR_EQUAL(api_civic_addr->pc, "Postcode");
+    UT_STR_EQUAL(api_civic_addr->bld, "Building");
+    UT_STR_EQUAL(api_civic_addr->unit, "Appartment 3");
+    UT_STR_EQUAL(api_civic_addr->flr, "5");
+    UT_STR_EQUAL(api_civic_addr->room, "Room 505");
+    UT_STR_EQUAL(api_civic_addr->plc, "Place type");
+    UT_STR_EQUAL(api_civic_addr->pcn, "Postal community name");
+    UT_STR_EQUAL(api_civic_addr->pobox, "12345");
+    UT_STR_EQUAL(api_civic_addr->addcode, "additional-code");
+    UT_STR_EQUAL(api_civic_addr->seat, "desk location");
+    UT_STR_EQUAL(api_civic_addr->rd, "Road name");
+    UT_STR_EQUAL(api_civic_addr->rdsec, "Road section");
+    UT_STR_EQUAL(api_civic_addr->rdbr, "Branch road name");
+    UT_STR_EQUAL(api_civic_addr->rdsubbr, "Sub-branch road name");
+    UT_STR_EQUAL(api_civic_addr->prm, "Road pre-modifier (e.g. Old)");
+    UT_STR_EQUAL(api_civic_addr->pom, "Road post-modifier (e.g. Service)");
+    UT_STR_EQUAL(api_civic_addr->usage_rules, "<retransmission-allowed xmlns=\"urn:ietf:params:xml:ns:pidf:geopriv10\">no</retransmission-allowed><retention-expiry xmlns=\"urn:ietf:params:xml:ns:pidf:geopriv10\">2003-06-23T04:57:29Z</retention-expiry>");
+    UT_STR_EQUAL(api_civic_addr->method, "GPS");
+    UT_STR_EQUAL(api_civic_addr->provided_by, "Provider");
+
+    UT_STR_EQUAL(create_req_data->mbs_session->dnn, "network-id");
+
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->snssai);
+    UT_INT_EQUAL(create_req_data->mbs_session->snssai->sst, 123);
+    UT_STR_EQUAL(create_req_data->mbs_session->snssai->sd, "123456");
+
+    UT_STR_NULL(create_req_data->mbs_session->activation_time); /* deprecated */
+
+    UT_STR_EQUAL(create_req_data->mbs_session->start_time, "2025-11-17T15:50:45.000000Z");
+
+    UT_STR_EQUAL(create_req_data->mbs_session->termination_time, "2025-11-17T15:51:26.000000Z");
+
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_serv_info);
+    UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_serv_info->mbs_media_comps);
+    UT_JSON_LIST_SIZE(create_req_data->mbs_session->mbs_serv_info->mbs_media_comps, 1);
+    /* TODO: check media components */
+    UT_ENUM_EQUAL(create_req_data->mbs_session->mbs_serv_info->mbs_sdf_res_prio, OpenAPI_reserv_priority_PRIO_1);
+    UT_STR_EQUAL(create_req_data->mbs_session->mbs_serv_info->af_app_id, "application-id");
+    UT_STR_EQUAL(create_req_data->mbs_session->mbs_serv_info->mbs_session_ambr, "1.000000 Mbps");
+
+    UT_PTR_NULL(create_req_data->mbs_session->mbs_session_subsc);
+
+    UT_ENUM_EQUAL(create_req_data->mbs_session->activity_status, OpenAPI_mbs_session_activity_status_ACTIVE);
+
+    UT_PTR_NULL(create_req_data->mbs_session->mbs_fsa_id_list);
+
+    /* mbs_security_context */
+    /* area_session_policy_id not present in OpenAPI model */
+
+    OpenAPI_create_req_data_free(create_req_data);
     ogs_sbi_request_free(req);
 
     return true;
@@ -428,7 +747,6 @@ static bool test_delete_sess(unit_test_ctx *ctx)
 {
     _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
     session->id = ogs_strdup(FAKE_SESSION_ID);
-    session->changed = true;
 
     ogs_sbi_request_t *req = _nmbsmf_mbs_session_build_remove((void*)session, NULL);
 
@@ -469,7 +787,6 @@ static bool test_create_status_subsc(unit_test_ctx *ctx)
     ogs_list_add(&session->new_subscriptions, subsc);
 
     subsc->changed = true;
-    session->changed = true;
 
     char *nf_instance_id = NF_INSTANCE_ID(ogs_sbi_self()->nf_instance);
 
@@ -608,14 +925,19 @@ static const unit_test_t test_delete_tmgi_desc = {
     .fn = test_delete_tmgi
 };
 
+static const unit_test_t test_create_sess_desc = {
+    .name = "nmbsmf-mbssession: create session without subscription builder",
+    .fn = test_create_sess
+};
+
 static const unit_test_t test_create_sess_with_subsc_desc = {
     .name = "nmbsmf-mbssession: create session with subscription builder",
     .fn = test_create_sess_with_subsc
 };
 
-static const unit_test_t test_create_sess_desc = {
-    .name = "nmbsmf-mbssession: create session without subscription builder",
-    .fn = test_create_sess
+static const unit_test_t test_create_sess_all_fields_desc = {
+    .name = "nmbsmf-mbssession: create session with all fields builder",
+    .fn = test_create_sess_all_fields
 };
 
 static const unit_test_t test_update_sess_desc = {
@@ -652,6 +974,7 @@ static void _init_fn()
 
     register_unit_test(&test_create_sess_desc);
     register_unit_test(&test_create_sess_with_subsc_desc);
+    register_unit_test(&test_create_sess_all_fields_desc);
     register_unit_test(&test_update_sess_desc);
     register_unit_test(&test_delete_sess_desc);
     register_unit_test(&test_create_status_subsc_desc);

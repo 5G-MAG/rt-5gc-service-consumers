@@ -8,8 +8,8 @@
  * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
  */
 
-#ifndef MB_SMF_CLIENT_UTILS_H
-#define MB_SMF_CLIENT_UTILS_H
+#ifndef MB_SMF_JSON_PATCH_H
+#define MB_SMF_JSON_PATCH_H
 
 #include "ogs-core.h"
 #include "ogs-sbi.h"
@@ -18,13 +18,16 @@
 extern "C" {
 #endif
 
+/* Library internal data types */
+typedef struct _json_patch_s {
+    ogs_lnode_t node;
+    OpenAPI_patch_item_t *item;
+} _json_patch_t;
+
 /* Library Internals */
-char *_sockaddr_string(const ogs_sockaddr_t *addr);
-char *_time_string(ogs_time_t t);
-ogs_time_t _response_to_expiry_time(ogs_sbi_response_t *message);
-ogs_time_t _cache_control_to_cache_age(const char *cache_control);
-char *_uint32_to_hex_str(uint32_t val, int min_digits, int max_digits);
-char *_uint64_to_hex_str(uint64_t val, int min_digits, int max_digits);
+ogs_list_t *_json_patches_append_list(ogs_list_t *dst, const ogs_list_t *src, const char *at_prefix);
+_json_patch_t *_json_patch_new_copy_with_prefix(const _json_patch_t *src, const char *at_prefix);
+_json_patch_t *_json_patch_new(OpenAPI_patch_operation_e op, const char *path, cJSON *value);
 
 #ifdef __cplusplus
 }
@@ -33,4 +36,4 @@ char *_uint64_to_hex_str(uint64_t val, int min_digits, int max_digits);
 /* vim:ts=8:sts=4:sw=4:expandtab:
  */
 
-#endif /* MB_SMF_CLIENT_UTILS_H */
+#endif /* MB_SMF_JSON_PATCH_H */

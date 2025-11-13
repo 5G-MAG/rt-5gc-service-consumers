@@ -27,6 +27,7 @@ nmbsmf_builders_src = files('''
 
     lib-nmbsmf-mbs-session-build.c
     lib-nmbsmf-tmgi-build.c
+    lib-utils.c
     ogs-openapi-model-status_subscribe_req_data.c
 '''.split())
 nmbsmf_builders_lib = static_library('mbsmfbuild', nmbsmf_builders_src,

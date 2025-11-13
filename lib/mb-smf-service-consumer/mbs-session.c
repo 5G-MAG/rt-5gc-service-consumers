@@ -16,11 +16,20 @@
 #include "macros.h"
 #include "context.h"
 #include "log.h"
+#include "ssm-addr.h"
+#include "tai.h"
 #include "tmgi.h"
 #include "mbs-status-subscription.h"
 #include "nmbsmf-mbs-session-build.h"
+#include "priv_associated-session-id.h"
+#include "priv_ext-mbs-service-area.h"
+#include "priv_mbs-fsa-id.h"
 #include "priv_mbs-session.h"
+#include "priv_mbs-service-area.h"
+#include "priv_mbs-service-info.h"
 #include "priv_mbs-status-subscription.h"
+#include "priv_ssm-addr.h"
+#include "priv_tai.h"
 #include "priv_tmgi.h"
 
 #include "mbs-session.h"
@@ -38,29 +47,16 @@ static int __mbs_session_find_subsc_hash_do(void *rec, const void *key, int klen
 static int __update_status_subscription(void *rec, const void *key, int klen, const void *value);
 static int __free_status_subscription(void *rec, const void *key, int klen, const void *value);
 
-/* SSM Type functions */
-MB_SMF_CLIENT_API bool mb_smf_sc_ssm_equal(const mb_smf_sc_ssm_addr_t *a, const mb_smf_sc_ssm_addr_t *b)
-{
-    if (a == b) return true;
-
-    if (!a || !b) return false;
-
-    return memcmp(a, b, sizeof(*a)) == 0;
-}
-
-/* MBS Session Type functions */
+/*================ Public mbs_session functions =================*/
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new()
 {
-    mb_smf_sc_mbs_session_t *ret = mb_smf_sc_mbs_session_new_ipv4(NULL, NULL);
-    ret->tmgi_req = true; /* No SSM or TMGI, so we'll make the default to request a TMGI */
-    return ret;
+    return mb_smf_sc_mbs_session_new_ipv4(NULL, NULL);
 }
 
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv4(const struct in_addr *source, const struct in_addr *dest)
 {
-    _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
+    _priv_mbs_session_t *session = _mbs_session_new();
 
-    session->changed = true;
     if (source) {
         session->session.ssm = ogs_calloc(1, sizeof(*session->session.ssm));
         session->session.ssm->family = AF_INET;
@@ -81,9 +77,8 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv4(const 
 
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv6(const struct in6_addr *source, const struct in6_addr *dest)
 {
-    _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
+    _priv_mbs_session_t *session = _mbs_session_new();
 
-    session->changed = true;
     if (source) {
         session->session.ssm = ogs_calloc(1, sizeof(*session->session.ssm));
         session->session.ssm->family = AF_INET6;
@@ -109,7 +104,13 @@ MB_SMF_CLIENT_API void mb_smf_sc_mbs_session_delete(mb_smf_sc_mbs_session_t *mbs
     if (!session) return;
 
     session->deleted = true;
-    session->changed = true;
+}
+
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tmgi(mb_smf_sc_mbs_session_t *session, mb_smf_sc_tmgi_t *tmgi)
+{
+    _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
+    _priv_tmgi_t *t = _priv_tmgi_from_public(tmgi);
+    return _mbs_session_set_tmgi(sess, t);
 }
 
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_add_subscription(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_status_subscription_t *subscription)
@@ -119,13 +120,13 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_add_subscription(mb_smf_sc_mbs_sess
 
     if (!sess || !subscription || sess->deleted) return false;
 
-    if (!session->subscriptions) {
-        session->subscriptions = ogs_hash_make();
+    if (!sess->active_subscriptions) {
+        sess->active_subscriptions = ogs_hash_make();
     }
 
     if (subsc->id) {
         // Remove from active list of current mbs session
-        ogs_hash_set(subsc->session->session.subscriptions, subsc->id, OGS_HASH_KEY_STRING, NULL);
+        ogs_hash_set(subsc->session->active_subscriptions, subsc->id, OGS_HASH_KEY_STRING, NULL);
 
         _mbs_status_subscription_send_delete(subsc);
 
@@ -137,7 +138,6 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_add_subscription(mb_smf_sc_mbs_sess
     ogs_list_add(&sess->new_subscriptions, subsc);
     subsc->session = sess;
     subsc->changed = true;
-    sess->changed = true;
 
     return true;
 }
@@ -148,14 +148,14 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_remove_subscription(mb_smf_sc_mbs_s
     _priv_mbs_status_subscription_t *subsc = _priv_mbs_status_subscription_from_public(subscription);
 
     if (!sess || !subsc || sess->deleted) return false;
+    if (subsc->session != sess) return false; // wrong session
     if (subsc->id) {
         // active subscription - move to deleted list
-        ogs_hash_set(session->subscriptions, subsc->id, OGS_HASH_KEY_STRING, NULL);
-        ogs_free(subsc->id);
-        subsc->id = NULL;
+        if (sess->active_subscriptions) {
+            ogs_hash_set(sess->active_subscriptions, subsc->id, OGS_HASH_KEY_STRING, NULL);
+        }
         ogs_list_add(&sess->deleted_subscriptions, subsc);
         subsc->changed = true;
-        sess->changed = true;
     } else {
         // if subscription is still in new list, just remove
         _priv_mbs_status_subscription_t *next, *node;
@@ -164,7 +164,6 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_remove_subscription(mb_smf_sc_mbs_s
                 ogs_list_remove(&sess->new_subscriptions, node);
                 _mbs_status_subscription_delete(node);
                 subsc->changed = true;
-                sess->changed = true;
                 break;
             }
         }
@@ -173,30 +172,16 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_remove_subscription(mb_smf_sc_mbs_s
     return true;
 }
 
-MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tmgi(mb_smf_sc_mbs_session_t *session, mb_smf_sc_tmgi_t *tmgi)
+MB_SMF_CLIENT_API mb_smf_sc_mbs_status_subscription_t *mb_smf_sc_mbs_session_find_subscription(const mb_smf_sc_mbs_session_t *session, const char *subscription_id)
 {
-    _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
-    _priv_tmgi_t *t = _priv_tmgi_from_public(tmgi);
-    return _mbs_session_set_tmgi(sess, t);
+    const _priv_mbs_session_t *sess = _priv_mbs_session_from_public_const(session);
+    return _priv_mbs_status_subscription_to_public(_mbs_session_find_active_subscription(sess, subscription_id));
 }
 
-MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tmgi_request(mb_smf_sc_mbs_session_t *session, bool request_tmgi)
+MB_SMF_CLIENT_API mb_smf_sc_mbs_status_subscription_t *mb_smf_sc_mbs_session_find_subscription_by_correlation(const mb_smf_sc_mbs_session_t *session, const char *correlation_id)
 {
-    _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
-    return _mbs_session_set_tmgi_request(sess, request_tmgi);
-}
-
-MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tunnel_request(mb_smf_sc_mbs_session_t *session, bool request_udp_tunnel)
-{
-    _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
-    return _mbs_set_tunnel_request(sess, request_udp_tunnel);
-}
-
-MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_service_type(mb_smf_sc_mbs_session_t *session,
-                                                              mb_smf_sc_mbs_service_type_e service_type)
-{
-    _priv_mbs_session_t *sess = _priv_mbs_session_from_public(session);
-    return _mbs_session_set_service_type(sess, service_type);
+    const _priv_mbs_session_t *sess = _priv_mbs_session_from_public_const(session);
+    return _priv_mbs_status_subscription_to_public(_mbs_session_find_subscription(sess, correlation_id));
 }
 
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_all_changes()
@@ -208,6 +193,11 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_all_changes()
         ret &= _mbs_session_push_changes(sess);
     }
     return ret;
+}
+
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_callback(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_create_result_cb callback, void *data)
+{
+    return _mbs_session_set_callback(_priv_mbs_session_from_public(session), callback, data);
 }
 
 MB_SMF_CLIENT_API const char *mb_smf_sc_mbs_session_get_resource_id(const mb_smf_sc_mbs_session_t *session)
@@ -230,7 +220,317 @@ MB_SMF_CLIENT_API OpenAPI_mbs_session_id_t *mb_smf_sc_mbs_session_create_mbs_ses
     return _mbs_session_create_mbs_session_id(sess);
 }
 
-/* protected functions */
+/*==================== Protected mbs_session functions ====================*/
+
+_priv_mbs_session_t *_mbs_session_new()
+{
+    /* create new mbs_session object */
+    _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
+
+    /* set defaults */
+    session->session.tmgi_req = true;
+
+    return session;
+}
+
+void _mbs_session_delete(_priv_mbs_session_t *session)
+{
+    if (!session) return;
+
+    // mb_smf_sc_mbs_session_t session->session
+    _mbs_session_public_clear(&session->session);
+    _mbs_session_public_free(session->previous_session);
+    session->previous_session = NULL;
+
+    _priv_mbs_status_subscription_t *next, *node;
+
+    ogs_list_for_each_safe(&session->new_subscriptions, next, node) {
+        ogs_list_remove(&session->new_subscriptions, node);
+        _mbs_status_subscription_delete(node);
+    }
+
+    if (session->active_subscriptions) {
+        ogs_hash_do(__free_status_subscription, session, session->active_subscriptions);
+        ogs_hash_destroy(session->active_subscriptions);
+        session->active_subscriptions = NULL;
+    }
+
+    ogs_list_for_each_safe(&session->deleted_subscriptions, next, node) {
+        ogs_list_remove(&session->new_subscriptions, node);
+        _mbs_status_subscription_delete(node);
+    }
+
+    if (session->id) {
+        ogs_free(session->id);
+        session->id = NULL;
+    }
+
+    if (session->sbi_object) {
+        _ref_count_sbi_object_unref(session->sbi_object);
+        session->sbi_object = NULL;
+    }
+
+    // session
+    ogs_free(session);
+}
+
+void _mbs_session_public_free(mb_smf_sc_mbs_session_t *session)
+{
+    if (!session) return;
+    _mbs_session_public_clear(session);
+    ogs_free(session);
+}
+
+void _mbs_session_public_clear(mb_smf_sc_mbs_session_t *session)
+{
+    if (!session) return;
+
+    if (session->ssm) {
+        ogs_free(session->ssm);
+        session->ssm = NULL;
+    }
+
+    /* session->tmgi: TMGI held elsewhere in context, don't free here */
+    session->tmgi = NULL;
+    session->tmgi_req = true;
+
+    if (session->mb_upf_udp_tunnel) {
+        ogs_freeaddrinfo(session->mb_upf_udp_tunnel);
+        session->mb_upf_udp_tunnel = NULL;
+    }
+
+    if (session->area_session_id) {
+        ogs_free(session->area_session_id);
+        session->area_session_id = NULL;
+    }
+
+    _mbs_service_area_free(session->mbs_service_area);
+    session->mbs_service_area = NULL;
+
+    _ext_mbs_service_area_free(session->ext_mbs_service_area);
+    session->ext_mbs_service_area = NULL;
+
+    if (session->dnn) {
+        ogs_free(session->dnn);
+        session->dnn = NULL;
+    }
+
+    if (session->snssai) {
+        ogs_free(session->snssai);
+        session->snssai = NULL;
+    }
+
+    if (session->start_time) {
+        ogs_free(session->start_time);
+        session->start_time = NULL;
+    }
+
+    if (session->termination_time) {
+        ogs_free(session->termination_time);
+        session->termination_time = NULL;
+    }
+
+    _mbs_service_info_free(session->mbs_service_info);
+    session->mbs_service_info = NULL;
+
+    _mbs_fsa_ids_clear(&session->mbs_fsa_ids);
+
+    _associated_session_id_free(session->associated_session_id);
+    session->associated_session_id = NULL;
+}
+
+void _mbs_session_public_copy(mb_smf_sc_mbs_session_t **dest, const mb_smf_sc_mbs_session_t * const src)
+{
+    if (!src) {
+        if (*dest) {
+            _mbs_session_public_clear(*dest);
+            ogs_free(*dest);
+            *dest = NULL;
+        }
+        return;
+    }
+
+    if (!*dest) {
+        *dest = (mb_smf_sc_mbs_session_t*)ogs_calloc(1, sizeof(**dest));
+    }
+
+    mb_smf_sc_mbs_session_t *dst = *dest;
+
+    /* copy service type */
+    dst->service_type = src->service_type;
+
+    /* copy SSM */
+    if (src->ssm) {
+        if (!dst->ssm) {
+            dst->ssm = (mb_smf_sc_ssm_addr_t*)ogs_calloc(1, sizeof(*dst->ssm));
+        }
+        memcpy(dst->ssm, src->ssm, sizeof(*dst->ssm));
+    } else {
+        if (dst->ssm) {
+            ogs_free(dst->ssm);
+            dst->ssm = NULL;
+        }
+    }
+
+    /* copy TMGI (we don't own, so copying pointer is fine) */
+    dst->tmgi = src->tmgi;
+
+    /* copy UDP tunnel */
+    if (dst->mb_upf_udp_tunnel) ogs_freeaddrinfo(dst->mb_upf_udp_tunnel);
+    ogs_copyaddrinfo(&dst->mb_upf_udp_tunnel, src->mb_upf_udp_tunnel);
+
+    /* copy tunnel request flag */
+    dst->tunnel_req = src->tunnel_req;
+
+    /* copy tmgi request flag */
+    dst->tmgi_req = src->tmgi_req;
+
+    /* copy location dependent flag */
+    dst->location_dependent = src->location_dependent;
+
+    /* copy any ue indicator flag */
+    dst->any_ue_ind = src->any_ue_ind;
+
+    /* copy contact PCF on update flag */
+    dst->contact_pcf_ind = src->contact_pcf_ind;
+
+    /* copy area session id */
+    dst->area_session_id = src->area_session_id;
+
+    /* copy mbs service area lists */
+    _mbs_service_area_copy(&dst->mbs_service_area, src->mbs_service_area);
+
+    /* copy external mbs service area lists */
+    _ext_mbs_service_area_copy(&dst->ext_mbs_service_area, src->ext_mbs_service_area);
+
+    /* copy dnn */
+    if (dst->dnn) {
+        ogs_free(dst->dnn);
+        dst->dnn = NULL;
+    }
+    if (src->dnn) dst->dnn = ogs_strdup(src->dnn);
+
+    /* copy snssai */
+    if (src->snssai) {
+        if (!dst->snssai) dst->snssai = (ogs_s_nssai_t*)ogs_calloc(1, sizeof(*dst->snssai));
+        dst->snssai->sst = src->snssai->sst;
+        dst->snssai->sd = src->snssai->sd;
+    } else {
+        if (dst->snssai) {
+            ogs_free(dst->snssai);
+            dst->snssai = NULL;
+        }
+    }
+
+    /* copy start_time & termination_time */
+    dst->start_time = src->start_time;
+    dst->termination_time = dst->termination_time;
+
+    /* copy mbs service info */
+    _mbs_service_info_copy(&dst->mbs_service_info, src->mbs_service_info);
+
+    /* copy activity status */
+    dst->activity_status = src->activity_status;
+
+    /* copy MBS FSA IDs */
+    _mbs_fsa_ids_copy(&dst->mbs_fsa_ids, &src->mbs_fsa_ids);
+
+    /* copy associated session id */
+    _associated_session_id_copy(&dst->associated_session_id, src->associated_session_id);
+}
+
+bool _mbs_session_public_equal(const mb_smf_sc_mbs_session_t *a, const mb_smf_sc_mbs_session_t *b)
+{
+    if (a == b) return true; /* same object or both NULL */
+
+    /* compare two MBS sessions */
+    if (!a || !b) return false; /* one NULL and the other not NULL is not equal */
+
+    /* both set, compare the fields, simple types first then more complex later */
+    if (a->service_type != b->service_type) return false;
+    if (a->tunnel_req != b->tunnel_req) return false;
+    if (a->tmgi_req != b->tmgi_req) return false;
+    if (a->location_dependent != b->location_dependent) return false;
+    if (a->any_ue_ind != b->any_ue_ind) return false;
+    if (a->contact_pcf_ind != b->contact_pcf_ind) return false;
+    if (a->activity_status != b->activity_status) return false;
+
+    /* check pointers for optional fields, not equal if one set and one NULL */
+    if (!a->ssm != !b->ssm) return false;
+    if (!a->tmgi != !b->tmgi) return false;
+    if (!a->mb_upf_udp_tunnel != !b->mb_upf_udp_tunnel) return false;
+    if (!a->area_session_id != !b->area_session_id) return false;
+    if (!a->mbs_service_area != !b->mbs_service_area) return false;
+    if (!a->ext_mbs_service_area != !b->ext_mbs_service_area) return false;
+    if (!a->dnn != !b->dnn) return false;
+    if (!a->snssai != !b->snssai) return false;
+    if (!a->start_time != !b->start_time) return false;
+    if (!a->termination_time != !b->termination_time) return false;
+    if (!a->mbs_service_info != !b->mbs_service_info) return false;
+    if (!a->associated_session_id != !b->associated_session_id) return false;
+
+    /* check array sizes */
+    if (ogs_list_count(&a->mbs_fsa_ids) != ogs_list_count(&b->mbs_fsa_ids)) return false;
+
+    /* check pointed to types, simple types first */
+    if (a->area_session_id && *a->area_session_id != *b->area_session_id) return false;
+    if (a->start_time && *a->start_time != *b->start_time) return false;
+    if (a->termination_time && *a->termination_time != *b->termination_time) return false;
+    if (a->dnn && strcmp(a->dnn, b->dnn)) return false;
+    if (a->ssm && !mb_smf_sc_ssm_equal(a->ssm, b->ssm)) return false;
+    if (a->tmgi && !mb_smf_sc_tmgi_equal(a->tmgi, b->tmgi)) return false;
+    /* a->mb_upf_udp_tunnel is read-only, so ignore for comparison */
+    if (a->mbs_service_area && !_mbs_service_area_equal(a->mbs_service_area, b->mbs_service_area)) return false;
+    if (a->ext_mbs_service_area && !_ext_mbs_service_area_equal(a->ext_mbs_service_area, b->ext_mbs_service_area))
+        return false;
+    if (a->snssai && memcmp(a->snssai, b->snssai, sizeof(*a->snssai))) return false;
+    if (a->mbs_service_info && !_mbs_service_info_equal(a->mbs_service_info, b->mbs_service_info)) return false;
+    if (a->associated_session_id && !_associated_session_id_equal(a->associated_session_id, b->associated_session_id))
+        return false;
+
+    /* check array contents */
+    if (!_mbs_fsa_ids_equal(&a->mbs_fsa_ids, &b->mbs_fsa_ids)) return false;
+
+    return true;
+}
+
+ogs_list_t *_mbs_session_public_patch_list(const mb_smf_sc_mbs_session_t *a, const mb_smf_sc_mbs_session_t *b)
+{
+    ogs_list_t *patches = NULL;
+
+    /* TODO: add patches for changed fields for changing a to b */
+
+    return patches;
+}
+
+ogs_list_t *_mbs_session_patch_list(const _priv_mbs_session_t *session)
+{
+    return _mbs_session_public_patch_list(session->previous_session, &session->session);
+}
+
+bool _mbs_session_set_tmgi(_priv_mbs_session_t *session, _priv_tmgi_t *tmgi)
+{
+    if (!session || session->deleted) return false;
+    if (session->session.tmgi != _priv_tmgi_to_public(tmgi)) {
+        if (session->session.tmgi && tmgi && _tmgi_equal(tmgi, _priv_tmgi_from_public(session->session.tmgi))) return true;
+        session->session.tmgi = _priv_tmgi_to_public(tmgi);
+        if (tmgi) {
+            _ref_count_sbi_object_t *old_sbi_obj = session->sbi_object;
+            session->sbi_object = _ref_count_sbi_object_ref(tmgi->sbi_object);
+            _ref_count_sbi_object_unref(old_sbi_obj);
+            session->session.tmgi_req = false;
+        }
+    }
+    return true;
+}
+
+bool _mbs_session_set_callback(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_create_result_cb callback, void *data)
+{
+    if (!session || session->deleted) return false;
+    session->create_result_cb = callback;
+    session->create_result_cb_data = data;
+    return true;
+}
 
 bool _mbs_session_push_changes(_priv_mbs_session_t *sess)
 {
@@ -246,190 +546,51 @@ bool _mbs_session_push_changes(_priv_mbs_session_t *sess)
         return true;
     }
 
-    if (!sess->id && sess->changed) {
-        /* No ID and not already sent, this must be new, push it */
+    if (!sess->previous_session) {
+        /* No cached copy of accepted MB-SMF version so this must be new, push it */
         ogs_debug("New MbsSession");
-        sess->changed = false;
         _mbs_session_send_create(sess);
         return true;
     }
 
-    if (!mb_smf_sc_ssm_equal(sess->previous_ssm, sess->session.ssm)) {
-        ogs_debug("SSM changed, recreating MbsSession");
-        /* SSM address change */
-        if (sess->previous_ssm) {
-            /* remove session at old SSM */
-            _mbs_session_send_remove(sess);
+    if (!_mbs_session_public_equal(sess->previous_session, &sess->session)) {
+        ogs_debug("MbsSession changed, updating");
+        if (!mb_smf_sc_ssm_equal(sess->previous_session->ssm, sess->session.ssm)) {
+            ogs_debug("SSM changed, recreating MbsSession");
+            /* SSM address change */
+            if (sess->previous_session && sess->previous_session->ssm) {
+                /* remove session at old SSM */
+                _mbs_session_send_remove(sess);
+            }
+
+            /* create new session (includes subscriptions) */
+            _mbs_session_send_create(sess);
+
+            return true;
         }
 
-        /* create new session (includes subscriptions) */
-        sess->changed = false;
-        _mbs_session_send_create(sess);
+        if (!_tmgi_equal(_priv_tmgi_from_public_const(sess->previous_session->tmgi),
+                         _priv_tmgi_from_public_const(sess->session.tmgi))) {
+            ogs_debug("TMGI changed, recreating MbsSession");
+            /* TMGI change */
+            if (sess->previous_session && sess->previous_session->tmgi) {
+                /* remove session for previous TMGI */
+                _mbs_session_send_remove(sess);
+            }
 
-        return true;
-    }
+            /* create new session (includes subscriptions) */
+            _mbs_session_send_create(sess);
 
-    if (!_tmgi_equal(sess->previous_tmgi, _priv_tmgi_from_public_const(sess->session.tmgi))) {
-        ogs_debug("TMGI changed, recreating MbsSession");
-        /* TMGI change */
-        if (sess->previous_tmgi) {
-            /* remove session for previous TMGI */
-            _mbs_session_send_remove(sess);
+            return true;
         }
 
-        /* create new session (includes subscriptions) */
-        sess->changed = false;
-        _mbs_session_send_create(sess);
-
-        return true;
-    }
-
-    if (!sess->changed) {
+        _mbs_session_send_update(sess);
+    } else {
         ogs_debug("MbsSession [%p (%p)] not changed", sess, _priv_mbs_session_to_public(sess));
-        return false;
     }
-
-    sess->changed = false;
 
     /* main session not changed, let's update the subscriptions */
     _mbs_session_subscriptions_update(sess);
-
-    return true;
-}
-
-void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess)
-{
-    /* Process subscription updates for the MBS Session */
-    _priv_mbs_status_subscription_t *next, *node;
-
-    /* Add new ones that haven't been requested yet */
-    ogs_list_for_each_safe(&sess->new_subscriptions, next, node) {
-        if (node->changed) _mbs_status_subscription_send_create(node);
-        node->changed = false;
-    }
-
-    /* Do any updates to existing subscriptions */
-    ogs_hash_do(__update_status_subscription, sess, sess->session.subscriptions);
-
-    /* Remove any subscriptions pending deletion */
-    ogs_list_for_each_safe(&sess->deleted_subscriptions, next, node) {
-        _mbs_status_subscription_send_delete(node);
-        node->changed = false;
-        // TODO: move this to response processing?
-        ogs_list_remove(&sess->deleted_subscriptions, node);
-        _mbs_status_subscription_delete(node);
-    }
-}
-
-void _mbs_session_delete(_priv_mbs_session_t *session)
-{
-    // mb_smf_sc_mbs_session_t session->session
-    if (session->session.mb_upf_udp_tunnel) {
-        ogs_freeaddrinfo(session->session.mb_upf_udp_tunnel);
-        session->session.mb_upf_udp_tunnel = NULL;
-    }
-
-    _priv_mbs_status_subscription_t *next, *node;
-
-    ogs_list_for_each_safe(&session->new_subscriptions, next, node) {
-        ogs_list_remove(&session->new_subscriptions, node);
-        _mbs_status_subscription_delete(node);
-    }
-
-    ogs_list_for_each_safe(&session->deleted_subscriptions, next, node) {
-        ogs_list_remove(&session->new_subscriptions, node);
-        _mbs_status_subscription_delete(node);
-    }
-
-    if (session->session.subscriptions) {
-        ogs_hash_do(__free_status_subscription, session->session.subscriptions, session->session.subscriptions);
-        ogs_hash_destroy(session->session.subscriptions);
-        session->session.subscriptions = NULL;
-    }
-
-    if (session->session.ssm) {
-        ogs_free(session->session.ssm);
-        session->session.ssm = NULL;
-    }
-
-    /* session->session.tmgi: TMGI held elsewhere in context, don't free here */
-
-    if (session->id) {
-        ogs_free(session->id);
-        session->id = NULL;
-    }
-
-    if (session->previous_ssm) {
-        ogs_free(session->previous_ssm);
-        session->previous_ssm = NULL;
-    }
-
-    if (session->previous_tmgi) {
-        _tmgi_free(session->previous_tmgi);
-        session->previous_tmgi = NULL;
-    }
-
-    if (session->sbi_object) {
-        _ref_count_sbi_object_unref(session->sbi_object);
-        session->sbi_object = NULL;
-    }
-
-    // session
-    ogs_free(session);
-}
-
-bool _mbs_session_set_tmgi(_priv_mbs_session_t *session, _priv_tmgi_t *tmgi)
-{
-    if (!session || session->deleted) return false;
-    if (session->session.tmgi != _priv_tmgi_to_public(tmgi)) {
-        if (session->session.tmgi && tmgi && _tmgi_equal(tmgi, _priv_tmgi_from_public(session->session.tmgi))) return true;
-        if (session->session.tmgi) _tmgi_free(_priv_tmgi_from_public(session->session.tmgi));
-        session->session.tmgi = _priv_tmgi_to_public(tmgi);
-        if (tmgi) {
-            _ref_count_sbi_object_unref(session->sbi_object);
-            session->sbi_object = _ref_count_sbi_object_ref(tmgi->sbi_object);
-            session->session.tmgi_req = false;
-        }
-    }
-    return true;
-}
-
-bool _mbs_session_set_tmgi_request(_priv_mbs_session_t *session, bool request_tmgi)
-{
-    if (!session || session->deleted) return false;
-
-    if (session->session.tmgi_req == request_tmgi) return true;
-
-    session->session.tmgi_req = request_tmgi;
-    if (request_tmgi) {
-        /* forget the old TMGI if we are requesting a new one */
-        session->session.tmgi = NULL;
-    }
-    session->changed = true;
-
-    return true;
-}
-
-bool _mbs_set_tunnel_request(_priv_mbs_session_t *session, bool request_udp_tunnel)
-{
-    if (!session || session->deleted) return false;
-
-    if (session->session.tunnel_req == request_udp_tunnel) return false;
-
-    session->session.tunnel_req = request_udp_tunnel;
-    session->changed = true;
-
-    return true;
-}
-
-bool _mbs_session_set_service_type(_priv_mbs_session_t *session, mb_smf_sc_mbs_service_type_e service_type)
-{
-    if (!session || session->deleted) return false;
-
-    if (session->session.service_type == service_type) return false;
-
-    session->session.service_type = service_type;
-    session->changed = true;
 
     return true;
 }
@@ -462,7 +623,16 @@ void _mbs_session_send_create(_priv_mbs_session_t *session)
 
 void _mbs_session_send_update(_priv_mbs_session_t *session)
 {
-    ogs_warn("TODO: _mbs_session_send_update(%p (%p))", session, _priv_mbs_session_to_public(session));
+    if (!session) return;
+
+    ogs_debug("Send update for MbsSession [%p (%p)]", session, _priv_mbs_session_to_public(session));
+
+    ogs_sbi_service_type_e service_type = OGS_SBI_SERVICE_TYPE_NMBSMF_MBS_SESSION;
+
+    ogs_sbi_object_t *sbi_object = _ref_count_sbi_object_ptr(session->sbi_object);
+    ogs_sbi_xact_t *xact = ogs_sbi_xact_add(0, sbi_object, service_type, NULL,
+                                            _nmbsmf_mbs_session_build_update, session, NULL);
+    ogs_sbi_discover_and_send(xact);
 }
 
 void _mbs_session_send_remove(_priv_mbs_session_t *session)
@@ -482,9 +652,41 @@ void _mbs_session_send_remove(_priv_mbs_session_t *session)
     ogs_sbi_discover_and_send(xact);
 }
 
-_priv_mbs_status_subscription_t *_mbs_session_find_subscription(_priv_mbs_session_t *session, const char *correlation_id)
+void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess)
 {
-    if (!session) return NULL;
+    /* Process subscription updates for the MBS Session */
+    _priv_mbs_status_subscription_t *next, *node;
+
+    /* Add new ones that haven't been requested yet */
+    ogs_list_for_each_safe(&sess->new_subscriptions, next, node) {
+        if (node->changed) _mbs_status_subscription_send_create(node);
+        node->changed = false;
+    }
+
+    /* Do any updates to existing subscriptions */
+    if (sess->active_subscriptions) {
+        ogs_hash_do(__update_status_subscription, sess, sess->active_subscriptions);
+    }
+
+    /* Remove any subscriptions pending deletion */
+    ogs_list_for_each_safe(&sess->deleted_subscriptions, next, node) {
+        _mbs_status_subscription_send_delete(node);
+        node->changed = false;
+        // TODO: move this to response processing?
+        ogs_list_remove(&sess->deleted_subscriptions, node);
+        _mbs_status_subscription_delete(node);
+    }
+}
+
+_priv_mbs_status_subscription_t *_mbs_session_find_active_subscription(const _priv_mbs_session_t *session, const char *id)
+{
+    if (!session || !id || session->deleted || !session->active_subscriptions) return NULL;
+    return (_priv_mbs_status_subscription_t*)ogs_hash_get(session->active_subscriptions, id, OGS_HASH_KEY_STRING);
+}
+
+_priv_mbs_status_subscription_t *_mbs_session_find_subscription(const _priv_mbs_session_t *session, const char *correlation_id)
+{
+    if (!session || session->deleted) return NULL;
 
     _priv_mbs_status_subscription_t *subsc;
     ogs_list_for_each(&session->new_subscriptions, subsc) {
@@ -497,8 +699,8 @@ _priv_mbs_status_subscription_t *_mbs_session_find_subscription(_priv_mbs_sessio
         .found = NULL
     };
 
-    if (session->session.subscriptions) {
-        if (!ogs_hash_do(__mbs_session_find_subsc_hash_do, &filter, session->session.subscriptions)) {
+    if (session->active_subscriptions) {
+        if (!ogs_hash_do(__mbs_session_find_subsc_hash_do, &filter, session->active_subscriptions)) {
             return filter.found;
         }
     }
@@ -531,7 +733,7 @@ OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t
     return mbs_session_id;
 }
 
-/* Private functions */
+/*========================== Local private functions ==========================*/
 
 static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr *addr)
 {

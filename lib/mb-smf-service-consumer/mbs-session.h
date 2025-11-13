@@ -9,22 +9,28 @@
  * program. If this file is missing then the license can be retrieved from
  * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
  */
-#include <netinet/in.h>
+#include <stdint.h>
 
 #include "ogs-core.h"
-#include "ogs-proto.h"
-#include "ogs-sbi.h"
 
 #include "macros.h"
-#include "tmgi.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* Forward declarations */
-typedef struct mb_smf_sc_mbs_status_subscription_s mb_smf_sc_mbs_status_subscription_t;
+typedef struct mb_smf_sc_associated_session_id_s mb_smf_sc_associated_session_id_t;
+typedef struct mb_smf_sc_ext_mbs_service_area_s mb_smf_sc_ext_mbs_service_area_t;
+typedef struct mb_smf_sc_mbs_service_area_s mb_smf_sc_mbs_service_area_t;
+typedef struct mb_smf_sc_mbs_service_info_s mb_smf_sc_mbs_service_info_t;
 typedef struct mb_smf_sc_mbs_session_s mb_smf_sc_mbs_session_t;
+typedef struct mb_smf_sc_mbs_status_subscription_s mb_smf_sc_mbs_status_subscription_t;
+typedef struct mb_smf_sc_ssm_addr_s mb_smf_sc_ssm_addr_t;
+typedef struct mb_smf_sc_tmgi_s mb_smf_sc_tmgi_t;
+
+typedef struct ogs_s_nssai_s ogs_s_nssai_t;
+typedef struct ogs_sockaddr_s ogs_sockaddr_t;
 
 /* Data types */
 
@@ -42,27 +48,13 @@ typedef enum {
     MBS_SERVICE_TYPE_MULTICAST  /**< Multicast MBS Service using an SSM */
 } mb_smf_sc_mbs_service_type_e;
 
-/** SSM Address
- *
- * Object for storing an SSM address.
+/** MBS Session activity status enumeration
  */
-typedef struct mb_smf_sc_ssm_addr_s {
-    int family;               /**< The AF family for the SSM address, either AF_INET or AF_INET6. */
-    /** SSM Source Address
-     * The source address for the SSM using the address family given by the @ref mb_smf_sc_ssm_addr_s::family "family" member.
-     */
-    union {
-        struct in_addr ipv4;  /**< The IPv4 source address if @ref mb_smf_sc_ssm_addr_s::family "family" is AF_INET. */
-        struct in6_addr ipv6; /**< The IPv6 source address if @ref mb_smf_sc_ssm_addr_s::family "family" is AF_INET6. */
-    } source;
-    /** SSM Destination Address
-     * The destination address for the SSM using the address family given by the @ref mb_smf_sc_ssm_addr_s::family "family" member.
-     */
-    union {
-        struct in_addr ipv4;  /**< The IPv4 destination address if @ref mb_smf_sc_ssm_addr_s::family "family" is AF_INET. */
-        struct in6_addr ipv6; /**< The IPv6 destination address if @ref mb_smf_sc_ssm_addr_s::family "family" is AF_INET6. */
-    } dest_mc;
-} mb_smf_sc_ssm_addr_t;
+typedef enum {
+    MBS_SESSION_ACTIVITY_STATUS_NONE = 0,
+    MBS_SESSION_ACTIVITY_STATUS_ACTIVE,
+    MBS_SESSION_ACTIVITY_STATUS_INACTIVE
+} mb_smf_sc_activity_status_e;
 
 /** MBS Session creation callback
  *
@@ -81,10 +73,7 @@ typedef void (*mb_smf_sc_mbs_session_create_result_cb)(mb_smf_sc_mbs_session_t *
 
 /** MBS Session
  *
- * This holds the public parts of the MBS Session Object. Most members are read-only and the approriate method should be used to
- * change them. This allows the library to keep track of changes to be committed. The exceptions are
- * @ref mb_smf_sc_mbs_session_s::create_result_cb "create_result_cb" and
- * @ref mb_smf_sc_mbs_session_s::create_result_cb_data "create_result_cb_data", which can be set directly.
+ * This holds the public parts of the MBS Session Object.
  */
 typedef struct mb_smf_sc_mbs_session_s {
     mb_smf_sc_mbs_service_type_e service_type; /**< Service type, broadcast or multicast */
@@ -93,24 +82,21 @@ typedef struct mb_smf_sc_mbs_session_s {
     ogs_sockaddr_t *mb_upf_udp_tunnel; /**< Tunnel address assigned by the MB-UPF for this session */
     bool tunnel_req;                   /**< Tunnel required, true to ask the MB-SMF for a UDP tunnel if mb_upf_udp_tunnel is NULL */
     bool tmgi_req;                     /**< Request a TMGI be allocated, must be false if tmgi is not NULL */
-    ogs_hash_t *subscriptions;         /**< list of mb_smf_sc_mbs_status_subscription_t indexed by their id */
-    mb_smf_sc_mbs_session_create_result_cb create_result_cb; /**< Callback for result of requesting MBS Session creation */
-    void *create_result_cb_data;       /**< data passed to the create_result_cb when it is called */
+    bool location_dependent;           /**< true if this MBS Session is location dependent */
+    bool any_ue_ind;
+    bool contact_pcf_ind;
+    uint16_t *area_session_id;          /**< The Area Session Identifier when location_dependent is true */
+    mb_smf_sc_mbs_service_area_t *mbs_service_area; /**< The optional MBS Service Area (union of ncgi_tais and tais lists) */
+    mb_smf_sc_ext_mbs_service_area_t *ext_mbs_service_area; /**< The optional External MBS Service Area */
+    char *dnn;
+    ogs_s_nssai_t *snssai;
+    ogs_time_t *start_time;
+    ogs_time_t *termination_time;
+    mb_smf_sc_mbs_service_info_t *mbs_service_info;
+    mb_smf_sc_activity_status_e activity_status;
+    ogs_list_t mbs_fsa_ids;
+    mb_smf_sc_associated_session_id_t *associated_session_id;
 } mb_smf_sc_mbs_session_t;
-
-/* mb_smf_sc_ssm Type functions */
-
-/** SSM equality
- * @memberof mb_smf_sc_ssm_addr_s
- * @public
- *
- * Check if SSM @p a is equal to SSM @p b.
- *
- * @param a The first SSM to compare.
- * @param b The second SSM to compare.
- * @return `true` if SSMs @p a and @p b contain the same SSM value.
- */
-MB_SMF_CLIENT_API bool mb_smf_sc_ssm_equal(const mb_smf_sc_ssm_addr_t *a, const mb_smf_sc_ssm_addr_t *b);
 
 /* mb_smf_sc_mbs_session Type functions */
 
@@ -166,6 +152,22 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_tmgi(mb_smf
  */
 MB_SMF_CLIENT_API void mb_smf_sc_mbs_session_delete(mb_smf_sc_mbs_session_t *session);
 
+/** Set the TMGI
+ * @memberof mb_smf_sc_mbs_session_s
+ * @public
+ *
+ * This sets the TMGI that identifies this MBS Session. Pass `NULL` in @p tmgi to unset the TMGI. If a TMGI is set then the
+ * @ref mb_smf_sc_mbs_session_s::tmgi_req "TMGI request flag" is cleared. The
+ * @ref mb_smf_sc_mbs_session_s::tmgi_req "TMGI request flag" and setting a TMGI are mutually exclusive.
+ * This will also direct further MBS Session communications towards the MB-SMF that allocated the TMGI.
+ *
+ * @param session The MBS Session to set the TMGI for.
+ * @param tmgi The TMGI to set.
+ *
+ * @return `true` if setting the TMGI was successful.
+ */
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tmgi(mb_smf_sc_mbs_session_t *session, mb_smf_sc_tmgi_t *tmgi);
+
 /** Add a notification subscription
  * @memberof mb_smf_sc_mbs_session_s
  * @public
@@ -194,7 +196,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_add_subscription(mb_smf_sc_mbs_sess
  * from the internal model and there is no need to use mb_smf_sc_mbs_session_push_changes() or
  * mb_smf_sc_mbs_session_push_all_changes(). If the subscription has been registered at the MB-SMF, then this will mark the
  * subscription as pending deletion for the next call to mb_smf_sc_mbs_session_push_changes() or
- * mb_smf_sc_mbs_session_push_all_changes().
+ * mb_smf_sc_mbs_session_push_all_changes(). The @p subscription will be deleted once removed.
  *
  * @param session The MBS Session to remove the subscription from.
  * @param subscription The subscription to remove.
@@ -206,62 +208,43 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_add_subscription(mb_smf_sc_mbs_sess
  */
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_remove_subscription(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_status_subscription_t *subscription);
 
-/** Set the TMGI request flag
+/** Find an active MBS Session status subscription by subscription id
  * @memberof mb_smf_sc_mbs_session_s
  * @public
  *
- * This sets the flag for requesting that a TMGI be allocated to the MBS Session upon creation at the MB-SMF. If set to `true`
- * then any TMGI associated with the MBS Session will be removed. Setting this flag to `true` and setting a TMGI are mutually
- * exclusive.
+ * @param session The MBS Session to find the subscription in.
+ * @param subscription_id The subscription id of the subscription to find.
  *
- * @param session The MBS Session to set the request TMGI flag on.
- * @param request_tmgi The value of the request TMGI flag, `true` to request a TMGI upon creation and `false` if no TMGI should be
- *                     created.
- * @return `true` if setting the flag was successful.
+ * @return The subscription matching @p subscription_id or `NULL` if the subscription could not be found.
  */
-MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tmgi_request(mb_smf_sc_mbs_session_t *session, bool request_tmgi);
+MB_SMF_CLIENT_API mb_smf_sc_mbs_status_subscription_t *mb_smf_sc_mbs_session_find_subscription(const mb_smf_sc_mbs_session_t *session, const char *subscription_id);
 
-/** Set the request UDP tunnel flag
+/** Find an active MBS Session status subscription by correlation id
  * @memberof mb_smf_sc_mbs_session_s
  * @public
  *
- * This sets the flag for requesting that a UDP tunnel be allocated for sending the multicast or broadcast packets to the MB-UPF.
+ * This will find the first subscription matching the @p correlation_id.
  *
- * @param session The MBS Session to set the request UDP tunnel flag on.
- * @param request_udp_tunnel The value of the request UDP tunnel flag, `true` to request a new UDP tunnel upon creation of the
- *                           MBS Session at the MB-SMF.
- * @return `true` if setting the flag was successful.
+ * @param session The MBS Session to find the subscription in.
+ * @param correlation_id The correlation id of the subscription to find.
+ *
+ * @return The first subscription matching @p correlation_id or `NULL` if no subscription could not be found.
  */
-MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tunnel_request(mb_smf_sc_mbs_session_t *session, bool request_udp_tunnel);
+MB_SMF_CLIENT_API mb_smf_sc_mbs_status_subscription_t *mb_smf_sc_mbs_session_find_subscription_by_correlation(const mb_smf_sc_mbs_session_t *session, const char *correlation_id);
 
-/** Set the MBS Service type
+/** Set the callback for the MBS Session
  * @memberof mb_smf_sc_mbs_session_s
  * @public
  *
- * Sets the MBS Service to either broadcast or multicast type.
+ * The callback will be called when the MBS Session when the result of a create attempt on the MB-SMF is received.
  *
- * @param session The MBS Session to set service type for.
- * @param service_type The MBS Service type to set.
+ * @param session The MBS Session to set the callback for.
+ * @param callback The callback to set.
+ * @param data The @a data parameter to call the callback with.
  *
- * @return `true` if setting the MBS Service type was successful.
+ * @return `true` if the callback is updated successfully.
  */
-MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_service_type(mb_smf_sc_mbs_session_t *session,
-                                                              mb_smf_sc_mbs_service_type_e service_type);
-
-/** Set the TMGI
- * @memberof mb_smf_sc_mbs_session_s
- * @public
- *
- * This sets the TMGI that identifies this MBS Session. Pass `NULL` in @p tmgi to unset the TMGI. If a TMGI is set then the
- * @ref mb_smf_sc_mbs_session_s::tmgi_req "TMGI request flag" is cleared. The
- * @ref mb_smf_sc_mbs_session_s::tmgi_req "TMGI request flag" and setting a TMGI are mutually exclusive.
- *
- * @param session The MBS Session to set the TMGI for.
- * @param tmgi The TMGI to set.
- *
- * @return `true` if setting the TMGI was successful.
- */
-MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_tmgi(mb_smf_sc_mbs_session_t *session, mb_smf_sc_tmgi_t *tmgi);
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_callback(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_create_result_cb callback, void *data);
 
 /** Get the resource ID for the MBS Session at the MB-SMF
  * @memberof mb_smf_sc_mbs_session_s

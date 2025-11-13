@@ -15,6 +15,7 @@
 #include "ogs-sbi.h"
 
 #include "macros.h"
+#include "json_patch.h"
 #include "mbs-session.h"
 #include "priv_tmgi.h"
 #include "ref_count_sbi_object.h"
@@ -35,11 +36,12 @@ typedef struct _priv_mbs_session_s {
 
     /* private part */
     char                    *id;
-    ogs_list_t               new_subscriptions;
-    ogs_list_t               deleted_subscriptions;
-    mb_smf_sc_ssm_addr_t    *previous_ssm;
-    _priv_tmgi_t            *previous_tmgi;
-    bool                     changed;
+    ogs_list_t               new_subscriptions;    /**< list of _priv_mbs_status_subscription_t that have not been created yet */
+    ogs_hash_t              *active_subscriptions; /**< list of _priv_mbs_status_subscription_t indexed by their id */
+    ogs_list_t               deleted_subscriptions;/**< list of _priv_mbs_status_subscription_t that are scheduled for deletion */
+    mb_smf_sc_mbs_session_t *previous_session;     /**< Cached copy of the MBS Session as last accepted by the MB-SMF */
+    mb_smf_sc_mbs_session_create_result_cb create_result_cb;
+    void                    *create_result_cb_data;
     bool                     deleted;
     _ref_count_sbi_object_t *sbi_object;
 } _priv_mbs_session_t;
@@ -68,20 +70,26 @@ static inline const _priv_mbs_session_t *_priv_mbs_session_from_public_const(con
     return NULL;
 }
 
+_priv_mbs_session_t *_mbs_session_new();
 void _mbs_session_delete(_priv_mbs_session_t *session);
+void _mbs_session_public_clear(mb_smf_sc_mbs_session_t *session);
+void _mbs_session_public_free(mb_smf_sc_mbs_session_t *session);
+void _mbs_session_public_copy(mb_smf_sc_mbs_session_t **dst, const mb_smf_sc_mbs_session_t * const src);
+bool _mbs_session_public_equal(const mb_smf_sc_mbs_session_t *a, const mb_smf_sc_mbs_session_t *b);
+ogs_list_t *_mbs_session_public_patch_list(const mb_smf_sc_mbs_session_t *a, const mb_smf_sc_mbs_session_t *b);
+ogs_list_t *_mbs_session_patch_list(const _priv_mbs_session_t *session);
 
 bool _mbs_session_set_tmgi(_priv_mbs_session_t *session, _priv_tmgi_t *tmgi);
-bool _mbs_session_set_tmgi_request(_priv_mbs_session_t *session, bool request_tmgi);
-bool _mbs_set_tunnel_request(_priv_mbs_session_t *session, bool request_udp_tunnel);
-bool _mbs_session_set_service_type(_priv_mbs_session_t *session, mb_smf_sc_mbs_service_type_e service_type);
+bool _mbs_session_set_callback(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_create_result_cb callback, void *data);
 
 bool _mbs_session_push_changes(_priv_mbs_session_t *session);
 void _mbs_session_send_create(_priv_mbs_session_t *session);
 void _mbs_session_send_update(_priv_mbs_session_t *session);
 void _mbs_session_send_remove(_priv_mbs_session_t *session);
-void _mbs_session_send_subscription_create(_priv_mbs_session_t *session, _priv_mbs_status_subscription_t *subsc);
+
 void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess);
-_priv_mbs_status_subscription_t *_mbs_session_find_subscription(_priv_mbs_session_t *session, const char *correlation_id);
+_priv_mbs_status_subscription_t *_mbs_session_find_active_subscription(const _priv_mbs_session_t *session, const char *id);
+_priv_mbs_status_subscription_t *_mbs_session_find_subscription(const _priv_mbs_session_t *session, const char *correlation_id);
 OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t *session);
 
 #ifdef __cplusplus

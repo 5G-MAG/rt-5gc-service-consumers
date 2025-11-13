@@ -381,7 +381,7 @@ const char *_tmgi_repr(const _priv_tmgi_t *tmgi)
     return tmgi->cache->repr;
 }
 
-_priv_tmgi_t *_tmgi_copy(_priv_tmgi_t *old, _priv_tmgi_t *src)
+_priv_tmgi_t *_tmgi_copy(_priv_tmgi_t *old, const _priv_tmgi_t *src)
 {
     /* no change, just return */
     if (old == src) return old;

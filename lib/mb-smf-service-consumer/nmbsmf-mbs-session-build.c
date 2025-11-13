@@ -10,13 +10,28 @@
 
 #include "ogs-core.h"
 #include "ogs-sbi.h"
+#include "openapi/model/mbs_service_type.h"
+#include "openapi/model/mbs_session_activity_status.h"
 #include "openapi/model/status_subscribe_req_data.h"
 
 #include "macros.h"
 #include "context.h"
 #include "log.h"
+#include "priv_arp.h"
+#include "priv_ncgi-tai.h"
+#include "priv_ncgi.h"
+#include "priv_flow-description.h"
+#include "priv_tai.h"
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
+#include "priv_civic-address.h"
+#include "priv_ext-mbs-service-area.h"
+#include "priv_mbs-service-area.h"
+#include "priv_mbs-service-info.h"
+#include "priv_mbs-media-comp.h"
+#include "priv_mbs-media-info.h"
+#include "priv_mbs-qos-req.h"
+#include "utils.h"
 
 #include "nmbsmf-mbs-session-build.h"
 
@@ -27,6 +42,9 @@ static ogs_sbi_server_t *__new_sbi_server(const ogs_sockaddr_t *address);
 static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *session, OpenAPI_ssm_t **ssm_ptr);
 
 static ogs_sbi_server_t *fixed_port_notifications = NULL;
+
+static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *session, bool for_update);
+static char *__bitrate_to_str(double bitrate);
 
 /* Library Internals */
 
@@ -41,49 +59,18 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
     memset(&msg, 0, sizeof(msg));
     msg.h.method = (char*)OGS_SBI_HTTP_METHOD_POST;
     msg.h.service.name = (char*)OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION;
-    msg.h.api.version = (char *)OGS_SBI_API_V1;
-    msg.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_MBS_SESSIONS;
+    msg.h.api.version = (char*)OGS_SBI_API_V1;
+    msg.h.resource.component[0] = (char*)OGS_SBI_RESOURCE_NAME_MBS_SESSIONS;
+    msg.http.content_type = (char*)OGS_SBI_CONTENT_JSON_TYPE;
 
-    OpenAPI_ssm_t *ssm = NULL;
-    OpenAPI_mbs_session_id_t *mbs_session_id = __make_mbs_session_id(session, &ssm);
-
-    OpenAPI_ext_mbs_session_t *ext_mbs_session = OpenAPI_ext_mbs_session_create(mbs_session_id,
-                                                                                session->session.tmgi_req,
-                                                                                (session->session.tmgi_req?1:0), /* tmgi_alloc_req: write-only */
-                                                                                NULL, /* tmgi: read-only */
-                                                                                NULL, /* expiry_time: read-only */
-                                                                                ssm?OpenAPI_mbs_service_type_MULTICAST
-                                                                                   :OpenAPI_mbs_service_type_BROADCAST, /* service_type: write-only */
-                                                                                false, 0, /* location_dependant */
-                                                                                false, 0, /* area_session_id: read-only */
-                                                                                session->session.tunnel_req, /* ingress_tun_addr_req: write-only */
-                                                                                ((session->session.tunnel_req)?1:0),
-                                                                                NULL, /* ingress_tun_addr list: read-only */
-                                                                                ssm,  /* ssm: write-only */
-                                                                                NULL, /* mbs_service_area: write-only */
-                                                                                NULL, /* ext_mbs_service_area: write-only */
-                                                                                /* red_mbs_serv_area: read-only */
-                                                                                /* ext_red_mbs_serv_area: read-only */
-                                                                                NULL, /* dnn: write-only */
-                                                                                NULL, /* snssai: write-only */
-                                                                                NULL, /* activation_time: deprecated */
-                                                                                NULL, /* start_time */
-                                                                                NULL, /* termination_time */
-                                                                                NULL, /* mbs_serv_info */
-                                                                                NULL, /* mbs_session_subsc */
-                                                                                OpenAPI_mbs_session_activity_status_ACTIVE,
-                                                                                true, 1, /* any_ue_ind */
-                                                                                NULL, /* mbs_fsa_id_list */
-                                                                                NULL, /* mbs_security_context */
-                                                                                false, 0 /* contact_pcf_ind */
-                                                                                );
+    OpenAPI_ext_mbs_session_t *ext_mbs_session = __make_ext_mbs_session(session, false);
 
     /* Add first subscription */
     _priv_mbs_status_subscription_t *subsc = NULL;
     if (!ogs_list_empty(&session->new_subscriptions)) {
         subsc = ogs_list_first(&session->new_subscriptions);
-    } else if (session->session.subscriptions && ogs_hash_count(session->session.subscriptions) > 0) {
-        ogs_hash_index_t *it = ogs_hash_first(session->session.subscriptions);
+    } else if (session->active_subscriptions && ogs_hash_count(session->active_subscriptions) > 0) {
+        ogs_hash_index_t *it = ogs_hash_first(session->active_subscriptions);
         subsc = _priv_mbs_status_subscription_from_public(ogs_hash_this_val(it));
     }
     if (subsc) {
@@ -137,9 +124,8 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
     ogs_sbi_request_t *req = ogs_sbi_build_request(&msg);
     ogs_expect(req);
 
-    ogs_sbi_header_set(req->http.headers, OGS_SBI_CONTENT_TYPE, OGS_SBI_CONTENT_JSON_TYPE);
     req->http.content = body;
-    req->http.content_length = strlen(body);
+    req->http.content_length = body?strlen(body):0;
 
     if (msg.CreateReqData) OpenAPI_create_req_data_free(msg.CreateReqData);
 
@@ -150,8 +136,26 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_create(void *context, void *data)
 
 ogs_sbi_request_t *_nmbsmf_mbs_session_build_update(void *context, void *data)
 {
-    ogs_warn("TODO: PATCH builder for MBS Session API");
-    return NULL;
+    _priv_mbs_session_t *session = (_priv_mbs_session_t*)context;
+
+    ogs_sbi_message_t msg;
+
+    memset(&msg, 0, sizeof(msg));
+    msg.h.method = (char*)OGS_SBI_HTTP_METHOD_PATCH;
+    msg.h.service.name = (char*)OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION;
+    msg.h.api.version = (char*)OGS_SBI_API_V1;
+    msg.http.content_type = (char*)OGS_SBI_CONTENT_PATCH_TYPE;
+    msg.h.resource.component[0] = (char*)OGS_SBI_RESOURCE_NAME_MBS_SESSIONS;
+    msg.h.resource.component[1] = session->id;
+    msg.PatchItemList = OpenAPI_list_create();
+
+    /* TODO: populate the PatchItemList with operations for things that have changed */
+    ogs_warn("TODO: complete implementation of the MBS Session update builder");
+
+    ogs_sbi_request_t *req = ogs_sbi_build_request(&msg);
+    ogs_expect(req);
+
+    return req;
 }
 
 ogs_sbi_request_t *_nmbsmf_mbs_session_build_remove(void *context, void *data)
@@ -255,12 +259,36 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_status_subscription_create(void *co
 
 ogs_sbi_request_t *_nmbsmf_mbs_session_build_status_subscription_update(void *context, void *data)
 {
-    //_priv_mbs_session_t *session = (_priv_mbs_session_t*)context;
-    //_priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)data;
+    _priv_mbs_session_t *session = (_priv_mbs_session_t*)context;
+    _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)data;
 
-    ogs_warn("TODO: update builder for MBS Session Status Subscription");
+    ogs_sbi_message_t msg;
 
-    return NULL;
+    memset(&msg, 0, sizeof(msg));
+    msg.h.method = (char*)OGS_SBI_HTTP_METHOD_PATCH;
+    msg.h.service.name = (char*)OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION;
+    msg.h.api.version = (char *)OGS_SBI_API_V1;
+    msg.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_MBS_SESSIONS;
+    msg.h.resource.component[1] = (char *)OGS_SBI_RESOURCE_NAME_SUBSCRIPTIONS;
+    msg.h.resource.component[2] = subsc->id;
+    msg.http.content_type = (char*)OGS_SBI_CONTENT_PATCH_TYPE;
+
+    msg.PatchItemList = OpenAPI_list_create();
+
+    ogs_list_t *patches = _mbs_session_patch_list(session);
+    if (patches) {
+        _json_patch_t *patch, *next;
+        ogs_list_for_each_safe(patches, next, patch) {
+            ogs_list_remove(patches, patch);
+            OpenAPI_list_add(msg.PatchItemList, patch->item);
+            ogs_free(patch);
+        }
+        ogs_free(patches);
+    }
+
+    ogs_sbi_request_t *req = ogs_sbi_build_request(&msg);
+
+    return req;
 }
 
 ogs_sbi_request_t *_nmbsmf_mbs_session_build_status_subscription_delete(void *context, void *data)
@@ -377,6 +405,308 @@ static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *sess
         *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, mbs_session_id->ssm);
     }
     return mbs_session_id;
+}
+
+static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *session, bool for_update)
+{
+    OpenAPI_ext_mbs_session_t *ext_mbs_session = NULL;
+
+    OpenAPI_ssm_t *ssm = NULL;
+    OpenAPI_mbs_session_id_t *mbs_session_id = __make_mbs_session_id(session, &ssm);
+    bool have_tmgi_req = session->session.tmgi_req;
+    bool have_locn_dependent = session->session.location_dependent;
+    bool have_tun_req = session->session.tunnel_req;
+    bool have_any_ue_ind = session->session.any_ue_ind;
+    bool have_contact_pcf_ind = (for_update && session->session.contact_pcf_ind); /* only in update */
+    int tmgi_req = session->session.tmgi_req?1:0;
+    int tun_req = session->session.tunnel_req?1:0;
+    int locn_dependent = session->session.location_dependent?1:0;
+    int any_ue_ind = session->session.any_ue_ind?1:0;
+    int contact_pcf_ind = (for_update && session->session.contact_pcf_ind)?1:0; /* only in update */
+    OpenAPI_mbs_session_activity_status_e activity_status = OpenAPI_mbs_session_activity_status_NULL;
+    OpenAPI_mbs_service_type_e service_type = ssm?OpenAPI_mbs_service_type_MULTICAST:OpenAPI_mbs_service_type_BROADCAST;
+    OpenAPI_mbs_service_area_t *mbs_service_area = NULL;
+    OpenAPI_external_mbs_service_area_t *ext_mbs_service_area = NULL;
+    char *dnn = session->session.dnn?ogs_strdup(session->session.dnn):NULL;
+    OpenAPI_snssai_t *snssai = NULL;
+    char *start_time = NULL;
+    char *term_time = NULL;
+    OpenAPI_mbs_service_info_t *mbs_service_info = NULL;
+    OpenAPI_list_t *mbs_fsa_ids = NULL;
+    OpenAPI_mbs_security_context_t *mbs_security_ctx = NULL;
+
+    if (session->session.activity_status == MBS_SESSION_ACTIVITY_STATUS_ACTIVE)
+        activity_status = OpenAPI_mbs_session_activity_status_ACTIVE;
+    else if (session->session.activity_status == MBS_SESSION_ACTIVITY_STATUS_INACTIVE)
+        activity_status = OpenAPI_mbs_session_activity_status_INACTIVE;
+
+    if (session->session.mbs_service_area &&
+        ogs_list_count(&session->session.mbs_service_area->ncgi_tais) +
+                ogs_list_count(&session->session.mbs_service_area->tais) > 0
+       ) {
+        mbs_service_area = OpenAPI_mbs_service_area_create(NULL, NULL);
+        if (ogs_list_count(&session->session.mbs_service_area->ncgi_tais) > 0) {
+            mbs_service_area->ncgi_list = OpenAPI_list_create();
+            /* copy ncgi_tais array over to OpenAPI structures */
+            mb_smf_sc_ncgi_tai_t *ncgi_tai;
+            ogs_list_for_each(&session->session.mbs_service_area->ncgi_tais, ncgi_tai) {
+                OpenAPI_tai_t *api_tai = OpenAPI_tai_create(ogs_sbi_build_plmn_id(&ncgi_tai->tai.plmn_id),
+                                                            _uint32_to_hex_str(ncgi_tai->tai.tac, 4, 6),
+                                                            ncgi_tai->tai.nid?_uint64_to_hex_str(*ncgi_tai->tai.nid, 11, 11):NULL);
+                OpenAPI_list_t *api_cell_list = NULL;
+                mb_smf_sc_ncgi_t *ncgi;
+                ogs_list_for_each(&ncgi_tai->ncgis, ncgi) {
+                    if (!api_cell_list) api_cell_list = OpenAPI_list_create();
+                    OpenAPI_ncgi_t *api_ncgi = OpenAPI_ncgi_create(ogs_sbi_build_plmn_id(&ncgi->plmn_id),
+                                                                   _uint64_to_hex_str(ncgi->nr_cell_id, 9, 9),
+                                                                   ncgi->nid?_uint64_to_hex_str(*ncgi->nid, 11, 11):NULL);
+                    OpenAPI_list_add(api_cell_list, api_ncgi);
+                }
+                OpenAPI_ncgi_tai_t *api_ncgi_tai = OpenAPI_ncgi_tai_create(api_tai, api_cell_list);
+                OpenAPI_list_add(mbs_service_area->ncgi_list, api_ncgi_tai);
+            }
+        }
+        if (ogs_list_count(&session->session.mbs_service_area->tais) > 0) {
+            mbs_service_area->tai_list = OpenAPI_list_create();
+            /* copy tais array over to OpenAPI structures */
+            mb_smf_sc_tai_t *tai;
+            ogs_list_for_each(&session->session.mbs_service_area->tais, tai) {
+                OpenAPI_tai_t *api_tai = OpenAPI_tai_create(ogs_sbi_build_plmn_id(&tai->plmn_id),
+                                                            _uint32_to_hex_str(tai->tac, 4, 6),
+                                                            tai->nid?_uint64_to_hex_str(*tai->nid, 11, 11):NULL);
+                OpenAPI_list_add(mbs_service_area->tai_list, api_tai);
+            }
+        }
+    }
+
+    if (session->session.ext_mbs_service_area &&
+        ogs_list_count(&session->session.ext_mbs_service_area->geographic_areas) +
+                ogs_list_count(&session->session.ext_mbs_service_area->civic_addresses) > 0
+       ) {
+        ext_mbs_service_area = OpenAPI_external_mbs_service_area_create(NULL,NULL);
+        if (ogs_list_count(&session->session.ext_mbs_service_area->geographic_areas) > 0) {
+            ext_mbs_service_area->geographic_area_list = OpenAPI_list_create();
+            /* TODO: copy array over to OpenAPI structures */
+        }
+        if (ogs_list_count(&session->session.ext_mbs_service_area->civic_addresses) > 0) {
+            ext_mbs_service_area->civic_address_list = OpenAPI_list_create();
+            /* copy civic_addresses array over to OpenAPI structures */
+            mb_smf_sc_civic_address_t *civic_addr;
+            ogs_list_for_each(&session->session.ext_mbs_service_area->civic_addresses, civic_addr) {
+                OpenAPI_civic_address_t *api_civic_addr = OpenAPI_civic_address_create(
+                    civic_addr->country?ogs_strdup(civic_addr->country):NULL,
+                    civic_addr->a[0]?ogs_strdup(civic_addr->a[0]):NULL,
+                    civic_addr->a[1]?ogs_strdup(civic_addr->a[1]):NULL,
+                    civic_addr->a[2]?ogs_strdup(civic_addr->a[2]):NULL,
+                    civic_addr->a[3]?ogs_strdup(civic_addr->a[3]):NULL,
+                    civic_addr->a[4]?ogs_strdup(civic_addr->a[4]):NULL,
+                    civic_addr->a[5]?ogs_strdup(civic_addr->a[5]):NULL,
+                    civic_addr->prd?ogs_strdup(civic_addr->prd):NULL,
+                    civic_addr->pod?ogs_strdup(civic_addr->pod):NULL,
+                    civic_addr->sts?ogs_strdup(civic_addr->sts):NULL,
+                    civic_addr->hno?ogs_strdup(civic_addr->hno):NULL,
+                    civic_addr->hns?ogs_strdup(civic_addr->hns):NULL,
+                    civic_addr->lmk?ogs_strdup(civic_addr->lmk):NULL,
+                    civic_addr->loc?ogs_strdup(civic_addr->loc):NULL,
+                    civic_addr->nam?ogs_strdup(civic_addr->nam):NULL,
+                    civic_addr->pc?ogs_strdup(civic_addr->pc):NULL,
+                    civic_addr->bld?ogs_strdup(civic_addr->bld):NULL,
+                    civic_addr->unit?ogs_strdup(civic_addr->unit):NULL,
+                    civic_addr->flr?ogs_strdup(civic_addr->flr):NULL,
+                    civic_addr->room?ogs_strdup(civic_addr->room):NULL,
+                    civic_addr->plc?ogs_strdup(civic_addr->plc):NULL,
+                    civic_addr->pcn?ogs_strdup(civic_addr->pcn):NULL,
+                    civic_addr->pobox?ogs_strdup(civic_addr->pobox):NULL,
+                    civic_addr->addcode?ogs_strdup(civic_addr->addcode):NULL,
+                    civic_addr->seat?ogs_strdup(civic_addr->seat):NULL,
+                    civic_addr->rd?ogs_strdup(civic_addr->rd):NULL,
+                    civic_addr->rdsec?ogs_strdup(civic_addr->rdsec):NULL,
+                    civic_addr->rdbr?ogs_strdup(civic_addr->rdbr):NULL,
+                    civic_addr->rdsubbr?ogs_strdup(civic_addr->rdsubbr):NULL,
+                    civic_addr->prm?ogs_strdup(civic_addr->prm):NULL,
+                    civic_addr->pom?ogs_strdup(civic_addr->pom):NULL,
+                    civic_addr->usage_rules?ogs_strdup(civic_addr->usage_rules):NULL,
+                    civic_addr->method?ogs_strdup(civic_addr->method):NULL,
+                    civic_addr->provided_by?ogs_strdup(civic_addr->provided_by):NULL
+                );
+                OpenAPI_list_add(ext_mbs_service_area->civic_address_list, api_civic_addr);
+            }
+        }
+    }
+
+    if (session->session.snssai) {
+        char *sd_str = ogs_s_nssai_sd_to_string(session->session.snssai->sd);
+        snssai = OpenAPI_snssai_create(session->session.snssai->sst, sd_str);
+    }
+
+    if (session->session.start_time) {
+        start_time = ogs_sbi_gmtime_string(*session->session.start_time);
+    }
+    if (session->session.termination_time) {
+        term_time = ogs_sbi_gmtime_string(*session->session.termination_time);
+    }
+    if (session->session.mbs_service_info) {
+        OpenAPI_list_t *media_comps = NULL;
+        ogs_hash_index_t *idx = ogs_hash_index_make(session->session.mbs_service_info->mbs_media_comps);
+        ogs_hash_index_t *it = idx;
+        for (it = ogs_hash_next(it); it; it = ogs_hash_next(it)) {
+            mb_smf_sc_mbs_media_comp_t *media_comp = (mb_smf_sc_mbs_media_comp_t*)ogs_hash_this_val(it);
+            OpenAPI_list_t *api_flow_descs = NULL;
+            OpenAPI_mbs_media_info_t *api_mbs_media_info = NULL;
+            char *api_qos_ref = NULL;
+            OpenAPI_mbs_qo_s_req_t *api_mbs_qo_s_req = NULL;
+
+            if (media_comp->flow_descriptions) {
+                api_flow_descs = OpenAPI_list_create();
+                mb_smf_sc_flow_description_t *flow_desc;
+                ogs_list_for_each(media_comp->flow_descriptions, flow_desc) {
+                    OpenAPI_list_add(api_flow_descs, ogs_strdup(flow_desc->string));
+                }
+            }
+
+            if (media_comp->media_info) {
+                OpenAPI_list_t *api_codecs = NULL;
+                OpenAPI_media_type_e api_mbs_media_type = OpenAPI_media_type_NULL;
+                switch (media_comp->media_info->mbs_media_type) {
+                case MEDIA_TYPE_AUDIO:
+                    api_mbs_media_type = OpenAPI_media_type_AUDIO;
+                    break;
+                case MEDIA_TYPE_VIDEO:
+                    api_mbs_media_type = OpenAPI_media_type_VIDEO;
+                    break;
+                case MEDIA_TYPE_DATA:
+                    api_mbs_media_type = OpenAPI_media_type_DATA;
+                    break;
+                case MEDIA_TYPE_APPLICATION:
+                    api_mbs_media_type = OpenAPI_media_type_APPLICATION;
+                    break;
+                case MEDIA_TYPE_CONTROL:
+                    api_mbs_media_type = OpenAPI_media_type_CONTROL;
+                    break;
+                case MEDIA_TYPE_TEXT:
+                    api_mbs_media_type = OpenAPI_media_type_TEXT;
+                    break;
+                case MEDIA_TYPE_MESSAGE:
+                    api_mbs_media_type = OpenAPI_media_type_MESSAGE;
+                    break;
+                case MEDIA_TYPE_OTHER:
+                    api_mbs_media_type = OpenAPI_media_type_OTHER;
+                    break;
+                default:
+                    break;
+                }
+                if (media_comp->media_info->codecs[0]) {
+                    if (!api_codecs) api_codecs = OpenAPI_list_create();
+                    OpenAPI_list_add(api_codecs, ogs_strdup(media_comp->media_info->codecs[0]));
+                }
+                if (media_comp->media_info->codecs[1]) {
+                    if (!api_codecs) api_codecs = OpenAPI_list_create();
+                    OpenAPI_list_add(api_codecs, ogs_strdup(media_comp->media_info->codecs[1]));
+                }
+                api_mbs_media_info = OpenAPI_mbs_media_info_create(api_mbs_media_type,
+                                media_comp->media_info->max_requested_mbs_bandwidth_downlink?
+                                        __bitrate_to_str(*media_comp->media_info->max_requested_mbs_bandwidth_downlink):NULL,
+                                media_comp->media_info->min_requested_mbs_bandwidth_downlink?
+                                        __bitrate_to_str(*media_comp->media_info->min_requested_mbs_bandwidth_downlink):NULL,
+                                api_codecs);
+            } else if (media_comp->qos_ref) {
+                api_qos_ref = ogs_strdup(media_comp->qos_ref);
+            } else if (media_comp->mbs_qos_req) {
+                OpenAPI_arp_t *req_mbs_arp = NULL;
+                if (media_comp->mbs_qos_req->req_mbs_arp) {
+                    req_mbs_arp = OpenAPI_arp_create(!!media_comp->mbs_qos_req->req_mbs_arp->priority_level,
+                                                    media_comp->mbs_qos_req->req_mbs_arp->priority_level,
+                                                    media_comp->mbs_qos_req->req_mbs_arp->preemption_capability,
+                                                    media_comp->mbs_qos_req->req_mbs_arp->preemption_vulnerability);
+                }
+                api_mbs_qo_s_req = OpenAPI_mbs_qo_s_req_create(media_comp->mbs_qos_req->five_qi,
+                                media_comp->mbs_qos_req->guarenteed_bit_rate?
+                                        __bitrate_to_str(*media_comp->mbs_qos_req->guarenteed_bit_rate):NULL,
+                                media_comp->mbs_qos_req->max_bit_rate?
+                                        __bitrate_to_str(*media_comp->mbs_qos_req->max_bit_rate):NULL,
+                                !!media_comp->mbs_qos_req->averaging_window,
+                                media_comp->mbs_qos_req->averaging_window?*media_comp->mbs_qos_req->averaging_window:0,
+                                req_mbs_arp);
+            }
+
+            OpenAPI_mbs_media_comp_rm_t *api_media_comp = OpenAPI_mbs_media_comp_rm_create(media_comp->id, api_flow_descs,
+                                OpenAPI_reserv_priority_NULL + media_comp->mbs_sdf_reserve_priority,
+                                api_mbs_media_info, api_qos_ref, api_mbs_qo_s_req);
+            if (!media_comps) media_comps = OpenAPI_list_create();
+            OpenAPI_map_t *kv_pair = OpenAPI_map_create(ogs_msprintf("%i", api_media_comp->mbs_med_comp_num), api_media_comp);
+            OpenAPI_list_add(media_comps, kv_pair);
+        }
+        ogs_free(idx);
+        mbs_service_info = OpenAPI_mbs_service_info_create(media_comps, OpenAPI_reserv_priority_NULL, NULL, NULL);
+        if (session->session.mbs_service_info->mbs_sdf_reserve_priority != 0) {
+            mbs_service_info->mbs_sdf_res_prio =
+                                OpenAPI_reserv_priority_PRIO_1 + session->session.mbs_service_info->mbs_sdf_reserve_priority - 1;
+        }
+        if (session->session.mbs_service_info->af_app_id) {
+            mbs_service_info->af_app_id = ogs_strdup(session->session.mbs_service_info->af_app_id);
+        }
+        if (session->session.mbs_service_info->mbs_session_ambr) {
+            mbs_service_info->mbs_session_ambr = __bitrate_to_str(*session->session.mbs_service_info->mbs_session_ambr);
+        }
+    }
+
+    if (ogs_list_count(&session->session.mbs_fsa_ids) > 0) {
+        mbs_fsa_ids = OpenAPI_list_create();
+        /* TODO: copy array values to new structure */
+    }
+
+    ext_mbs_session = OpenAPI_ext_mbs_session_create(mbs_session_id, /* mbs_session_id */
+                                                     have_tmgi_req, tmgi_req, /* tmgi_alloc_req: write-only */
+                                                     NULL, /* tmgi: read-only */
+                                                     NULL, /* expiry_time: read-only */
+                                                     service_type, /* service_type: write-only */
+                                                     have_locn_dependent, locn_dependent, /* location_dependant */
+                                                     false, 0, /* area_session_id: read-only */
+                                                     have_tun_req, tun_req, /* ingress_tun_addr_req: write-only */
+                                                     NULL, /* ingress_tun_addr list: read-only */
+                                                     ssm,  /* ssm: write-only */
+                                                     mbs_service_area, /* mbs_service_area: write-only */
+                                                     ext_mbs_service_area, /* ext_mbs_service_area: write-only */
+                                                     /* red_mbs_serv_area: read-only */
+                                                     /* ext_red_mbs_serv_area: read-only */
+                                                     dnn, /* dnn: write-only */
+                                                     snssai, /* snssai: write-only */
+                                                     NULL, /* activation_time: deprecated */
+                                                     start_time, /* start_time */
+                                                     term_time, /* termination_time */
+                                                     mbs_service_info, /* mbs_serv_info */
+                                                     NULL, /* mbs_session_subsc */
+                                                     activity_status, /* activity_status */
+                                                     have_any_ue_ind, any_ue_ind, /* any_ue_ind */
+                                                     mbs_fsa_ids, /* mbs_fsa_id_list */
+                                                     /* associated_session_id */
+                                                     mbs_security_ctx, /* mbs_security_context */
+                                                     have_contact_pcf_ind, contact_pcf_ind /* contact_pcf_ind */
+                                                     /* area_session_policy_id */
+                                                    );
+    return ext_mbs_session;
+}
+
+static char *__bitrate_to_str(double bitrate)
+{
+    double divisor = 1.0;
+    const char *units = "bps";
+
+    if (bitrate >= 1e12) {
+        divisor = 1e12;
+        units = "Tbps";
+    } else if (bitrate >= 1e9) {
+        divisor = 1e9;
+        units = "Gbps";
+    } else if (bitrate >= 1e6) {
+        divisor = 1e6;
+        units = "Mbps";
+    } else if (bitrate >= 1e3) {
+        divisor = 1e3;
+        units = "Kbps";
+    }
+
+    return ogs_msprintf("%.6f %s", bitrate/divisor, units);
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

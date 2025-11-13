@@ -24,15 +24,45 @@ libscmbsmf_description = 'Library that provides a C language API for communicati
 libscmbsmf_sources = files('''
     mb-smf-service-consumer.c
     mb-smf-service-consumer.h
+    arp.c
+    arp.h
+    associated-session-id.c
+    associated-session-id.h
+    civic-address.c
+    civic-address.h
     context.c
     context.h
+    ext-mbs-service-area.c
+    ext-mbs-service-area.h
+    flow-description.c
+    flow-description.h
+    geographic-area.c
+    geographic-area.h
+    json_patch.c
+    json_patch.h
     log.c
     log.h
     macros.h
+    mbs-fsa-id.c
+    mbs-fsa-id.h
+    mbs-media-comp.c
+    mbs-media-comp.h
+    mbs-media-info.c
+    mbs-media-info.h
+    mbs-qos-req.c
+    mbs-qos-req.h
+    mbs-service-area.c
+    mbs-service-area.h
+    mbs-service-info.c
+    mbs-service-info.h
     mbs-session.c
     mbs-session.h
     mbs-status-subscription.c
     mbs-status-subscription.h
+    ncgi.c
+    ncgi.h
+    ncgi-tai.c
+    ncgi-tai.h
     nmbsmf-mbs-session-build.c
     nmbsmf-mbs-session-build.h
     nmbsmf-mbs-session-handle.c
@@ -43,10 +73,30 @@ libscmbsmf_sources = files('''
     nmbsmf-tmgi-handle.h
     nnrf-disc-handle.c
     nnrf-disc-handle.h
+    priv_arp.h
+    priv_associated-session-id.h
+    priv_civic-address.h
+    priv_ext-mbs-service-area.h
+    priv_flow-description.h
+    priv_geographic-area.h
+    priv_mbs-fsa-id.h
+    priv_mbs-media-comp.h
+    priv_mbs-media-info.h
+    priv_mbs-qos-req.h
+    priv_mbs-service-area.h
+    priv_mbs-service-info.h
     priv_mbs-session.h
     priv_mbs-status-subscription.h
+    priv_ncgi.h
+    priv_ncgi-tai.h
+    priv_ssm-addr.h
+    priv_tai.h
     priv_tmgi.h
     ref_count_sbi_object.h
+    ssm-addr.c
+    ssm-addr.h
+    tai.c
+    tai.h
     tmgi.c
     tmgi.h
     utils.c

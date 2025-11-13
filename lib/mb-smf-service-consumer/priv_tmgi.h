@@ -44,7 +44,7 @@ static inline _priv_tmgi_t *_priv_tmgi_from_public(mb_smf_sc_tmgi_t *tmgi)
     return NULL;
 }
 
-static inline const _priv_tmgi_t *_priv_tmgi_from_public_const(const mb_smf_sc_tmgi_t *tmgi)
+static inline const _priv_tmgi_t *_priv_tmgi_from_public_const(const mb_smf_sc_tmgi_t * const tmgi)
 {
     if (tmgi) return ogs_container_of(tmgi, const _priv_tmgi_t, tmgi);
     return NULL;
@@ -56,7 +56,7 @@ static inline mb_smf_sc_tmgi_t *_priv_tmgi_to_public(_priv_tmgi_t *tmgi)
     return NULL;
 }
 
-static inline const mb_smf_sc_tmgi_t *_priv_tmgi_to_public_const(const _priv_tmgi_t *tmgi)
+static inline const mb_smf_sc_tmgi_t *_priv_tmgi_to_public_const(const _priv_tmgi_t * const tmgi)
 {
     if (tmgi) return &tmgi->tmgi;
     return NULL;
@@ -98,7 +98,7 @@ char *_tmgi_list_repr(const ogs_list_t *tmgis);
 bool _tmgi_equal(const _priv_tmgi_t *a, const _priv_tmgi_t *b);
 const char *_tmgi_repr(const _priv_tmgi_t *tmgi);
 
-_priv_tmgi_t *_tmgi_copy(_priv_tmgi_t *old, _priv_tmgi_t *src);
+_priv_tmgi_t *_tmgi_copy(_priv_tmgi_t *old, const _priv_tmgi_t *src);
 
 OpenAPI_tmgi_t *_tmgi_to_openapi_type(const _priv_tmgi_t *tmgi);
 _priv_tmgi_t *_tmgi_find_matching_openapi_type(const OpenAPI_tmgi_t *api_tmgi);

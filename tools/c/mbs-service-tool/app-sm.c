@@ -471,20 +471,19 @@ static void app_mbs_session_create(ogs_fsm_t *sm)
     }
 
     /* set the request tmgi flag */
-    mb_smf_sc_mbs_session_set_tmgi_request(session, options->req_tmgi);
+    session->tmgi_req = options->req_tmgi;
 
     /* set the ingressTunAddrReq flag in the MBS session */
-    mb_smf_sc_mbs_session_set_tunnel_request(session, options->req_tunnel);
+    session->tunnel_req = options->req_tunnel;
 
     /* set the service type */
-    mb_smf_sc_mbs_session_set_service_type(session, options->is_multicast?MBS_SERVICE_TYPE_MULTICAST:MBS_SERVICE_TYPE_BROADCAST);
+    session->service_type = options->is_multicast?MBS_SERVICE_TYPE_MULTICAST:MBS_SERVICE_TYPE_BROADCAST;
 
     /* Add the subscribe all */
     mb_smf_sc_mbs_session_add_subscription(session, subsc);
 
     /* set the callback */
-    session->create_result_cb = app_mbs_session_created_cb;
-    session->create_result_cb_data = (void*)sm;
+    mb_smf_sc_mbs_session_set_callback(session, app_mbs_session_created_cb, (void*)sm);
 
     mbs_service_tool_set_mbs_session(session);
 

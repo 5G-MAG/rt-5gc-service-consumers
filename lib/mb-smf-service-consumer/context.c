@@ -245,7 +245,7 @@ bool _context_is_notification_server(ogs_sbi_server_t *server)
         ogs_list_for_each(&sess->new_subscriptions, subsc) {
             if (subsc->cache && subsc->cache->notif_server == server) return true;
         }
-        if (!ogs_hash_do(__check_notification_server, server, sess->session.subscriptions)) return true;
+        if (!ogs_hash_do(__check_notification_server, server, sess->active_subscriptions)) return true;
     }
     return false;
 }
@@ -315,7 +315,7 @@ _priv_mbs_status_subscription_t *_context_find_subscription(ogs_sbi_server_t *se
             }
         }
         __mbs_status_subsc_filter_t filter = { .server = server, .url_path = url_path };
-        if (!ogs_hash_do(__filter_subscription, &filter, sess->session.subscriptions)) {
+        if (!ogs_hash_do(__filter_subscription, &filter, sess->active_subscriptions)) {
             return filter.subsc;
         }
     }

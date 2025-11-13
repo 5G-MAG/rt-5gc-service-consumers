@@ -52,7 +52,7 @@ typedef void (*mb_smf_sc_tmgi_result_cb)(mb_smf_sc_tmgi_t *tmgi, int result,
 
 /** TMGI allocation callback (backward compatibility)
  * @deprecated
- * 
+ *
  * This is maintained for backward compatibility. New code should use mb_smf_sc_tmgi_result_cb instead.
  *
  * @see mb_smf_sc_tmgi_result_cb

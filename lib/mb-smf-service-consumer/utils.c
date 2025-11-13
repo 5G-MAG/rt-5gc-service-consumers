@@ -17,6 +17,8 @@
 extern "C" {
 #endif
 
+static char *__to_hex_string(unsigned long long val, int min_digits);
+
 /* Library Internals */
 char *_sockaddr_string(const ogs_sockaddr_t *addr)
 {
@@ -87,6 +89,23 @@ ogs_time_t _cache_control_to_cache_age(const char *cache_control)
     }
     ogs_free(value);
     return ret;
+}
+
+char *_uint32_to_hex_str(uint32_t val, int min_digits, int max_digits)
+{
+    uint32_t mask = (uint32_t)((1ULL<<(4*max_digits))-1);
+    return __to_hex_string(val&mask, min_digits);
+}
+
+char *_uint64_to_hex_str(uint64_t val, int min_digits, int max_digits)
+{
+    uint64_t mask = (uint64_t)((1ULL<<(4*max_digits))-1);
+    return __to_hex_string(val&mask, min_digits);
+}
+
+static char *__to_hex_string(unsigned long long val, int min_digits)
+{
+    return ogs_msprintf("%.*llX", min_digits, val);
 }
 
 #ifdef __cplusplus
