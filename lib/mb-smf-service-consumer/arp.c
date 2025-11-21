@@ -10,8 +10,10 @@
 #include <stddef.h>
 
 #include "ogs-core.h"
+#include "ogs-sbi.h"
 
 #include "macros.h"
+#include "json-patch.h"
 
 #include "arp.h"
 #include "priv_arp.h"
@@ -69,6 +71,59 @@ bool _arp_equal(const mb_smf_sc_arp_t *a, const mb_smf_sc_arp_t *b)
     if (a->preemption_vulnerability != b->preemption_vulnerability) return false;
 
     return true;
+}
+
+ogs_list_t *_arp_patch_list(const mb_smf_sc_arp_t *a, const mb_smf_sc_arp_t *b)
+{
+    if (a == b) return NULL;
+
+    ogs_list_t *patches = NULL;
+
+    if (!a) {
+        _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_add, "/", _arp_to_json(b));
+        patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+        ogs_list_add(patches, patch);
+    } else if (!b) {
+        _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation__remove, "/", NULL);
+        patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+        ogs_list_add(patches, patch);
+    } else {
+        if (a->priority_level != b->priority_level) {
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_replace, "/priorityLevel", cJSON_CreateNumber(b->priority_level));
+            patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        }
+        if (a->preemption_capability != b->preemption_capability) {
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_replace, "/preemptCap", cJSON_CreateString(OpenAPI_preemption_capability_ToString(b->preemption_capability)));
+            if (!patches) patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        }
+        if (a->preemption_vulnerability != b->preemption_vulnerability) {
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_replace, "/preemptVuln", cJSON_CreateString(OpenAPI_preemption_vulnerability_ToString(b->preemption_vulnerability)));
+            if (!patches) patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        }
+    }
+
+    return patches;
+}
+
+OpenAPI_arp_t *_arp_to_openapi(const mb_smf_sc_arp_t *arp)
+{
+    if (!arp) return NULL;
+
+    return OpenAPI_arp_create(false, arp->priority_level, arp->preemption_capability, arp->preemption_vulnerability);
+}
+
+cJSON *_arp_to_json(const mb_smf_sc_arp_t *arp)
+{
+    if (!arp) return NULL;
+
+    OpenAPI_arp_t *api_arp = _arp_to_openapi(arp);
+    cJSON *json = OpenAPI_arp_convertToJSON(api_arp);
+    OpenAPI_arp_free(api_arp);
+
+    return json;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

@@ -17,12 +17,24 @@
 extern "C" {
 #endif
 
+typedef struct ogs_list_s ogs_list_t;
+typedef struct cJSON cJSON;
+typedef struct OpenAPI_list_s OpenAPI_list_t;
+typedef struct OpenAPI_ncgi_s OpenAPI_ncgi_t;
+
 /* Library internal ncgi methods (protected) */
+ogs_list_t *_ncgis_patch_list(const ogs_list_t *a, const ogs_list_t *b);
+OpenAPI_list_t *_ncgis_to_openapi(const ogs_list_t *ncgis);
+cJSON *_ncgis_to_json(const ogs_list_t *ncgis);
+
 mb_smf_sc_ncgi_t *_ncgi_new();
 void _ncgi_free(mb_smf_sc_ncgi_t *ncgi);
 void _ncgi_clear(mb_smf_sc_ncgi_t *ncgi);
 void _ncgi_copy(mb_smf_sc_ncgi_t **dst, const mb_smf_sc_ncgi_t *src);
 bool _ncgi_equal(const mb_smf_sc_ncgi_t *a, const mb_smf_sc_ncgi_t *b);
+ogs_list_t *_ncgi_patch_list(const mb_smf_sc_ncgi_t *a, const mb_smf_sc_ncgi_t *b);
+OpenAPI_ncgi_t *_ncgi_to_openapi(const mb_smf_sc_ncgi_t *ncgi);
+cJSON *_ncgi_to_json(const mb_smf_sc_ncgi_t *ncgi);
 
 #ifdef __cplusplus
 }

@@ -103,6 +103,28 @@ char *_uint64_to_hex_str(uint64_t val, int min_digits, int max_digits)
     return __to_hex_string(val&mask, min_digits);
 }
 
+char *_bitrate_to_str(double bitrate)
+{
+    double divisor = 1.0; 
+    const char *units = "bps";
+
+    if (bitrate >= 1e12) {
+        divisor = 1e12;
+        units = "Tbps";
+    } else if (bitrate >= 1e9) {
+        divisor = 1e9;
+        units = "Gbps";
+    } else if (bitrate >= 1e6) {
+        divisor = 1e6;
+        units = "Mbps";
+    } else if (bitrate >= 1e3) {
+        divisor = 1e3;
+        units = "Kbps";
+    }
+
+    return ogs_msprintf("%.6f %s", bitrate/divisor, units);
+}
+
 static char *__to_hex_string(unsigned long long val, int min_digits)
 {
     return ogs_msprintf("%.*llX", min_digits, val);

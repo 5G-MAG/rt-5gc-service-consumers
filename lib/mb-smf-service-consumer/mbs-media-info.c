@@ -10,8 +10,11 @@
 #include <stdint.h>
 
 #include "ogs-core.h"
+#include "ogs-sbi.h"
 
 #include "macros.h"
+#include "json-patch.h"
+#include "utils.h"
 
 #include "mbs-media-info.h"
 #include "priv_mbs-media-info.h"
@@ -130,6 +133,154 @@ bool _mbs_media_info_equal(const mb_smf_sc_mbs_media_info_t *a, const mb_smf_sc_
     if (a2 && strcmp(a2, b2)) return false;
 
     return true;
+}
+
+ogs_list_t *_mbs_media_info_patch_list(const mb_smf_sc_mbs_media_info_t *a, const mb_smf_sc_mbs_media_info_t *b)
+{
+    if (a == b) return NULL;
+
+    ogs_list_t *patches = NULL;
+
+    if (!a) {
+        _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_add, "/", _mbs_media_info_to_json(b));
+        patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+        ogs_list_add(patches, patch);
+    } else if (!b) {
+        _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation__remove, "/", NULL);
+        patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+        ogs_list_add(patches, patch);
+    } else {
+        if (a->mbs_media_type != b->mbs_media_type) {
+            _json_patch_t *patch;
+            if (!a->mbs_media_type) {
+                patch = _json_patch_new(OpenAPI_patch_operation_add, "/mbsMedType", cJSON_CreateString(OpenAPI_media_type_ToString(b->mbs_media_type)));
+            } else if (!b->mbs_media_type) {
+                patch = _json_patch_new(OpenAPI_patch_operation__remove, "/mbsMedType", NULL);
+            } else {
+                patch = _json_patch_new(OpenAPI_patch_operation_replace, "/mbsMedType", cJSON_CreateString(OpenAPI_media_type_ToString(b->mbs_media_type)));
+            }
+            patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        }
+        if (a->max_requested_mbs_bandwidth_downlink != b->max_requested_mbs_bandwidth_downlink) {
+            _json_patch_t *patch = NULL;
+            if (!a->max_requested_mbs_bandwidth_downlink) {
+                char *br = _bitrate_to_str(*b->max_requested_mbs_bandwidth_downlink);
+                patch = _json_patch_new(OpenAPI_patch_operation_add, "/maxReqMbsBwDl", cJSON_CreateString(br));
+                ogs_free(br);
+            } else if (!b->max_requested_mbs_bandwidth_downlink) {
+                patch = _json_patch_new(OpenAPI_patch_operation__remove, "/maxReqMbsBwDl", NULL);
+            } else if (*a->max_requested_mbs_bandwidth_downlink != *b->max_requested_mbs_bandwidth_downlink) {
+                char *br = _bitrate_to_str(*b->max_requested_mbs_bandwidth_downlink);
+                patch = _json_patch_new(OpenAPI_patch_operation_replace, "/maxReqMbsBwDl", cJSON_CreateString(br));
+                ogs_free(br);
+            }
+            if (patch) {
+                if (!patches) patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+                ogs_list_add(patches, patch);
+            }
+        }
+        if (a->min_requested_mbs_bandwidth_downlink != b->min_requested_mbs_bandwidth_downlink) {
+            _json_patch_t *patch = NULL;
+            if (!a->min_requested_mbs_bandwidth_downlink) {
+                char *br = _bitrate_to_str(*b->min_requested_mbs_bandwidth_downlink);
+                patch = _json_patch_new(OpenAPI_patch_operation_add, "/minReqMbsBwDl", cJSON_CreateString(br));
+                ogs_free(br);
+            } else if (!b->min_requested_mbs_bandwidth_downlink) {
+                patch = _json_patch_new(OpenAPI_patch_operation__remove, "/minReqMbsBwDl", NULL);
+            } else if (*a->min_requested_mbs_bandwidth_downlink != *b->min_requested_mbs_bandwidth_downlink) {
+                char *br = _bitrate_to_str(*b->min_requested_mbs_bandwidth_downlink);
+                patch = _json_patch_new(OpenAPI_patch_operation_replace, "/minReqMbsBwDl", cJSON_CreateString(br));
+                ogs_free(br);
+            }
+            if (patch) {
+                if (!patches) patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+                ogs_list_add(patches, patch);
+            }
+        }
+        const char *a_c1 = a->codecs[0];
+        const char *a_c2 = a->codecs[1];
+        const char *b_c1 = b->codecs[0];
+        const char *b_c2 = b->codecs[1];
+
+        if (!a_c1) {
+            a_c1 = a_c2;
+            a_c2 = NULL;
+        }
+        if (!b_c1) {
+            b_c1 = b_c2;
+            b_c2 = NULL;
+        }
+
+        if (a_c1 != b_c1) {
+            _json_patch_t *patch = NULL;
+            if (!a_c1) {
+                patch = _json_patch_new(OpenAPI_patch_operation_add, "/codecs/-", cJSON_CreateString(b_c1));
+            } else if (!b_c1) {
+                patch = _json_patch_new(OpenAPI_patch_operation__remove, "/codecs", NULL);
+            } else if (strcmp(a_c1, b_c1)) {
+                patch = _json_patch_new(OpenAPI_patch_operation_replace, "/codecs/0", cJSON_CreateString(b_c1));
+            }
+            if (patch) {
+                if (!patches) patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+                ogs_list_add(patches, patch);
+            }
+        }
+        if (a_c2 != b_c2) {
+            _json_patch_t *patch = NULL;
+            if (!a_c2) {
+                patch = _json_patch_new(OpenAPI_patch_operation_add, "/codecs/-", cJSON_CreateString(b_c2));
+            } else if (!b_c2) {
+                if (b_c1) {
+                    patch = _json_patch_new(OpenAPI_patch_operation__remove, "/codecs/1", NULL);
+                }
+            } else if (strcmp(a_c2, b_c2)) {
+                patch = _json_patch_new(OpenAPI_patch_operation_replace, "/codecs/1", cJSON_CreateString(b_c2));
+            }
+            if (patch) {
+                if (!patches) patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+                ogs_list_add(patches, patch);
+            }
+        }
+    }
+
+    return patches;
+}
+
+OpenAPI_mbs_media_info_t *_mbs_media_info_to_openapi(const mb_smf_sc_mbs_media_info_t *media_info)
+{
+    if (!media_info) return NULL;
+
+    char *max_br = NULL;
+    char *min_br = NULL;
+    OpenAPI_list_t *codecs = NULL;
+
+    if (media_info->max_requested_mbs_bandwidth_downlink) {
+        max_br = _bitrate_to_str(*media_info->max_requested_mbs_bandwidth_downlink);
+    }
+    if (media_info->min_requested_mbs_bandwidth_downlink) {
+        min_br = _bitrate_to_str(*media_info->min_requested_mbs_bandwidth_downlink);
+    }
+    if (media_info->codecs[0]) {
+        codecs = OpenAPI_list_create();
+        OpenAPI_list_add(codecs, ogs_strdup(media_info->codecs[0]));
+    }
+    if (media_info->codecs[1]) {
+        if (!codecs) codecs = OpenAPI_list_create();
+        OpenAPI_list_add(codecs, ogs_strdup(media_info->codecs[1]));
+    }
+
+    return OpenAPI_mbs_media_info_create(media_info->mbs_media_type, max_br, min_br, codecs);
+}
+
+cJSON *_mbs_media_info_to_json(const mb_smf_sc_mbs_media_info_t *media_info)
+{
+    if (!media_info) return NULL;
+
+    OpenAPI_mbs_media_info_t *api_info = _mbs_media_info_to_openapi(media_info);
+    cJSON *json = OpenAPI_mbs_media_info_convertToJSON(api_info);
+    OpenAPI_mbs_media_info_free(api_info);
+    return json;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

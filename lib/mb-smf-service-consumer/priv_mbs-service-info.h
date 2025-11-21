@@ -17,12 +17,19 @@
 extern "C" {
 #endif
 
+typedef struct ogs_list_s ogs_list_t;
+typedef struct cJSON cJSON;
+typedef struct OpenAPI_mbs_service_info_s OpenAPI_mbs_service_info_t;
+
 /* Library internal mbs_service_info methods (protected) */
 mb_smf_sc_mbs_service_info_t *_mbs_service_info_new();
 void _mbs_service_info_free(mb_smf_sc_mbs_service_info_t *mbs_service_info);
 void _mbs_service_info_clear(mb_smf_sc_mbs_service_info_t *mbs_service_info);
 void _mbs_service_info_copy(mb_smf_sc_mbs_service_info_t **dst, const mb_smf_sc_mbs_service_info_t *src);
 bool _mbs_service_info_equal(const mb_smf_sc_mbs_service_info_t *a, const mb_smf_sc_mbs_service_info_t *b);
+ogs_list_t *_mbs_service_info_patch_list(const mb_smf_sc_mbs_service_info_t *a, const mb_smf_sc_mbs_service_info_t *b);
+OpenAPI_mbs_service_info_t *_mbs_service_info_to_openapi(const mb_smf_sc_mbs_service_info_t *mbs_service_info);
+cJSON *_mbs_service_info_to_json(const mb_smf_sc_mbs_service_info_t *mbs_service_info);
 
 #ifdef __cplusplus
 }

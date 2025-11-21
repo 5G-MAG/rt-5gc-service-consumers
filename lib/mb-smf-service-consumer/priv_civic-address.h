@@ -17,12 +17,28 @@
 extern "C" {
 #endif
 
+typedef struct ogs_list_s ogs_list_t;
+typedef struct cJSON cJSON;
+typedef struct OpenAPI_list_s OpenAPI_list_t;
+typedef struct OpenAPI_civic_address_s OpenAPI_civic_address_t;
+
 /* Library internal civic_address methods (protected) */
+void _civic_addresses_free(ogs_list_t *civic_addresses);
+void _civic_addresses_clear(ogs_list_t *civic_addresses);
+void _civic_addresses_copy(ogs_list_t **dst, const ogs_list_t *src);
+bool _civic_addresses_equal(const ogs_list_t *a, const ogs_list_t *b);
+ogs_list_t *_civic_addresses_patch_list(const ogs_list_t *a, const ogs_list_t *b);
+OpenAPI_list_t *_civic_addresses_to_openapi(const ogs_list_t *civic_addresses);
+cJSON *_civic_addresses_to_json(const ogs_list_t *civic_addresses);
+
 mb_smf_sc_civic_address_t *_civic_address_new();
 void _civic_address_free(mb_smf_sc_civic_address_t *civic_address);
 void _civic_address_clear(mb_smf_sc_civic_address_t *civic_address);
 void _civic_address_copy(mb_smf_sc_civic_address_t **dst, const mb_smf_sc_civic_address_t *src);
 bool _civic_address_equal(const mb_smf_sc_civic_address_t *a, const mb_smf_sc_civic_address_t *b);
+ogs_list_t *_civic_address_patch_list(const mb_smf_sc_civic_address_t *a, const mb_smf_sc_civic_address_t *b);
+OpenAPI_civic_address_t *_civic_address_to_openapi(const mb_smf_sc_civic_address_t *civic_address);
+cJSON *_civic_address_to_json(const mb_smf_sc_civic_address_t *civic_address);
 
 #ifdef __cplusplus
 }

@@ -25,8 +25,27 @@ mb_smf_test_libs = []
 nmbsmf_builders_src = files('''
     nmbsmf-builders.c
 
+    lib-arp.c
+    lib-associated-session-id.c
+    lib-civic-address.c
+    lib-ext-mbs-service-area.c
+    lib-flow-description.c
+    lib-geographic-area.c
+    lib-geographic-coordinate.c
+    lib-json-patch.c
+    lib-mbs-fsa-id.c
+    lib-mbs-media-comp.c
+    lib-mbs-media-info.c
+    lib-mbs-qos-req.c
+    lib-mbs-service-area.c
+    lib-mbs-service-info.c
+    lib-ncgi.c
+    lib-ncgi-tai.c
     lib-nmbsmf-mbs-session-build.c
     lib-nmbsmf-tmgi-build.c
+    lib-ssm-addr.c
+    lib-tai.c
+    lib-tmgi.c
     lib-utils.c
     ogs-openapi-model-status_subscribe_req_data.c
 '''.split())

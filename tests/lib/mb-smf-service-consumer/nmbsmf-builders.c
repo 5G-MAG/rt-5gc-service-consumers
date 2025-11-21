@@ -1,7 +1,7 @@
 /*
  * License: 5G-MAG Public License (v1.0)
  * Copyright: (C) 2025 British Broadcasting Corporation
- * Author(s): David Waring <david.waring2@bbc.co.uk> 
+ * Author(s): David Waring <david.waring2@bbc.co.uk>
  *
  * For full license terms please see the LICENSE file distributed with this
  * program. If this file is missing then the license can be retrieved from
@@ -16,11 +16,13 @@
 #include "openapi/model/create_req_data.h"
 #include "openapi/model/status_subscribe_req_data.h"
 
+#include "priv_associated-session-id.h"
 #include "priv_civic-address.h"
 #include "priv_flow-description.h"
 #include "priv_ncgi-tai.h"
 #include "priv_ncgi.h"
 #include "priv_tai.h"
+#include "priv_mbs-fsa-id.h"
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
 #include "priv_ssm-addr.h"
@@ -34,6 +36,11 @@
 
 #include "unit-test.h"
 
+static cJSON *__activity_status_to_cJSON(mb_smf_sc_activity_status_e act_status);
+static bool __string_equal(const char *a, const char *b);
+static bool __ogs_time_equal(const ogs_time_t *a, const ogs_time_t *b);
+static bool __snssai_equal(const ogs_s_nssai_t *a, const ogs_s_nssai_t *b);
+
 /* fake context.c functions */
 const ogs_sockaddr_t *_context_get_notification_address()
 {
@@ -46,31 +53,25 @@ const ogs_sockaddr_t *_context_get_notification_address()
     return &loopback;
 }
 
-/* fake tmgi.c functions */
+static OGS_LIST(__tmgis);
 
-void _tmgi_free(_priv_tmgi_t *tmgi)
+bool _context_add_tmgi(_priv_tmgi_t *tmgi)
 {
-    if (tmgi) {
-        if (tmgi->tmgi.mbs_service_id) ogs_free(tmgi->tmgi.mbs_service_id);
-        if (tmgi->cache) {
-            if (tmgi->cache->repr) ogs_free(tmgi->cache->repr);
-            ogs_free(tmgi->cache);
-        }
-        ogs_free(tmgi);
-    }
+    if (!tmgi) return false;
+    ogs_list_add(&__tmgis, _priv_tmgi_to_private_lnode(tmgi));
+    return true;
 }
 
-OpenAPI_tmgi_t *_tmgi_to_openapi_type(const _priv_tmgi_t *tmgi)
+bool _context_remove_tmgi(_priv_tmgi_t *tmgi)
 {
-    if (!tmgi) return NULL;
+    if (!tmgi) return false;
+    ogs_list_remove(&__tmgis, _priv_tmgi_to_private_lnode(tmgi));
+    return true;
+}
 
-    char *mbs_service_id = NULL;
-    if (tmgi->tmgi.mbs_service_id) mbs_service_id = ogs_strdup(tmgi->tmgi.mbs_service_id);
-
-    OpenAPI_plmn_id_t *plmn = OpenAPI_plmn_id_create(ogs_plmn_id_mcc_string(&tmgi->tmgi.plmn),
-                                                     ogs_plmn_id_mnc_string(&tmgi->tmgi.plmn));
-
-    return OpenAPI_tmgi_create(mbs_service_id, plmn);
+const ogs_list_t *_context_tmgis()
+{
+    return &__tmgis;
 }
 
 /* fake mbs-session.c functions */
@@ -100,15 +101,282 @@ void _mbs_session_free(_priv_mbs_session_t *session)
             _mbs_status_subscription_free(node);
         }
         if (session->id) ogs_free(session->id);
-        if (session->session.ssm) ogs_free(session->session.ssm);
-        if (session->session.tmgi) ogs_free(session->session.tmgi);
+        _mbs_session_public_clear(&session->session);
         ogs_free(session);
     }
 }
 
+void _mbs_session_public_clear(mb_smf_sc_mbs_session_t *session)
+{
+    if (!session) return;
+
+    if (session->ssm) {
+        ogs_free(session->ssm);
+        session->ssm = NULL;
+    }
+
+    /* session->tmgi: TMGI held elsewhere in context, don't free here */
+    session->tmgi = NULL;
+    session->tmgi_req = true;
+
+    if (session->mb_upf_udp_tunnel) {
+        ogs_freeaddrinfo(session->mb_upf_udp_tunnel);
+        session->mb_upf_udp_tunnel = NULL;
+    }
+
+    if (session->area_session_id) {
+        ogs_free(session->area_session_id);
+        session->area_session_id = NULL;
+    }
+
+    _mbs_service_area_free(session->mbs_service_area);
+    session->mbs_service_area = NULL;
+
+    _ext_mbs_service_area_free(session->ext_mbs_service_area);
+    session->ext_mbs_service_area = NULL;
+
+    if (session->dnn) {
+        ogs_free(session->dnn);
+        session->dnn = NULL;
+    }
+
+    if (session->snssai) {
+        ogs_free(session->snssai);
+        session->snssai = NULL;
+    }
+
+    if (session->start_time) {
+        ogs_free(session->start_time);
+        session->start_time = NULL;
+    }
+
+    if (session->termination_time) {
+        ogs_free(session->termination_time);
+        session->termination_time = NULL;
+    }
+
+    _mbs_service_info_free(session->mbs_service_info);
+    session->mbs_service_info = NULL;
+
+    _mbs_fsa_ids_clear(&session->mbs_fsa_ids);
+
+    _associated_session_id_free(session->associated_session_id);
+    session->associated_session_id = NULL;
+}
+
+ogs_list_t *_mbs_session_public_patch_list(const mb_smf_sc_mbs_session_t *a, const mb_smf_sc_mbs_session_t *b)
+{
+    ogs_list_t *patches = NULL;
+
+    if (a != b) {
+        /* add patches for changed fields for changing a to b */
+        if (!a) {
+            /* completely new (shouldn't happen for an update) */
+            ogs_error("Attempt to update an MBS Session when create should be used");
+            return NULL;
+        }
+
+        if (!b) {
+            /* completely remove (shouldn't happen for an update) */
+            ogs_error("Attempt to update an MBS Session when delete should be used");
+            return NULL;
+        }
+#define FIELD_NOT_UPDATEABLE(field, name) \
+        do { \
+            if (a->field != b->field) { \
+                ogs_warn("Attempt to update MBS Session " name " is ignored"); \
+            } \
+        } while (0)
+#define FIELD_STRUCT_NOT_UPDATEABLE(field, name, equalfn) \
+        do { \
+            if (!equalfn(a->field, b->field)) { \
+                ogs_warn("Attempt to update MBS Session " name " is ignored"); \
+            } \
+        } while (0)
+#define FIELD_INLINE_NOT_UPDATEABLE(field, name, equalfn) \
+        do { \
+            if (!equalfn(&a->field, &b->field)) { \
+                ogs_warn("Attempt to update MBS Session " name " is ignored"); \
+            } \
+        } while (0)
+#define PATCH_FIELD(field, attribute, jsonfn) \
+        do { \
+            if (a->field != b->field) { \
+                _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_replace, "/" attribute, jsonfn(b->field)); \
+                if (!patches) patches = (ogs_list_t*)ogs_calloc(1,sizeof(*patches)); \
+                ogs_list_add(patches, patch); \
+            } \
+        } while (0)
+#define PATCH_NULLABLE_FIELD(field, attribute, jsonfn, nullval) \
+        do { \
+            if (a->field != b->field) { \
+                _json_patch_t *patch = NULL; \
+                if (a->field == nullval) { \
+                    patch = _json_patch_new(OpenAPI_patch_operation_add, "/" attribute, jsonfn(b->field)); \
+                } else if (b->field == nullval) { \
+                    patch = _json_patch_new(OpenAPI_patch_operation__remove, "/" attribute, NULL); \
+                } else { \
+                    patch = _json_patch_new(OpenAPI_patch_operation_replace, "/" attribute, jsonfn(b->field)); \
+                } \
+                if (!patches) patches = (ogs_list_t*)ogs_calloc(1,sizeof(*patches)); \
+                ogs_list_add(patches, patch); \
+            } \
+        } while (0)
+#define PATCH_INLINE_FIELD(field, attribute, listfn) \
+        do { \
+            patches = _json_patches_append_list(patches, listfn(&a->field, &b->field), "/" attribute); \
+        } while(0)
+#define APPEND_PATCH_LIST(field, attribute, listfn) \
+        do { \
+            patches = _json_patches_append_list(patches, listfn(a->field, b->field), "/" attribute); \
+        } while (0)
+#define APPEND_INLINE_PATCH_LIST(field, attribute, listfn) \
+        do { \
+            patches = _json_patches_append_list(patches, listfn(&a->field, &b->field), "/" attribute); \
+        } while (0)
+
+        FIELD_NOT_UPDATEABLE(service_type, "service type");
+        FIELD_STRUCT_NOT_UPDATEABLE(ssm, "SSM", _ssm_addr_equal);
+        FIELD_STRUCT_NOT_UPDATEABLE(tmgi, "TMGI", mb_smf_sc_tmgi_equal);
+        /* mb_upf_udp_tunnel is read-only */
+        FIELD_NOT_UPDATEABLE(tunnel_req, "request udp tunnel flag");
+        FIELD_NOT_UPDATEABLE(tmgi_req, "request TMGI flag");
+        FIELD_NOT_UPDATEABLE(location_dependent, "location dependant flag");
+        FIELD_NOT_UPDATEABLE(any_ue_ind, "any UE indicator flag");
+        PATCH_FIELD(contact_pcf_ind, "contactPcfInd", cJSON_CreateBool);
+        /* area_session_id is read-only */
+        APPEND_PATCH_LIST(mbs_service_area, "mbsServiceArea", _mbs_service_area_patch_list);
+        APPEND_PATCH_LIST(ext_mbs_service_area, "extMbsServiceArea", _ext_mbs_service_area_patch_list);
+        FIELD_STRUCT_NOT_UPDATEABLE(dnn, "DNN", __string_equal);
+        FIELD_STRUCT_NOT_UPDATEABLE(snssai, "S-NSSAI", __snssai_equal);
+        FIELD_STRUCT_NOT_UPDATEABLE(start_time, "start time", __ogs_time_equal);
+        FIELD_STRUCT_NOT_UPDATEABLE(termination_time, "termination time", __ogs_time_equal);
+        APPEND_PATCH_LIST(mbs_service_info, "mbsServiceInfo", _mbs_service_info_patch_list);
+        if (a->service_type == MBS_SERVICE_TYPE_BROADCAST) {
+            FIELD_NOT_UPDATEABLE(activity_status, "activity status");
+            APPEND_INLINE_PATCH_LIST(mbs_fsa_ids, "mbsFsaIds", _mbs_fsa_ids_patch_list);
+        } else {
+            PATCH_NULLABLE_FIELD(activity_status, "activityStatus", __activity_status_to_cJSON, MBS_SESSION_ACTIVITY_STATUS_NONE);
+            FIELD_INLINE_NOT_UPDATEABLE(mbs_fsa_ids, "MBS FSA Ids", _mbs_fsa_ids_equal);
+        }
+        /* associated_session_id not present in current Open5GS model */
+
+#undef FIELD_NOT_UPDATEABLE
+#undef FIELD_STRUCT_NOT_UPDATEABLE
+#undef FIELD_INLINE_NOT_UPDATEABLE
+#undef PATCH_FIELD
+#undef PATCH_NULLABLE_FIELD
+#undef PATCH_INLINE_FIELD
+#undef APPEND_PATCH_LIST
+#undef APPEND_INLINE_PATCH_LIST
+    }
+
+    return patches;
+}
+
 ogs_list_t *_mbs_session_patch_list(const _priv_mbs_session_t *session)
 {
-    return NULL;
+    return _mbs_session_public_patch_list(session->previous_session, &session->session);
+}
+
+void _mbs_session_public_copy(mb_smf_sc_mbs_session_t **dest, const mb_smf_sc_mbs_session_t * const src)
+{
+    if (!src) {
+        if (*dest) {
+            _mbs_session_public_clear(*dest);
+            ogs_free(*dest);
+            *dest = NULL;
+        }
+        return;
+    }
+
+    if (!*dest) {
+        *dest = (mb_smf_sc_mbs_session_t*)ogs_calloc(1, sizeof(**dest));
+    }
+
+    mb_smf_sc_mbs_session_t *dst = *dest;
+
+    /* copy service type */
+    dst->service_type = src->service_type;
+
+    /* copy SSM */
+    if (src->ssm) {
+        if (!dst->ssm) {
+            dst->ssm = (mb_smf_sc_ssm_addr_t*)ogs_calloc(1, sizeof(*dst->ssm));
+        }
+        memcpy(dst->ssm, src->ssm, sizeof(*dst->ssm));
+    } else {
+        if (dst->ssm) {
+            ogs_free(dst->ssm);
+            dst->ssm = NULL;
+        }
+    }
+
+    /* copy TMGI (we don't own, so copying pointer is fine) */
+    dst->tmgi = src->tmgi;
+
+    /* copy UDP tunnel */
+    if (dst->mb_upf_udp_tunnel) ogs_freeaddrinfo(dst->mb_upf_udp_tunnel);
+    ogs_copyaddrinfo(&dst->mb_upf_udp_tunnel, src->mb_upf_udp_tunnel);
+
+    /* copy tunnel request flag */
+    dst->tunnel_req = src->tunnel_req;
+
+    /* copy tmgi request flag */
+    dst->tmgi_req = src->tmgi_req;
+
+    /* copy location dependent flag */
+    dst->location_dependent = src->location_dependent;
+
+    /* copy any ue indicator flag */
+    dst->any_ue_ind = src->any_ue_ind;
+
+    /* copy contact PCF on update flag */
+    dst->contact_pcf_ind = src->contact_pcf_ind;
+
+    /* copy area session id */
+    dst->area_session_id = src->area_session_id;
+
+    /* copy mbs service area lists */
+    _mbs_service_area_copy(&dst->mbs_service_area, src->mbs_service_area);
+
+    /* copy external mbs service area lists */
+    _ext_mbs_service_area_copy(&dst->ext_mbs_service_area, src->ext_mbs_service_area);
+
+    /* copy dnn */
+    if (dst->dnn) {
+        ogs_free(dst->dnn);
+        dst->dnn = NULL;
+    }
+    if (src->dnn) dst->dnn = ogs_strdup(src->dnn);
+
+    /* copy snssai */
+    if (src->snssai) {
+        if (!dst->snssai) dst->snssai = (ogs_s_nssai_t*)ogs_calloc(1, sizeof(*dst->snssai));
+        dst->snssai->sst = src->snssai->sst;
+        dst->snssai->sd = src->snssai->sd;
+    } else {
+        if (dst->snssai) {
+            ogs_free(dst->snssai);
+            dst->snssai = NULL;
+        }
+    }
+
+    /* copy start_time & termination_time */
+    dst->start_time = src->start_time;
+    dst->termination_time = dst->termination_time;
+
+    /* copy mbs service info */
+    _mbs_service_info_copy(&dst->mbs_service_info, src->mbs_service_info);
+
+    /* copy activity status */
+    dst->activity_status = src->activity_status;
+
+    /* copy MBS FSA IDs */
+    _mbs_fsa_ids_copy(&dst->mbs_fsa_ids, &src->mbs_fsa_ids);
+
+    /* copy associated session id */
+    _associated_session_id_copy(&dst->associated_session_id, src->associated_session_id);
 }
 
 OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t *session)
@@ -352,13 +620,13 @@ static bool test_create_sess(unit_test_ctx *ctx)
     }
     cJSON *json = cJSON_Parse(req->http.content);
     if (!json) {
-        fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON");
+        fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON\n");
         return false;
     }
     OpenAPI_create_req_data_t *create_req_data = OpenAPI_create_req_data_parseFromJSON(json);
     cJSON_Delete(json);
     if (!create_req_data) {
-        fprintf(stderr, "expected req->http.content to be valid 3GPP CreateReqData JSON, could not parse JSON as a CreateReqData object");
+        fprintf(stderr, "expected req->http.content to be valid 3GPP CreateReqData JSON, could not parse JSON as a CreateReqData object\n");
         return false;
     }
     UT_PTR_NOT_NULL(create_req_data->mbs_session);
@@ -401,20 +669,20 @@ static bool test_create_sess_with_subsc(unit_test_ctx *ctx)
     }
     cJSON *json = cJSON_Parse(req->http.content);
     if (!json) {
-        fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON");
+        fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON\n");
         return false;
     }
     OpenAPI_create_req_data_t *create_req_data = OpenAPI_create_req_data_parseFromJSON(json);
     cJSON_Delete(json);
     if (!create_req_data) {
-        fprintf(stderr, "expected req->http.content to be valid 3GPP CreateReqData JSON, could not parse JSON as a CreateReqData object");
+        fprintf(stderr, "expected req->http.content to be valid 3GPP CreateReqData JSON, could not parse JSON as a CreateReqData object\n");
         return false;
     }
     UT_PTR_NOT_NULL(create_req_data->mbs_session);
     UT_BOOL_FALSE(create_req_data->mbs_session->is_any_ue_ind);
     UT_ENUM_EQUAL(create_req_data->mbs_session->service_type, OpenAPI_mbs_service_type_BROADCAST);
     UT_ENUM_EQUAL(create_req_data->mbs_session->activity_status, OpenAPI_mbs_session_activity_status_NULL);
-    
+
     UT_PTR_NOT_NULL(create_req_data->mbs_session->mbs_session_subsc);
     UT_STR_EQUAL(create_req_data->mbs_session->mbs_session_subsc->notify_correlation_id, "test-correlation-id");
     UT_STR_BEGINS_WITH(create_req_data->mbs_session->mbs_session_subsc->notify_uri, "http://");
@@ -577,16 +845,16 @@ static bool test_create_sess_all_fields(unit_test_ctx *ctx)
 
     cJSON *json = cJSON_Parse(req->http.content);
     if (!json) {
-        fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON");
+        fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON\n");
         return false;
     }
     OpenAPI_create_req_data_t *create_req_data = OpenAPI_create_req_data_parseFromJSON(json);
     cJSON_Delete(json);
     if (!create_req_data) {
-        fprintf(stderr, "expected req->http.content to be valid 3GPP CreateReqData JSON, could not parse JSON as a CreateReqData object");
+        fprintf(stderr, "expected req->http.content to be valid 3GPP CreateReqData JSON, could not parse JSON as a CreateReqData object\n");
         return false;
     }
-    
+
     UT_PTR_NOT_NULL(create_req_data->mbs_session);
 
     UT_ENUM_EQUAL(create_req_data->mbs_session->service_type, OpenAPI_mbs_service_type_MULTICAST);
@@ -739,7 +1007,71 @@ static bool test_create_sess_all_fields(unit_test_ctx *ctx)
 
 static bool test_update_sess(unit_test_ctx *ctx)
 {
-    // TODO: Implement once update builder implemented in the library
+    _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
+    session->id = ogs_strdup(FAKE_SESSION_ID);
+    session->session.service_type = MBS_SERVICE_TYPE_MULTICAST;
+    _mbs_session_public_copy(&session->previous_session, &session->session);
+
+    session->session.activity_status = MBS_SESSION_ACTIVITY_STATUS_ACTIVE;
+
+    ogs_sbi_request_t *req = _nmbsmf_mbs_session_build_update((void*)session, NULL);
+
+    UT_STR_EQUAL(req->h.method, OGS_SBI_HTTP_METHOD_PATCH);
+    if (!req->h.uri) {
+        UT_STR_EQUAL(req->h.service.name, OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION);
+        UT_STR_EQUAL(req->h.api.version, OGS_SBI_API_V1);
+        UT_STR_EQUAL(req->h.resource.component[0], OGS_SBI_RESOURCE_NAME_MBS_SESSIONS);
+        UT_STR_EQUAL(req->h.resource.component[1], FAKE_SESSION_ID);
+        UT_STR_NULL(req->h.resource.component[2]);
+    } else {
+        UT_STR_MATCHES(req->h.uri, "^https?://(?:[a-zA-Z0-9.]*|\\[[0-9A-Fa-f:]*\\])(?::[1-9][0-9]*)?/" OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION "/" OGS_SBI_API_V1 "/" OGS_SBI_RESOURCE_NAME_MBS_SESSIONS "/" FAKE_SESSION_ID "$");
+    }
+
+    cJSON *json = cJSON_Parse(req->http.content);
+    if (!json) {
+        fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON\n");
+        return false;
+    }
+
+    if (!cJSON_IsArray(json)) {
+        fprintf(stderr, "expected req->http.content to be a JSON array\n");
+        return false;
+    }
+
+    cJSON *item;
+    size_t count = 0;
+    cJSON_ArrayForEach(item, json) {
+        count++;
+        if (!cJSON_IsObject(item)) {
+            fprintf(stderr, "expected req->http.content to be a JSON array of objects\n");
+            return false;
+        }
+
+        OpenAPI_patch_item_t *patch_item = OpenAPI_patch_item_parseFromJSON(item);
+        if (!patch_item) {
+            fprintf(stderr, "expected req->http.content to be a JSON array of patch objects\n");
+            return false;
+        }
+
+        if (count == 1) {
+            UT_ENUM_EQUAL(patch_item->op, OpenAPI_patch_operation_add);
+            UT_STR_EQUAL(patch_item->path, "/activityStatus");
+            UT_PTR_NOT_NULL(patch_item->value);
+            UT_PTR_NOT_NULL(patch_item->value->json);
+            if (!cJSON_IsString(patch_item->value->json)) {
+                fprintf(stderr, "expected patch_item->value->json to be a string value\n");
+                return false;
+            }
+            const char *value = cJSON_GetStringValue(patch_item->value->json);
+            UT_STR_EQUAL(value, "ACTIVE");
+        }
+    }
+
+    if (count != 1) {
+        fprintf(stderr, "expected 1 JSON patch, got %zu\n", count);
+        return false;
+    }
+
     return true;
 }
 
@@ -802,16 +1134,16 @@ static bool test_create_status_subsc(unit_test_ctx *ctx)
     } else {
         UT_STR_MATCHES(req->h.uri, "^https?://(?:[a-zA-Z0-9.]*|\\[[0-9A-Fa-f:]*\\])(?::[1-9][0-9]*)?/" OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION "/" OGS_SBI_API_V1 "/" OGS_SBI_RESOURCE_NAME_MBS_SESSIONS "/" OGS_SBI_RESOURCE_NAME_SUBSCRIPTIONS "$");
     }
-    
+
     cJSON *json = cJSON_Parse(req->http.content);
     if (!json) {
-        fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON");
+        fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON\n");
         return false;
     }
     OpenAPI_status_subscribe_req_data_t *status_subsc_req_data = OpenAPI_status_subscribe_req_data_parseFromJSON(json);
     cJSON_Delete(json);
     if (!status_subsc_req_data) {
-        fprintf(stderr, "expected req->http.content to be valid 3GPP StatusSubscribeReqData JSON, could not parse JSON as a StatusSubscribeReqData object");
+        fprintf(stderr, "expected req->http.content to be valid 3GPP StatusSubscribeReqData JSON, could not parse JSON as a StatusSubscribeReqData object\n");
         return false;
     }
     /* StatusSubscribeReqData.subscription */
@@ -863,7 +1195,7 @@ static bool test_create_status_subsc(unit_test_ctx *ctx)
 
 static bool test_update_status_subsc(unit_test_ctx *ctx)
 {
-    fprintf(stderr, "TODO: implement update builder test for MBS Session Status Subscriptions");
+    fprintf(stderr, "TODO: implement update builder test for MBS Session Status Subscriptions\n");
     return true;
 }
 
@@ -875,7 +1207,7 @@ static bool test_delete_status_subsc(unit_test_ctx *ctx)
     session->session.ssm->family = AF_INET;
     session->session.ssm->source.ipv4.s_addr = htonl(0xc0a80001); /* 192.168.0.1 */
     session->session.ssm->dest_mc.ipv4.s_addr = htonl(0xe8000001); /* 232.0.0.1 */
-  
+
     _priv_mbs_status_subscription_t *subsc = (_priv_mbs_status_subscription_t*)ogs_calloc(1, sizeof(*subsc));
     subsc->id = ogs_strdup(FAKE_SUBSCRIPTION_ID);
     subsc->cache = ogs_calloc(1, sizeof(*subsc->cache));
@@ -907,6 +1239,40 @@ static bool test_delete_status_subsc(unit_test_ctx *ctx)
     return true;
 }
 
+static cJSON *__activity_status_to_cJSON(mb_smf_sc_activity_status_e act_status)
+{
+    switch (act_status) {
+    case MBS_SESSION_ACTIVITY_STATUS_ACTIVE:
+        return cJSON_CreateString("ACTIVE");
+    case MBS_SESSION_ACTIVITY_STATUS_INACTIVE:
+        return cJSON_CreateString("INACTIVE");
+    default:
+        break;
+    }
+    return cJSON_CreateNull();
+}
+
+static bool __string_equal(const char *a, const char *b)
+{
+    if (a == b) return true;
+    if (!a || !b) return false;
+    return strcmp(a,b) == 0;
+}
+
+static bool __ogs_time_equal(const ogs_time_t *a, const ogs_time_t *b)
+{
+    if (a == b) return true;
+    if (!a || !b) return false;
+    return *a == *b;
+}
+
+static bool __snssai_equal(const ogs_s_nssai_t *a, const ogs_s_nssai_t *b)
+{
+    if (a == b) return true;
+    if (!a || !b) return false;
+
+    return a->sst == b->sst && a->sd.v == b->sd.v;
+}
 
 /** Test descriptors **/
 

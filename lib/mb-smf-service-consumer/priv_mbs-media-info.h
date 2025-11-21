@@ -19,12 +19,19 @@
 extern "C" {
 #endif
 
+typedef struct cJSON cJSON;
+typedef struct OpenAPI_mbs_media_info_s OpenAPI_mbs_media_info_t;
+typedef struct ogs_list_s ogs_list_t;
+
 /* Library internal mbs_media_info methods (protected) */
 mb_smf_sc_mbs_media_info_t *_mbs_media_info_new();
 void _mbs_media_info_free(mb_smf_sc_mbs_media_info_t *mbs_media_info);
 void _mbs_media_info_clear(mb_smf_sc_mbs_media_info_t *mbs_media_info);
 void _mbs_media_info_copy(mb_smf_sc_mbs_media_info_t **dst, const mb_smf_sc_mbs_media_info_t *src);
 bool _mbs_media_info_equal(const mb_smf_sc_mbs_media_info_t *a, const mb_smf_sc_mbs_media_info_t *b);
+ogs_list_t *_mbs_media_info_patch_list(const mb_smf_sc_mbs_media_info_t *a, const mb_smf_sc_mbs_media_info_t *b);
+OpenAPI_mbs_media_info_t *_mbs_media_info_to_openapi(const mb_smf_sc_mbs_media_info_t *mbs_media_info);
+cJSON *_mbs_media_info_to_json(const mb_smf_sc_mbs_media_info_t *mbs_media_info);
 
 #ifdef __cplusplus
 }

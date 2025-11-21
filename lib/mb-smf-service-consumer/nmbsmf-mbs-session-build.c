@@ -20,17 +20,18 @@
 #include "priv_arp.h"
 #include "priv_ncgi-tai.h"
 #include "priv_ncgi.h"
-#include "priv_flow-description.h"
 #include "priv_tai.h"
 #include "priv_mbs-session.h"
-#include "priv_mbs-status-subscription.h"
 #include "priv_civic-address.h"
 #include "priv_ext-mbs-service-area.h"
-#include "priv_mbs-service-area.h"
-#include "priv_mbs-service-info.h"
+#include "priv_flow-description.h"
+#include "priv_mbs-fsa-id.h"
 #include "priv_mbs-media-comp.h"
 #include "priv_mbs-media-info.h"
 #include "priv_mbs-qos-req.h"
+#include "priv_mbs-service-area.h"
+#include "priv_mbs-service-info.h"
+#include "priv_mbs-status-subscription.h"
 #include "utils.h"
 
 #include "nmbsmf-mbs-session-build.h"
@@ -44,7 +45,6 @@ static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *sess
 static ogs_sbi_server_t *fixed_port_notifications = NULL;
 
 static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *session, bool for_update);
-static char *__bitrate_to_str(double bitrate);
 
 /* Library Internals */
 
@@ -149,8 +149,15 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_update(void *context, void *data)
     msg.h.resource.component[1] = session->id;
     msg.PatchItemList = OpenAPI_list_create();
 
-    /* TODO: populate the PatchItemList with operations for things that have changed */
-    ogs_warn("TODO: complete implementation of the MBS Session update builder");
+    ogs_list_t *patches = _mbs_session_patch_list(session);
+    if (patches) {
+        _json_patch_t *next, *patch;
+        ogs_list_for_each_safe(patches, next, patch) {
+            ogs_list_remove(patches, patch);
+            OpenAPI_list_add(msg.PatchItemList, patch->item);
+            ogs_free(patch);
+        }
+    }
 
     ogs_sbi_request_t *req = ogs_sbi_build_request(&msg);
     ogs_expect(req);
@@ -444,94 +451,14 @@ static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *se
         ogs_list_count(&session->session.mbs_service_area->ncgi_tais) +
                 ogs_list_count(&session->session.mbs_service_area->tais) > 0
        ) {
-        mbs_service_area = OpenAPI_mbs_service_area_create(NULL, NULL);
-        if (ogs_list_count(&session->session.mbs_service_area->ncgi_tais) > 0) {
-            mbs_service_area->ncgi_list = OpenAPI_list_create();
-            /* copy ncgi_tais array over to OpenAPI structures */
-            mb_smf_sc_ncgi_tai_t *ncgi_tai;
-            ogs_list_for_each(&session->session.mbs_service_area->ncgi_tais, ncgi_tai) {
-                OpenAPI_tai_t *api_tai = OpenAPI_tai_create(ogs_sbi_build_plmn_id(&ncgi_tai->tai.plmn_id),
-                                                            _uint32_to_hex_str(ncgi_tai->tai.tac, 4, 6),
-                                                            ncgi_tai->tai.nid?_uint64_to_hex_str(*ncgi_tai->tai.nid, 11, 11):NULL);
-                OpenAPI_list_t *api_cell_list = NULL;
-                mb_smf_sc_ncgi_t *ncgi;
-                ogs_list_for_each(&ncgi_tai->ncgis, ncgi) {
-                    if (!api_cell_list) api_cell_list = OpenAPI_list_create();
-                    OpenAPI_ncgi_t *api_ncgi = OpenAPI_ncgi_create(ogs_sbi_build_plmn_id(&ncgi->plmn_id),
-                                                                   _uint64_to_hex_str(ncgi->nr_cell_id, 9, 9),
-                                                                   ncgi->nid?_uint64_to_hex_str(*ncgi->nid, 11, 11):NULL);
-                    OpenAPI_list_add(api_cell_list, api_ncgi);
-                }
-                OpenAPI_ncgi_tai_t *api_ncgi_tai = OpenAPI_ncgi_tai_create(api_tai, api_cell_list);
-                OpenAPI_list_add(mbs_service_area->ncgi_list, api_ncgi_tai);
-            }
-        }
-        if (ogs_list_count(&session->session.mbs_service_area->tais) > 0) {
-            mbs_service_area->tai_list = OpenAPI_list_create();
-            /* copy tais array over to OpenAPI structures */
-            mb_smf_sc_tai_t *tai;
-            ogs_list_for_each(&session->session.mbs_service_area->tais, tai) {
-                OpenAPI_tai_t *api_tai = OpenAPI_tai_create(ogs_sbi_build_plmn_id(&tai->plmn_id),
-                                                            _uint32_to_hex_str(tai->tac, 4, 6),
-                                                            tai->nid?_uint64_to_hex_str(*tai->nid, 11, 11):NULL);
-                OpenAPI_list_add(mbs_service_area->tai_list, api_tai);
-            }
-        }
+        mbs_service_area = _mbs_service_area_to_openapi(session->session.mbs_service_area);
     }
 
     if (session->session.ext_mbs_service_area &&
         ogs_list_count(&session->session.ext_mbs_service_area->geographic_areas) +
                 ogs_list_count(&session->session.ext_mbs_service_area->civic_addresses) > 0
        ) {
-        ext_mbs_service_area = OpenAPI_external_mbs_service_area_create(NULL,NULL);
-        if (ogs_list_count(&session->session.ext_mbs_service_area->geographic_areas) > 0) {
-            ext_mbs_service_area->geographic_area_list = OpenAPI_list_create();
-            /* TODO: copy array over to OpenAPI structures */
-        }
-        if (ogs_list_count(&session->session.ext_mbs_service_area->civic_addresses) > 0) {
-            ext_mbs_service_area->civic_address_list = OpenAPI_list_create();
-            /* copy civic_addresses array over to OpenAPI structures */
-            mb_smf_sc_civic_address_t *civic_addr;
-            ogs_list_for_each(&session->session.ext_mbs_service_area->civic_addresses, civic_addr) {
-                OpenAPI_civic_address_t *api_civic_addr = OpenAPI_civic_address_create(
-                    civic_addr->country?ogs_strdup(civic_addr->country):NULL,
-                    civic_addr->a[0]?ogs_strdup(civic_addr->a[0]):NULL,
-                    civic_addr->a[1]?ogs_strdup(civic_addr->a[1]):NULL,
-                    civic_addr->a[2]?ogs_strdup(civic_addr->a[2]):NULL,
-                    civic_addr->a[3]?ogs_strdup(civic_addr->a[3]):NULL,
-                    civic_addr->a[4]?ogs_strdup(civic_addr->a[4]):NULL,
-                    civic_addr->a[5]?ogs_strdup(civic_addr->a[5]):NULL,
-                    civic_addr->prd?ogs_strdup(civic_addr->prd):NULL,
-                    civic_addr->pod?ogs_strdup(civic_addr->pod):NULL,
-                    civic_addr->sts?ogs_strdup(civic_addr->sts):NULL,
-                    civic_addr->hno?ogs_strdup(civic_addr->hno):NULL,
-                    civic_addr->hns?ogs_strdup(civic_addr->hns):NULL,
-                    civic_addr->lmk?ogs_strdup(civic_addr->lmk):NULL,
-                    civic_addr->loc?ogs_strdup(civic_addr->loc):NULL,
-                    civic_addr->nam?ogs_strdup(civic_addr->nam):NULL,
-                    civic_addr->pc?ogs_strdup(civic_addr->pc):NULL,
-                    civic_addr->bld?ogs_strdup(civic_addr->bld):NULL,
-                    civic_addr->unit?ogs_strdup(civic_addr->unit):NULL,
-                    civic_addr->flr?ogs_strdup(civic_addr->flr):NULL,
-                    civic_addr->room?ogs_strdup(civic_addr->room):NULL,
-                    civic_addr->plc?ogs_strdup(civic_addr->plc):NULL,
-                    civic_addr->pcn?ogs_strdup(civic_addr->pcn):NULL,
-                    civic_addr->pobox?ogs_strdup(civic_addr->pobox):NULL,
-                    civic_addr->addcode?ogs_strdup(civic_addr->addcode):NULL,
-                    civic_addr->seat?ogs_strdup(civic_addr->seat):NULL,
-                    civic_addr->rd?ogs_strdup(civic_addr->rd):NULL,
-                    civic_addr->rdsec?ogs_strdup(civic_addr->rdsec):NULL,
-                    civic_addr->rdbr?ogs_strdup(civic_addr->rdbr):NULL,
-                    civic_addr->rdsubbr?ogs_strdup(civic_addr->rdsubbr):NULL,
-                    civic_addr->prm?ogs_strdup(civic_addr->prm):NULL,
-                    civic_addr->pom?ogs_strdup(civic_addr->pom):NULL,
-                    civic_addr->usage_rules?ogs_strdup(civic_addr->usage_rules):NULL,
-                    civic_addr->method?ogs_strdup(civic_addr->method):NULL,
-                    civic_addr->provided_by?ogs_strdup(civic_addr->provided_by):NULL
-                );
-                OpenAPI_list_add(ext_mbs_service_area->civic_address_list, api_civic_addr);
-            }
-        }
+        ext_mbs_service_area = _ext_mbs_service_area_to_openapi(session->session.ext_mbs_service_area);
     }
 
     if (session->session.snssai) {
@@ -546,113 +473,11 @@ static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *se
         term_time = ogs_sbi_gmtime_string(*session->session.termination_time);
     }
     if (session->session.mbs_service_info) {
-        OpenAPI_list_t *media_comps = NULL;
-        ogs_hash_index_t *idx = ogs_hash_index_make(session->session.mbs_service_info->mbs_media_comps);
-        ogs_hash_index_t *it = idx;
-        for (it = ogs_hash_next(it); it; it = ogs_hash_next(it)) {
-            mb_smf_sc_mbs_media_comp_t *media_comp = (mb_smf_sc_mbs_media_comp_t*)ogs_hash_this_val(it);
-            OpenAPI_list_t *api_flow_descs = NULL;
-            OpenAPI_mbs_media_info_t *api_mbs_media_info = NULL;
-            char *api_qos_ref = NULL;
-            OpenAPI_mbs_qo_s_req_t *api_mbs_qo_s_req = NULL;
-
-            if (media_comp->flow_descriptions) {
-                api_flow_descs = OpenAPI_list_create();
-                mb_smf_sc_flow_description_t *flow_desc;
-                ogs_list_for_each(media_comp->flow_descriptions, flow_desc) {
-                    OpenAPI_list_add(api_flow_descs, ogs_strdup(flow_desc->string));
-                }
-            }
-
-            if (media_comp->media_info) {
-                OpenAPI_list_t *api_codecs = NULL;
-                OpenAPI_media_type_e api_mbs_media_type = OpenAPI_media_type_NULL;
-                switch (media_comp->media_info->mbs_media_type) {
-                case MEDIA_TYPE_AUDIO:
-                    api_mbs_media_type = OpenAPI_media_type_AUDIO;
-                    break;
-                case MEDIA_TYPE_VIDEO:
-                    api_mbs_media_type = OpenAPI_media_type_VIDEO;
-                    break;
-                case MEDIA_TYPE_DATA:
-                    api_mbs_media_type = OpenAPI_media_type_DATA;
-                    break;
-                case MEDIA_TYPE_APPLICATION:
-                    api_mbs_media_type = OpenAPI_media_type_APPLICATION;
-                    break;
-                case MEDIA_TYPE_CONTROL:
-                    api_mbs_media_type = OpenAPI_media_type_CONTROL;
-                    break;
-                case MEDIA_TYPE_TEXT:
-                    api_mbs_media_type = OpenAPI_media_type_TEXT;
-                    break;
-                case MEDIA_TYPE_MESSAGE:
-                    api_mbs_media_type = OpenAPI_media_type_MESSAGE;
-                    break;
-                case MEDIA_TYPE_OTHER:
-                    api_mbs_media_type = OpenAPI_media_type_OTHER;
-                    break;
-                default:
-                    break;
-                }
-                if (media_comp->media_info->codecs[0]) {
-                    if (!api_codecs) api_codecs = OpenAPI_list_create();
-                    OpenAPI_list_add(api_codecs, ogs_strdup(media_comp->media_info->codecs[0]));
-                }
-                if (media_comp->media_info->codecs[1]) {
-                    if (!api_codecs) api_codecs = OpenAPI_list_create();
-                    OpenAPI_list_add(api_codecs, ogs_strdup(media_comp->media_info->codecs[1]));
-                }
-                api_mbs_media_info = OpenAPI_mbs_media_info_create(api_mbs_media_type,
-                                media_comp->media_info->max_requested_mbs_bandwidth_downlink?
-                                        __bitrate_to_str(*media_comp->media_info->max_requested_mbs_bandwidth_downlink):NULL,
-                                media_comp->media_info->min_requested_mbs_bandwidth_downlink?
-                                        __bitrate_to_str(*media_comp->media_info->min_requested_mbs_bandwidth_downlink):NULL,
-                                api_codecs);
-            } else if (media_comp->qos_ref) {
-                api_qos_ref = ogs_strdup(media_comp->qos_ref);
-            } else if (media_comp->mbs_qos_req) {
-                OpenAPI_arp_t *req_mbs_arp = NULL;
-                if (media_comp->mbs_qos_req->req_mbs_arp) {
-                    req_mbs_arp = OpenAPI_arp_create(!!media_comp->mbs_qos_req->req_mbs_arp->priority_level,
-                                                    media_comp->mbs_qos_req->req_mbs_arp->priority_level,
-                                                    media_comp->mbs_qos_req->req_mbs_arp->preemption_capability,
-                                                    media_comp->mbs_qos_req->req_mbs_arp->preemption_vulnerability);
-                }
-                api_mbs_qo_s_req = OpenAPI_mbs_qo_s_req_create(media_comp->mbs_qos_req->five_qi,
-                                media_comp->mbs_qos_req->guarenteed_bit_rate?
-                                        __bitrate_to_str(*media_comp->mbs_qos_req->guarenteed_bit_rate):NULL,
-                                media_comp->mbs_qos_req->max_bit_rate?
-                                        __bitrate_to_str(*media_comp->mbs_qos_req->max_bit_rate):NULL,
-                                !!media_comp->mbs_qos_req->averaging_window,
-                                media_comp->mbs_qos_req->averaging_window?*media_comp->mbs_qos_req->averaging_window:0,
-                                req_mbs_arp);
-            }
-
-            OpenAPI_mbs_media_comp_rm_t *api_media_comp = OpenAPI_mbs_media_comp_rm_create(media_comp->id, api_flow_descs,
-                                OpenAPI_reserv_priority_NULL + media_comp->mbs_sdf_reserve_priority,
-                                api_mbs_media_info, api_qos_ref, api_mbs_qo_s_req);
-            if (!media_comps) media_comps = OpenAPI_list_create();
-            OpenAPI_map_t *kv_pair = OpenAPI_map_create(ogs_msprintf("%i", api_media_comp->mbs_med_comp_num), api_media_comp);
-            OpenAPI_list_add(media_comps, kv_pair);
-        }
-        ogs_free(idx);
-        mbs_service_info = OpenAPI_mbs_service_info_create(media_comps, OpenAPI_reserv_priority_NULL, NULL, NULL);
-        if (session->session.mbs_service_info->mbs_sdf_reserve_priority != 0) {
-            mbs_service_info->mbs_sdf_res_prio =
-                                OpenAPI_reserv_priority_PRIO_1 + session->session.mbs_service_info->mbs_sdf_reserve_priority - 1;
-        }
-        if (session->session.mbs_service_info->af_app_id) {
-            mbs_service_info->af_app_id = ogs_strdup(session->session.mbs_service_info->af_app_id);
-        }
-        if (session->session.mbs_service_info->mbs_session_ambr) {
-            mbs_service_info->mbs_session_ambr = __bitrate_to_str(*session->session.mbs_service_info->mbs_session_ambr);
-        }
+        mbs_service_info = _mbs_service_info_to_openapi(session->session.mbs_service_info);
     }
 
     if (ogs_list_count(&session->session.mbs_fsa_ids) > 0) {
-        mbs_fsa_ids = OpenAPI_list_create();
-        /* TODO: copy array values to new structure */
+        mbs_fsa_ids = _mbs_fsa_ids_to_openapi(&session->session.mbs_fsa_ids);
     }
 
     ext_mbs_session = OpenAPI_ext_mbs_session_create(mbs_session_id, /* mbs_session_id */
@@ -685,28 +510,6 @@ static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *se
                                                      /* area_session_policy_id */
                                                     );
     return ext_mbs_session;
-}
-
-static char *__bitrate_to_str(double bitrate)
-{
-    double divisor = 1.0;
-    const char *units = "bps";
-
-    if (bitrate >= 1e12) {
-        divisor = 1e12;
-        units = "Tbps";
-    } else if (bitrate >= 1e9) {
-        divisor = 1e9;
-        units = "Gbps";
-    } else if (bitrate >= 1e6) {
-        divisor = 1e6;
-        units = "Mbps";
-    } else if (bitrate >= 1e3) {
-        divisor = 1e3;
-        units = "Kbps";
-    }
-
-    return ogs_msprintf("%.6f %s", bitrate/divisor, units);
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

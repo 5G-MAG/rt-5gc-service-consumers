@@ -17,12 +17,19 @@
 extern "C" {
 #endif
 
+typedef struct ogs_list_s ogs_list_t;
+typedef struct cJSON cJSON;
+typedef struct OpenAPI_external_mbs_service_area_s OpenAPI_external_mbs_service_area_t;
+
 /* Library internal ext_mbs_service_area methods (protected) */
 mb_smf_sc_ext_mbs_service_area_t *_ext_mbs_service_area_new();
 void _ext_mbs_service_area_free(mb_smf_sc_ext_mbs_service_area_t *ext_mbs_service_area);
 void _ext_mbs_service_area_clear(mb_smf_sc_ext_mbs_service_area_t *ext_mbs_service_area);
 void _ext_mbs_service_area_copy(mb_smf_sc_ext_mbs_service_area_t **dst, const mb_smf_sc_ext_mbs_service_area_t *src);
 bool _ext_mbs_service_area_equal(const mb_smf_sc_ext_mbs_service_area_t *a, const mb_smf_sc_ext_mbs_service_area_t *b);
+ogs_list_t *_ext_mbs_service_area_patch_list(const mb_smf_sc_ext_mbs_service_area_t *a, const mb_smf_sc_ext_mbs_service_area_t *b);
+OpenAPI_external_mbs_service_area_t *_ext_mbs_service_area_to_openapi(const mb_smf_sc_ext_mbs_service_area_t *ext_mbs_service_area);
+cJSON *_ext_mbs_service_area_to_json(const mb_smf_sc_ext_mbs_service_area_t *ext_mbs_service_area);
 
 #ifdef __cplusplus
 }

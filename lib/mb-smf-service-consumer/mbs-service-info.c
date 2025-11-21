@@ -10,9 +10,12 @@
 #include <stdint.h>
 
 #include "ogs-core.h"
+#include "ogs-sbi.h"
 
 #include "macros.h"
+#include "json-patch.h"
 #include "priv_mbs-media-comp.h"
+#include "utils.h"
 
 #include "mbs-service-info.h"
 #include "priv_mbs-service-info.h"
@@ -138,6 +141,100 @@ bool _mbs_service_info_equal(const mb_smf_sc_mbs_service_info_t *a, const mb_smf
     }
 
     return true;
+}
+
+ogs_list_t *_mbs_service_info_patch_list(const mb_smf_sc_mbs_service_info_t *a, const mb_smf_sc_mbs_service_info_t *b)
+{
+    ogs_list_t *patches = NULL;
+
+    if (a != b) {
+        if (!a) {
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_add, "/", _mbs_service_info_to_json(b));
+            patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        } else if (!b) {
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation__remove, "/", NULL);
+            patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        } else {
+            patches = _json_patches_append_list(patches, _mbs_media_comps_patch_list(a->mbs_media_comps, b->mbs_media_comps), "/mbsMediaComps");
+            if (a->mbs_sdf_reserve_priority != b->mbs_sdf_reserve_priority) {
+                _json_patch_t *patch = NULL;
+                if (!a->mbs_sdf_reserve_priority) {
+                    char *prio = ogs_msprintf("PRIO_%i", b->mbs_sdf_reserve_priority);
+                    patch = _json_patch_new(OpenAPI_patch_operation_add, "/mbsSdfResPrio", cJSON_CreateString(prio));
+                    ogs_free(prio);
+                } else if (!b->mbs_sdf_reserve_priority) {
+                    patch = _json_patch_new(OpenAPI_patch_operation__remove, "/mbsSdfResPrio", NULL);
+                } else {
+                    char *prio = ogs_msprintf("PRIO_%i", b->mbs_sdf_reserve_priority);
+                    patch = _json_patch_new(OpenAPI_patch_operation_replace, "/mbsSdfResPrio", cJSON_CreateString(prio));
+                    ogs_free(prio);
+                }
+                if (patch) {
+                    if (!patches) patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+                    ogs_list_add(patches, patch);
+                }
+            }
+            if (a->af_app_id != b->af_app_id) {
+                _json_patch_t *patch = NULL;
+                if (!a->af_app_id) {
+                    patch = _json_patch_new(OpenAPI_patch_operation_add, "/afAppId", cJSON_CreateString(b->af_app_id));
+                } else if (!b->af_app_id) {
+                    patch = _json_patch_new(OpenAPI_patch_operation__remove, "/afAppId", NULL);
+                } else {
+                    patch = _json_patch_new(OpenAPI_patch_operation_replace, "/afAppId", cJSON_CreateString(b->af_app_id));
+                }
+                if (patch) {
+                    if (!patches) patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+                    ogs_list_add(patches, patch);
+                }
+            }
+            if (a->mbs_session_ambr != b->mbs_session_ambr) {
+                _json_patch_t *patch = NULL;
+                if (!a->mbs_session_ambr) {
+                    char *br = _bitrate_to_str(*b->mbs_session_ambr);
+                    patch = _json_patch_new(OpenAPI_patch_operation_add, "/mbsSessionAmbr", cJSON_CreateString(br));
+                    ogs_free(br);
+                } else if (!b->mbs_session_ambr) {
+                    patch = _json_patch_new(OpenAPI_patch_operation__remove, "/mbsSessionAmbr", NULL);
+                } else if (*a->mbs_session_ambr != *b->mbs_session_ambr) {
+                    char *br = _bitrate_to_str(*b->mbs_session_ambr);
+                    patch = _json_patch_new(OpenAPI_patch_operation_replace, "/mbsSessionAmbr", cJSON_CreateString(br));
+                    ogs_free(br);
+                }
+                if (patch) {
+                    if (!patches) patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+                    ogs_list_add(patches, patch);
+                }
+            }
+        }
+    }
+
+    return NULL;
+}
+
+OpenAPI_mbs_service_info_t *_mbs_service_info_to_openapi(const mb_smf_sc_mbs_service_info_t *svc_info)
+{
+    if (!svc_info) return NULL;
+
+    return OpenAPI_mbs_service_info_create(_mbs_media_comps_to_openapi(svc_info->mbs_media_comps),
+                                           (OpenAPI_reserv_priority_e)svc_info->mbs_sdf_reserve_priority,
+                                           svc_info->af_app_id?ogs_strdup(svc_info->af_app_id):NULL,
+                                           svc_info->mbs_session_ambr?_bitrate_to_str(*svc_info->mbs_session_ambr):NULL);
+}
+
+cJSON *_mbs_service_info_to_json(const mb_smf_sc_mbs_service_info_t *svc_info)
+{
+    if (!svc_info) return NULL;
+
+    OpenAPI_mbs_service_info_t *api_svc_info = _mbs_service_info_to_openapi(svc_info);
+    if (!api_svc_info) return NULL;
+
+    cJSON *json = OpenAPI_mbs_service_info_convertToJSON(api_svc_info);
+    OpenAPI_mbs_service_info_free(api_svc_info);
+
+    return json;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

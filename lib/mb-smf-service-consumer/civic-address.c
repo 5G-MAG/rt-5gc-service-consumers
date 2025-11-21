@@ -8,8 +8,10 @@
  * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
  */
 #include "ogs-core.h"
+#include "ogs-sbi.h"
 
 #include "macros.h"
+#include "json-patch.h"
 
 #include "civic-address.h"
 #include "priv_civic-address.h"
@@ -27,6 +29,158 @@ MB_SMF_CLIENT_API void mb_smf_sc_civic_address_delete(mb_smf_sc_civic_address_t 
 }
 
 /* Library internal civic_address methods (protected) */
+void _civic_addresses_free(ogs_list_t *civic_addresses)
+{
+    if (!civic_addresses) return;
+    _civic_addresses_clear(civic_addresses);
+    ogs_free(civic_addresses);
+}
+
+void _civic_addresses_clear(ogs_list_t *civic_addresses)
+{
+    if (!civic_addresses) return;
+
+    mb_smf_sc_civic_address_t *next, *addr;
+    ogs_list_for_each_safe(civic_addresses, next, addr) {
+        ogs_list_remove(civic_addresses, addr);
+        _civic_address_free(addr);
+    }
+}
+
+void _civic_addresses_copy(ogs_list_t **dst, const ogs_list_t *src)
+{
+    if (src && ogs_list_count(src) == 0) src = NULL;
+    if (!src) {
+        if (*dst) {
+            _civic_addresses_free(*dst);
+            *dst = NULL;
+        }
+        return;
+    }
+
+    if (!*dst) {
+        *dst = (typeof(*dst))ogs_calloc(1, sizeof(**dst));
+    } else {
+        _civic_addresses_clear(*dst);
+    }
+
+    mb_smf_sc_civic_address_t *addr;
+    ogs_list_for_each(src, addr) {
+        mb_smf_sc_civic_address_t *new_addr = NULL;
+        _civic_address_copy(&new_addr, addr);
+        ogs_list_add(*dst, new_addr);
+    }
+}
+
+bool _civic_addresses_equal(const ogs_list_t *a, const ogs_list_t *b)
+{
+    if (a && ogs_list_count(a) == 0) a = NULL;
+    if (b && ogs_list_count(b) == 0) b = NULL;
+    if (a == b) return true;
+    if (!a || !b) return false;
+    if (ogs_list_count(a) != ogs_list_count(b)) return false;
+
+    ogs_list_t *b_copy = NULL;
+    _civic_addresses_copy(&b_copy, b);
+
+    mb_smf_sc_civic_address_t *a_addr;
+    ogs_list_for_each(a, a_addr) {
+        mb_smf_sc_civic_address_t *next, *b_addr;
+        bool found = false;
+        ogs_list_for_each_safe(b_copy, next, b_addr) {
+            if (_civic_address_equal(a_addr, b_addr)) {
+                ogs_list_remove(b_copy, b_addr);
+                _civic_address_free(b_addr);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            _civic_addresses_free(b_copy);
+            return false;
+        }
+    }
+
+    _civic_addresses_free(b_copy);
+    return true;
+}
+
+ogs_list_t *_civic_addresses_patch_list(const ogs_list_t *a, const ogs_list_t *b)
+{
+    ogs_list_t *patches = NULL;
+
+    if (a && ogs_list_count(a) == 0) a = NULL;
+    if (b && ogs_list_count(b) == 0) b = NULL;
+
+    if (a != b) {
+        if (!a) {
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_add, "/", _civic_addresses_to_json(b));
+            patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        } else if (!b) {
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation__remove, "/", NULL);
+            patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        } else {
+            int idx = 0;
+            mb_smf_sc_civic_address_t *a_addr = (mb_smf_sc_civic_address_t*)ogs_list_first(a);
+            mb_smf_sc_civic_address_t *b_addr = (mb_smf_sc_civic_address_t*)ogs_list_first(b);
+            while (a_addr || b_addr) {
+                _json_patch_t *patch = NULL;
+                if (!a_addr) {
+                    patch = _json_patch_new(OpenAPI_patch_operation_add, "/-", _civic_address_to_json(b_addr));
+                } else if (!b_addr) {
+                    char *path = ogs_msprintf("/%i", idx);
+                    patch = _json_patch_new(OpenAPI_patch_operation__remove, path, NULL);
+                    ogs_free(path);
+                    idx--;
+                } else if (!_civic_address_equal(a_addr, b_addr)) {
+                    char *path = ogs_msprintf("/%i", idx);
+                    patch = _json_patch_new(OpenAPI_patch_operation_replace, path, _civic_address_to_json(b_addr));
+                    ogs_free(path);
+                }
+                if (patch) {
+                    if (!patches) patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+                    ogs_list_add(patches, patch);
+                }
+                idx++;   
+                if (a_addr) a_addr = (mb_smf_sc_civic_address_t*)ogs_list_next(a_addr);
+                if (b_addr) b_addr = (mb_smf_sc_civic_address_t*)ogs_list_next(b_addr);
+            }
+        }
+    }
+
+    return patches;
+}
+
+OpenAPI_list_t *_civic_addresses_to_openapi(const ogs_list_t *civic_addresses)
+{
+    if (!civic_addresses || ogs_list_count(civic_addresses) == 0) return NULL;
+
+    OpenAPI_list_t *list = OpenAPI_list_create();
+
+    mb_smf_sc_civic_address_t *addr;
+    ogs_list_for_each(civic_addresses, addr) {
+        OpenAPI_list_add(list, _civic_address_to_openapi(addr));
+    }
+
+    return list;
+}
+
+cJSON *_civic_addresses_to_json(const ogs_list_t *civic_addresses)
+{
+    if (!civic_addresses) return NULL;
+
+    cJSON *json = cJSON_CreateArray();
+
+    mb_smf_sc_civic_address_t *addr;
+    ogs_list_for_each(civic_addresses, addr) {
+        cJSON_AddItemToArray(json, _civic_address_to_json(addr));
+    }
+
+    return json;
+}
+
 mb_smf_sc_civic_address_t *_civic_address_new()
 {
     return (mb_smf_sc_civic_address_t*)ogs_calloc(1,sizeof(mb_smf_sc_civic_address_t));
@@ -208,6 +362,134 @@ bool _civic_address_equal(const mb_smf_sc_civic_address_t *a, const mb_smf_sc_ci
     if (a->provided_by && strcmp(a->provided_by, b->provided_by)) return false;
 
     return true;
+}
+
+ogs_list_t *_civic_address_patch_list(const mb_smf_sc_civic_address_t *a, const mb_smf_sc_civic_address_t *b)
+{
+    ogs_list_t *patches = NULL;
+
+    if (a != b) {
+        if (!a) {
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_add, "/", _civic_address_to_json(b));
+            patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        } else if (!b) {
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation__remove, "/", NULL);
+            patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        } else {
+#define PATCH_FIELD(field, name) \
+            do { \
+                if (a->field != b->field) { \
+                    _json_patch_t *patch = NULL; \
+                    if (!a->field) { \
+                        patch = _json_patch_new(OpenAPI_patch_operation_add, "/" name, cJSON_CreateString(b->field)); \
+                    } else if (!b->field) { \
+                        patch = _json_patch_new(OpenAPI_patch_operation__remove, "/" name, NULL); \
+                    } else if (strcmp(a->field, b->field)) { \
+                        patch = _json_patch_new(OpenAPI_patch_operation_replace, "/" name, cJSON_CreateString(b->field)); \
+                    } \
+                    if (patch) { \
+                        if (!patches) patches = (typeof(patches))ogs_calloc(1, sizeof(*patches)); \
+                        ogs_list_add(patches, patch); \
+                    } \
+                } \
+            } while (0)
+
+            PATCH_FIELD(country, "country");
+            PATCH_FIELD(a[0], "A1");
+            PATCH_FIELD(a[1], "A2");
+            PATCH_FIELD(a[2], "A3");
+            PATCH_FIELD(a[3], "A4");
+            PATCH_FIELD(a[4], "A5");
+            PATCH_FIELD(a[5], "A6");
+            PATCH_FIELD(prd, "PRD");
+            PATCH_FIELD(pod, "POD");
+            PATCH_FIELD(sts, "STS");
+            PATCH_FIELD(hno, "HNO");
+            PATCH_FIELD(hns, "HNS");
+            PATCH_FIELD(lmk, "LMK");
+            PATCH_FIELD(loc, "LOC");
+            PATCH_FIELD(nam, "NAM");
+            PATCH_FIELD(pc, "PC");
+            PATCH_FIELD(bld, "BLD");
+            PATCH_FIELD(unit, "UNIT");
+            PATCH_FIELD(flr, "FLR");
+            PATCH_FIELD(room, "ROOM");
+            PATCH_FIELD(plc, "PLC");
+            PATCH_FIELD(pcn, "PCN");
+            PATCH_FIELD(pobox, "POBOX");
+            PATCH_FIELD(addcode, "ADDCODE");
+            PATCH_FIELD(seat, "SEAT");
+            PATCH_FIELD(rd, "RD");
+            PATCH_FIELD(rdsec, "RDSEC");
+            PATCH_FIELD(rdbr, "RDBR");
+            PATCH_FIELD(rdsubbr, "RDSUBBR");
+            PATCH_FIELD(prm, "PRM");
+            PATCH_FIELD(pom, "POM");
+            PATCH_FIELD(usage_rules, "usageRules");
+            PATCH_FIELD(method, "method");
+            PATCH_FIELD(provided_by, "providedBy");
+
+#undef PATCH_FIELD
+        }
+    }
+
+    return patches;
+}
+
+OpenAPI_civic_address_t *_civic_address_to_openapi(const mb_smf_sc_civic_address_t *civic_address)
+{
+    if (!civic_address) return NULL;
+    return OpenAPI_civic_address_create(
+            ogs_strdup(civic_address->country),
+            civic_address->a[0]?ogs_strdup(civic_address->a[0]):NULL,
+            civic_address->a[1]?ogs_strdup(civic_address->a[1]):NULL,
+            civic_address->a[2]?ogs_strdup(civic_address->a[2]):NULL,
+            civic_address->a[3]?ogs_strdup(civic_address->a[3]):NULL,
+            civic_address->a[4]?ogs_strdup(civic_address->a[4]):NULL,
+            civic_address->a[5]?ogs_strdup(civic_address->a[5]):NULL,
+            civic_address->prd?ogs_strdup(civic_address->prd):NULL,
+            civic_address->pod?ogs_strdup(civic_address->pod):NULL,
+            civic_address->sts?ogs_strdup(civic_address->sts):NULL,
+            civic_address->hno?ogs_strdup(civic_address->hno):NULL,
+            civic_address->hns?ogs_strdup(civic_address->hns):NULL,
+            civic_address->lmk?ogs_strdup(civic_address->lmk):NULL,
+            civic_address->loc?ogs_strdup(civic_address->loc):NULL,
+            civic_address->nam?ogs_strdup(civic_address->nam):NULL,
+            civic_address->pc?ogs_strdup(civic_address->pc):NULL,
+            civic_address->bld?ogs_strdup(civic_address->bld):NULL,
+            civic_address->unit?ogs_strdup(civic_address->unit):NULL,
+            civic_address->flr?ogs_strdup(civic_address->flr):NULL,
+            civic_address->room?ogs_strdup(civic_address->room):NULL,
+            civic_address->plc?ogs_strdup(civic_address->plc):NULL,
+            civic_address->pcn?ogs_strdup(civic_address->pcn):NULL,
+            civic_address->pobox?ogs_strdup(civic_address->pobox):NULL,
+            civic_address->addcode?ogs_strdup(civic_address->addcode):NULL,
+            civic_address->seat?ogs_strdup(civic_address->seat):NULL,
+            civic_address->rd?ogs_strdup(civic_address->rd):NULL,
+            civic_address->rdsec?ogs_strdup(civic_address->rdsec):NULL,
+            civic_address->rdbr?ogs_strdup(civic_address->rdbr):NULL,
+            civic_address->rdsubbr?ogs_strdup(civic_address->rdsubbr):NULL,
+            civic_address->prm?ogs_strdup(civic_address->prm):NULL,
+            civic_address->pom?ogs_strdup(civic_address->pom):NULL,
+            civic_address->usage_rules?ogs_strdup(civic_address->usage_rules):NULL,
+            civic_address->method?ogs_strdup(civic_address->method):NULL,
+            civic_address->provided_by?ogs_strdup(civic_address->provided_by):NULL
+        );
+}
+
+cJSON *_civic_address_to_json(const mb_smf_sc_civic_address_t *civic_address)
+{
+    if (!civic_address) return NULL;
+
+    OpenAPI_civic_address_t *api_addr = _civic_address_to_openapi(civic_address);
+    if (!api_addr) return NULL;
+
+    cJSON *json = OpenAPI_civic_address_convertToJSON(api_addr);
+    OpenAPI_civic_address_free(api_addr);
+
+    return json;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

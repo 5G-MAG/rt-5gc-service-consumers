@@ -47,6 +47,11 @@ static int __mbs_session_find_subsc_hash_do(void *rec, const void *key, int klen
 static int __update_status_subscription(void *rec, const void *key, int klen, const void *value);
 static int __free_status_subscription(void *rec, const void *key, int klen, const void *value);
 
+static cJSON *__activity_status_to_cJSON(mb_smf_sc_activity_status_e act_status);
+static bool __string_equal(const char *a, const char *b);
+static bool __ogs_time_equal(const ogs_time_t *a, const ogs_time_t *b);
+static bool __snssai_equal(const ogs_s_nssai_t *a, const ogs_s_nssai_t *b);
+
 /*================ Public mbs_session functions =================*/
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new()
 {
@@ -498,7 +503,108 @@ ogs_list_t *_mbs_session_public_patch_list(const mb_smf_sc_mbs_session_t *a, con
 {
     ogs_list_t *patches = NULL;
 
-    /* TODO: add patches for changed fields for changing a to b */
+    if (a != b) {
+        /* add patches for changed fields for changing a to b */
+        if (!a) {
+            /* completely new (shouldn't happen for an update) */
+            ogs_error("Attempt to update an MBS Session when create should be used");
+            return NULL;
+        }
+
+        if (!b) {
+            /* completely remove (shouldn't happen for an update) */
+            ogs_error("Attempt to update an MBS Session when delete should be used");
+            return NULL;
+        }
+#define FIELD_NOT_UPDATEABLE(field, name) \
+        do { \
+            if (a->field != b->field) { \
+                ogs_warn("Attempt to update MBS Session " name " is ignored"); \
+            } \
+        } while (0)
+#define FIELD_STRUCT_NOT_UPDATEABLE(field, name, equalfn) \
+        do { \
+            if (!equalfn(a->field, b->field)) { \
+                ogs_warn("Attempt to update MBS Session " name " is ignored"); \
+            } \
+        } while (0)
+#define FIELD_INLINE_NOT_UPDATEABLE(field, name, equalfn) \
+        do { \
+            if (!equalfn(&a->field, &b->field)) { \
+                ogs_warn("Attempt to update MBS Session " name " is ignored"); \
+            } \
+        } while (0)
+#define PATCH_FIELD(field, attribute, jsonfn) \
+        do { \
+            if (a->field != b->field) { \
+                _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_replace, "/" attribute, jsonfn(b->field)); \
+                if (!patches) patches = (ogs_list_t*)ogs_calloc(1,sizeof(*patches)); \
+                ogs_list_add(patches, patch); \
+            } \
+        } while (0)
+#define PATCH_NULLABLE_FIELD(field, attribute, jsonfn, nullval) \
+        do { \
+            if (a->field != b->field) { \
+                _json_patch_t *patch = NULL; \
+                if (a->field == nullval) { \
+                    patch = _json_patch_new(OpenAPI_patch_operation_add, "/" attribute, jsonfn(b->field)); \
+                } else if (b->field == nullval) { \
+                    patch = _json_patch_new(OpenAPI_patch_operation__remove, "/" attribute, NULL); \
+                } else { \
+                    patch = _json_patch_new(OpenAPI_patch_operation_replace, "/" attribute, jsonfn(b->field)); \
+                } \
+                if (!patches) patches = (ogs_list_t*)ogs_calloc(1,sizeof(*patches)); \
+                ogs_list_add(patches, patch); \
+            } \
+        } while (0)
+#define PATCH_INLINE_FIELD(field, attribute, listfn) \
+        do { \
+            patches = _json_patches_append_list(patches, listfn(&a->field, &b->field), "/" attribute); \
+        } while(0)
+#define APPEND_PATCH_LIST(field, attribute, listfn) \
+        do { \
+            patches = _json_patches_append_list(patches, listfn(a->field, b->field), "/" attribute); \
+        } while (0)
+#define APPEND_INLINE_PATCH_LIST(field, attribute, listfn) \
+        do { \
+            patches = _json_patches_append_list(patches, listfn(&a->field, &b->field), "/" attribute); \
+        } while (0)
+
+        FIELD_NOT_UPDATEABLE(service_type, "service type");
+        FIELD_STRUCT_NOT_UPDATEABLE(ssm, "SSM", _ssm_addr_equal);
+        FIELD_STRUCT_NOT_UPDATEABLE(tmgi, "TMGI", mb_smf_sc_tmgi_equal);
+        /* mb_upf_udp_tunnel is read-only */
+        FIELD_NOT_UPDATEABLE(tunnel_req, "request udp tunnel flag");
+        FIELD_NOT_UPDATEABLE(tmgi_req, "request TMGI flag");
+        FIELD_NOT_UPDATEABLE(location_dependent, "location dependant flag");
+        FIELD_NOT_UPDATEABLE(any_ue_ind, "any UE indicator flag");
+        PATCH_FIELD(contact_pcf_ind, "contactPcfInd", cJSON_CreateBool);
+        /* area_session_id is read-only */
+        APPEND_PATCH_LIST(mbs_service_area, "mbsServiceArea", _mbs_service_area_patch_list);
+        APPEND_PATCH_LIST(ext_mbs_service_area, "extMbsServiceArea", _ext_mbs_service_area_patch_list);
+        FIELD_STRUCT_NOT_UPDATEABLE(dnn, "DNN", __string_equal);
+        FIELD_STRUCT_NOT_UPDATEABLE(snssai, "S-NSSAI", __snssai_equal);
+        FIELD_STRUCT_NOT_UPDATEABLE(start_time, "start time", __ogs_time_equal);
+        FIELD_STRUCT_NOT_UPDATEABLE(termination_time, "termination time", __ogs_time_equal);
+        APPEND_PATCH_LIST(mbs_service_info, "mbsServiceInfo", _mbs_service_info_patch_list);
+        if (a->service_type == MBS_SERVICE_TYPE_BROADCAST) {
+            FIELD_NOT_UPDATEABLE(activity_status, "activity status");
+            APPEND_INLINE_PATCH_LIST(mbs_fsa_ids, "mbsFsaIds", _mbs_fsa_ids_patch_list);
+        } else {
+            PATCH_NULLABLE_FIELD(activity_status, "activityStatus", __activity_status_to_cJSON, MBS_SESSION_ACTIVITY_STATUS_NONE);
+            FIELD_INLINE_NOT_UPDATEABLE(mbs_fsa_ids, "MBS FSA Ids", _mbs_fsa_ids_equal);
+        }
+        /* associated_session_id not present in current Open5GS model */
+
+#undef FIELD_NOT_UPDATEABLE
+#undef FIELD_STRUCT_NOT_UPDATEABLE
+#undef FIELD_INLINE_NOT_UPDATEABLE
+#undef PATCH_FIELD
+#undef PATCH_NULLABLE_FIELD
+#undef PATCH_INLINE_FIELD
+#undef APPEND_PATCH_LIST
+#undef APPEND_INLINE_PATCH_LIST
+    }
 
     return patches;
 }
@@ -792,6 +898,41 @@ static int __free_status_subscription(void *rec, const void *key, int klen, cons
     ogs_hash_set(hash, key, klen, NULL);
     _mbs_status_subscription_delete(subsc);
     return 1;
+}
+
+static cJSON *__activity_status_to_cJSON(mb_smf_sc_activity_status_e act_status)
+{
+    switch (act_status) {
+    case MBS_SESSION_ACTIVITY_STATUS_ACTIVE:
+        return cJSON_CreateString("ACTIVE");
+    case MBS_SESSION_ACTIVITY_STATUS_INACTIVE:
+        return cJSON_CreateString("INACTIVE");
+    default:
+        break;
+    }
+    return cJSON_CreateNull();
+}
+
+static bool __string_equal(const char *a, const char *b)
+{
+    if (a == b) return true;
+    if (!a || !b) return false;
+    return strcmp(a,b) == 0;
+}
+
+static bool __ogs_time_equal(const ogs_time_t *a, const ogs_time_t *b)
+{
+    if (a == b) return true;
+    if (!a || !b) return false;
+    return *a == *b;
+}
+
+static bool __snssai_equal(const ogs_s_nssai_t *a, const ogs_s_nssai_t *b)
+{
+    if (a == b) return true;
+    if (!a || !b) return false;
+
+    return a->sst == b->sst && a->sd.v == b->sd.v;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

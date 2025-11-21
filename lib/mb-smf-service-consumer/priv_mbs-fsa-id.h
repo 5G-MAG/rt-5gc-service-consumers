@@ -17,16 +17,26 @@
 extern "C" {
 #endif
 
+typedef struct ogs_list_s ogs_list_t;
+typedef struct cJSON cJSON;
+typedef struct OpenAPI_list_s OpenAPI_list_t;
+
 /* Library internal mbs_fsa_id methods (protected) */
 void _mbs_fsa_ids_copy(ogs_list_t *dst, const ogs_list_t *src);
 void _mbs_fsa_ids_clear(ogs_list_t *mbs_fsa_ids);
 bool _mbs_fsa_ids_equal(const ogs_list_t *a, const ogs_list_t *b);
+ogs_list_t *_mbs_fsa_ids_patch_list(const ogs_list_t *a, const ogs_list_t *b);
+OpenAPI_list_t *_mbs_fsa_ids_to_openapi(const ogs_list_t *mbs_fsa_ids);
+cJSON *_mbs_fsa_ids_to_json(const ogs_list_t *mbs_fsa_ids);
 
 mb_smf_sc_mbs_fsa_id_t *_mbs_fsa_id_new();
 void _mbs_fsa_id_free(mb_smf_sc_mbs_fsa_id_t *mbs_fsa_id);
 void _mbs_fsa_id_clear(mb_smf_sc_mbs_fsa_id_t *mbs_fsa_id);
 void _mbs_fsa_id_copy(mb_smf_sc_mbs_fsa_id_t **dst, const mb_smf_sc_mbs_fsa_id_t *src);
 bool _mbs_fsa_id_equal(const mb_smf_sc_mbs_fsa_id_t *a, const mb_smf_sc_mbs_fsa_id_t *b);
+ogs_list_t *_mbs_fsa_id_patch_list(const mb_smf_sc_mbs_fsa_id_t *a, const mb_smf_sc_mbs_fsa_id_t *b);
+char *_mbs_fsa_id_to_openapi(const mb_smf_sc_mbs_fsa_id_t *mbs_fsa_id);
+cJSON *_mbs_fsa_id_to_json(const mb_smf_sc_mbs_fsa_id_t *mbs_fsa_id);
 
 #ifdef __cplusplus
 }

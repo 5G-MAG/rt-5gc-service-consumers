@@ -12,7 +12,7 @@
 #include "ogs-proto.h"
 
 #include "macros.h"
-#include "json_patch.h"
+#include "json-patch.h"
 #include "utils.h"
 
 #include "priv_tai.h"
@@ -23,7 +23,6 @@
 /* Data types */
 
 /* mb_smf_sc_tai Type functions */
-
 MB_SMF_CLIENT_API mb_smf_sc_tai_t *mb_smf_sc_tai_new(uint16_t mcc, uint16_t mnc, uint32_t tac, const uint64_t *nid)
 {
     ogs_plmn_id_t plmn_id;
@@ -81,6 +80,97 @@ MB_SMF_CLIENT_API mb_smf_sc_tai_t *mb_smf_sc_tai_unset_network_id(mb_smf_sc_tai_
 }
 
 /* internal library functions */
+ogs_list_t *_tais_patch_list(const ogs_list_t *a, const ogs_list_t *b)
+{
+    ogs_list_t *patches = NULL;
+
+    if (a && ogs_list_count(a) == 0) a = NULL;
+    if (b && ogs_list_count(b) == 0) b = NULL;
+    if (a != b) {
+        if (!a) {
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_add, "/", _tais_to_json(b));
+            patches = (ogs_list_t*)ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        } else if (!b) {
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation__remove, "/", NULL);
+            patches = (ogs_list_t*)ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        } else {
+            int idx = 0;
+            mb_smf_sc_tai_t *a_tai = (mb_smf_sc_tai_t*)ogs_list_first(a);
+            mb_smf_sc_tai_t *b_tai = (mb_smf_sc_tai_t*)ogs_list_first(b);
+            while (a_tai && b_tai && _tai_equal(a_tai, b_tai)) {
+                idx++;
+                a_tai = (mb_smf_sc_tai_t*)ogs_list_next(a_tai);
+                b_tai = (mb_smf_sc_tai_t*)ogs_list_next(b_tai);
+            }
+            if (idx == 0) {
+                /* replace/add whole array */
+                _json_patch_t *patch;
+                if (ogs_list_count(a) == 0) {
+                    patch = _json_patch_new(OpenAPI_patch_operation_add, "/", _tais_to_json(b));
+                } else {
+                    patch = _json_patch_new(OpenAPI_patch_operation_replace, "/", _tais_to_json(b));
+                }
+                patches = (ogs_list_t*)ogs_calloc(1,sizeof(*patches));
+                ogs_list_add(patches, patch);
+            } else {
+                /* replace/add/remove array entries */
+                while (a_tai || b_tai) {
+                    _json_patch_t *patch = NULL;
+                    if (!a_tai) {
+                        patch = _json_patch_new(OpenAPI_patch_operation_add, "/-", _tai_to_json(b_tai));
+                    } else if (!b_tai) {
+                        char *path = ogs_msprintf("/%i", idx);
+                        patch = _json_patch_new(OpenAPI_patch_operation__remove, path, NULL);
+                        ogs_free(path);
+                        idx--;
+                    } else if (!_tai_equal(a_tai, b_tai)) {
+                        char *path = ogs_msprintf("/%i", idx);
+                        patch = _json_patch_new(OpenAPI_patch_operation_replace, path, _tai_to_json(b_tai));
+                        ogs_free(path);
+                    }
+                    if (patch) {
+                        if (!patches) patches = (ogs_list_t*)ogs_calloc(1,sizeof(*patches));
+                        ogs_list_add(patches, patch);
+                    }
+                    idx++;
+                    if (a_tai) a_tai = (mb_smf_sc_tai_t*)ogs_list_next(a_tai);
+                    if (b_tai) b_tai = (mb_smf_sc_tai_t*)ogs_list_next(b_tai);
+                }
+            }
+        }
+    }
+
+    return patches;
+}
+
+OpenAPI_list_t *_tais_to_openapi(const ogs_list_t *tais)
+{
+    if (!tais) return NULL;
+    OpenAPI_list_t *list = OpenAPI_list_create();
+
+    mb_smf_sc_tai_t *tai;
+    ogs_list_for_each(tais, tai) {
+        OpenAPI_list_add(list, _tai_to_openapi(tai));
+    }
+
+    return list;
+}
+
+cJSON *_tais_to_json(const ogs_list_t *tais)
+{
+    if (!tais) return NULL;
+    cJSON *json = cJSON_CreateArray();
+
+    mb_smf_sc_tai_t *tai;
+    ogs_list_for_each(tais, tai) {
+        cJSON_AddItemToArray(json, _tai_to_json(tai));
+    }
+
+    return json;
+}
+
 mb_smf_sc_tai_t *_tai_new(const ogs_plmn_id_t *plmn_id, uint32_t tac, const uint64_t *nid)
 {
     mb_smf_sc_tai_t *ret = _tai_create();
@@ -159,9 +249,7 @@ ogs_list_t *_tai_patch_list(const mb_smf_sc_tai_t *a, const mb_smf_sc_tai_t *b)
     if (a != b) {
         if (!a) {
             /* create entire TAI */
-            OpenAPI_tai_t *api_tai = _tai_to_openapi(b);
-            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_add, "/", OpenAPI_tai_convertToJSON(api_tai));
-            OpenAPI_tai_free(api_tai);
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_add, "/", _tai_to_json(b));
             ret = (ogs_list_t*)ogs_calloc(1, sizeof(*ret));
             ogs_list_add(ret, patch);
         } else if (!b) {
@@ -245,6 +333,16 @@ OpenAPI_tai_t *_tai_to_openapi(const mb_smf_sc_tai_t *tai)
     if (tai->nid) nid = _uint64_to_hex_str(*tai->nid, 11, 11);
     OpenAPI_tai_t *api_tai = OpenAPI_tai_create(plmn_id, tac, nid);
     return api_tai;
+}
+
+cJSON *_tai_to_json(const mb_smf_sc_tai_t *tai)
+{
+    if (!tai) return NULL;
+
+    OpenAPI_tai_t *api_tai = _tai_to_openapi(tai);
+    cJSON *json = OpenAPI_tai_convertToJSON(api_tai);
+    OpenAPI_tai_free(api_tai);
+    return json;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

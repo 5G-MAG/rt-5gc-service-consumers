@@ -38,8 +38,10 @@ libscmbsmf_sources = files('''
     flow-description.h
     geographic-area.c
     geographic-area.h
-    json_patch.c
-    json_patch.h
+    geographic-coordinate.c
+    geographic-coordinate.h
+    json-patch.c
+    json-patch.h
     log.c
     log.h
     macros.h
@@ -79,6 +81,7 @@ libscmbsmf_sources = files('''
     priv_ext-mbs-service-area.h
     priv_flow-description.h
     priv_geographic-area.h
+    priv_geographic-coordinate.h
     priv_mbs-fsa-id.h
     priv_mbs-media-comp.h
     priv_mbs-media-info.h
@@ -109,9 +112,26 @@ libscmbsmf_sources = files('''
 
 libscmbsmf_public_hdrs = files('''
     macros.h
+    arp.h
+    associated-session-id.h
+    civic-address.h
+    ext-mbs-service-area.h
+    flow-description.h
+    geographic-area.h
+    geographic-coordinate.h
+    mbs-fsa-id.h
+    mbs-media-comp.h
+    mbs-media-info.h
+    mbs-qos-req.h
     mb-smf-service-consumer.h
+    mbs-service-area.h
+    mbs-service-info.h
     mbs-session.h
     mbs-status-subscription.h
+    ncgi.h
+    ncgi-tai.h
+    ssm-addr.h
+    tai.h
     tmgi.h
 '''.split())
 

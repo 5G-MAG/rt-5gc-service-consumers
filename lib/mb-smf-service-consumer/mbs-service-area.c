@@ -8,8 +8,10 @@
  * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
  */
 #include "ogs-core.h"
+#include "ogs-sbi.h"
 
 #include "macros.h"
+#include "json-patch.h"
 #include "priv_ncgi-tai.h"
 #include "priv_tai.h"
 
@@ -154,6 +156,65 @@ bool _mbs_service_area_equal(const mb_smf_sc_mbs_service_area_t *a, const mb_smf
     }
     _mbs_service_area_free(b_copy);
     return true;
+}
+
+ogs_list_t *_mbs_service_area_patch_list(const mb_smf_sc_mbs_service_area_t *a, const mb_smf_sc_mbs_service_area_t *b)
+{
+    ogs_list_t *patches = NULL;
+
+    if (a != b) {
+        if (!a) {
+            /* create whole new MbsServiceArea */
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_add, "/", _mbs_service_area_to_json(b));
+            patches = (ogs_list_t*)ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        } else if (!b) {
+            _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation__remove, "/", NULL);
+            patches = (ogs_list_t*)ogs_calloc(1, sizeof(*patches));
+            ogs_list_add(patches, patch);
+        } else {
+            patches = _json_patches_append_list(patches, _ncgi_tais_patch_list(&a->ncgi_tais, &b->ncgi_tais), "/ncgiList");
+            patches = _json_patches_append_list(patches, _tais_patch_list(&a->tais, &b->tais), "/taiList");
+        }
+    }
+
+    return patches;
+}
+
+cJSON *_mbs_service_area_to_json(const mb_smf_sc_mbs_service_area_t *area)
+{
+    if (!area) return NULL;
+
+    OpenAPI_mbs_service_area_t *api_area = _mbs_service_area_to_openapi(area);
+    if (!api_area) return NULL;
+    cJSON *json = OpenAPI_mbs_service_area_convertToJSON(api_area);
+    OpenAPI_mbs_service_area_free(api_area);
+    return json;
+}
+
+OpenAPI_mbs_service_area_t *_mbs_service_area_to_openapi(const mb_smf_sc_mbs_service_area_t *area)
+{
+    OpenAPI_mbs_service_area_t *api_area = OpenAPI_mbs_service_area_create(NULL, NULL);
+
+    if (ogs_list_count(&area->ncgi_tais) > 0) {
+        api_area->ncgi_list = OpenAPI_list_create();
+        mb_smf_sc_ncgi_tai_t *ncgi_tai;
+        ogs_list_for_each(&area->ncgi_tais, ncgi_tai) {
+            OpenAPI_ncgi_tai_t *api_ncgi_tai = _ncgi_tai_to_openapi(ncgi_tai);
+            if (api_ncgi_tai) OpenAPI_list_add(api_area->ncgi_list, api_ncgi_tai);
+        }
+    }
+
+    if (ogs_list_count(&area->tais) > 0) {
+        api_area->tai_list = OpenAPI_list_create();
+        mb_smf_sc_tai_t *tai;
+        ogs_list_for_each(&area->tais, tai) {
+            OpenAPI_tai_t *api_tai = _tai_to_openapi(tai);
+            if (api_tai) OpenAPI_list_add(api_area->tai_list, api_tai);
+        }
+    }
+
+    return api_area;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

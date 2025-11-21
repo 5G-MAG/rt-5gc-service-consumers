@@ -25,6 +25,7 @@ ogs_time_t _response_to_expiry_time(ogs_sbi_response_t *message);
 ogs_time_t _cache_control_to_cache_age(const char *cache_control);
 char *_uint32_to_hex_str(uint32_t val, int min_digits, int max_digits);
 char *_uint64_to_hex_str(uint64_t val, int min_digits, int max_digits);
+char *_bitrate_to_str(double bitrate);
 
 #ifdef __cplusplus
 }

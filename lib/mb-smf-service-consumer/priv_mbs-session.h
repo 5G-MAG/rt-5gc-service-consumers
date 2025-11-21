@@ -15,7 +15,7 @@
 #include "ogs-sbi.h"
 
 #include "macros.h"
-#include "json_patch.h"
+#include "json-patch.h"
 #include "mbs-session.h"
 #include "priv_tmgi.h"
 #include "ref_count_sbi_object.h"

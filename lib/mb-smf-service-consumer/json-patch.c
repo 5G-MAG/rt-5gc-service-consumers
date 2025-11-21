@@ -11,7 +11,7 @@
 #include "ogs-core.h"
 #include "ogs-sbi.h"
 
-#include "json_patch.h"
+#include "json-patch.h"
 
 /* Library internal data types */
 
@@ -34,10 +34,7 @@ ogs_list_t *_json_patches_append_list(ogs_list_t *dst, const ogs_list_t *src, co
 _json_patch_t *_json_patch_new_copy_with_prefix(const _json_patch_t *src, const char *at_prefix)
 {
     _json_patch_t *new_patch = (_json_patch_t*)ogs_calloc(1, sizeof(*new_patch));
-    new_patch->item->op = src->item->op;
-    if (src->item->from) new_patch->item->from = ogs_strdup(src->item->from);
-    new_patch->item->is_value_null = src->item->is_value_null;
-    if (src->item->value) new_patch->item->value = OpenAPI_any_type_create(src->item->value->json);
+    new_patch->item = OpenAPI_patch_item_create(src->item->op, NULL, src->item->from?ogs_strdup(src->item->from):NULL, src->item->is_value_null, OpenAPI_any_type_create(src->item->value->json));
     if (src->item->path) {
         if (at_prefix) {
             if (src->item->path[0] == '/' && src->item->path[1] == '\0') {
@@ -57,13 +54,8 @@ _json_patch_t *_json_patch_new_copy_with_prefix(const _json_patch_t *src, const 
 _json_patch_t *_json_patch_new(OpenAPI_patch_operation_e op, const char *path, cJSON *value)
 {
     _json_patch_t *dst = (_json_patch_t*)ogs_calloc(1, sizeof(*dst));
-    dst->item->op = op;
-    dst->item->path = ogs_strdup(path);
-    if (value) {
-        if (cJSON_IsNull(value)) dst->item->is_value_null = true;
-        dst->item->value = OpenAPI_any_type_create(value);
-        cJSON_Delete(value);
-    }
+    dst->item = OpenAPI_patch_item_create(op, ogs_strdup(path), NULL,
+                                          (value && cJSON_IsNull(value)), value?OpenAPI_any_type_create(value):NULL);
     return dst;
 }
 

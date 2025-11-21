@@ -9,9 +9,6 @@
  * program. If this file is missing then the license can be retrieved from
  * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
  */
-#include "ogs-proto.h"
-#include "ogs-sbi.h"
-
 #include "tai.h"
 
 #ifdef __cplusplus
@@ -19,10 +16,19 @@ extern "C" {
 #endif
 
 /* Forward declarations */
+typedef struct cJSON cJSON;
+typedef struct ogs_list_s ogs_list_t;
+typedef struct OpenAPI_list_s OpenAPI_list_t;
+typedef struct OpenAPI_tai_s OpenAPI_tai_t;
+typedef struct ogs_plmn_id_s ogs_plmn_id_t;
 
 /* Data types */
 
 /* internal library functions */
+ogs_list_t *_tais_patch_list(const ogs_list_t *a, const ogs_list_t *b);
+OpenAPI_list_t *_tais_to_openapi(const ogs_list_t *tais);
+cJSON *_tais_to_json(const ogs_list_t *tais);
+
 mb_smf_sc_tai_t *_tai_new(const ogs_plmn_id_t *plmn_id, uint32_t tac, const uint64_t *nid);
 mb_smf_sc_tai_t *_tai_create();
 void _tai_free(mb_smf_sc_tai_t *tai);
@@ -34,6 +40,7 @@ void _tai_set_plmn_id(mb_smf_sc_tai_t *tai, const ogs_plmn_id_t *plmn_id);
 void _tai_set_tac(mb_smf_sc_tai_t *tai, uint32_t tac);
 void _tai_set_network_id(mb_smf_sc_tai_t *tai, const uint64_t *nid);
 OpenAPI_tai_t *_tai_to_openapi(const mb_smf_sc_tai_t *tai);
+cJSON *_tai_to_json(const mb_smf_sc_tai_t *tai);
 
 #ifdef __cplusplus
 }
