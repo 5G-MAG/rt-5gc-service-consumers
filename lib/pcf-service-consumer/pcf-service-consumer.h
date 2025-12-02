@@ -135,7 +135,7 @@ typedef enum pcf_app_session_event_type_e {
  *
  * @param pcf_address The socket address of the PCF to connect to.
  *
- * @return A PCF connection session for the @pcf_address or NULL on error.
+ * @return A PCF connection session for the @p pcf_address or NULL on error.
  */
 PCF_SVC_CONSUMER_API pcf_session_t *pcf_session_new(const ogs_sockaddr_t *pcf_address);
 
@@ -152,13 +152,13 @@ PCF_SVC_CONSUMER_API void pcf_service_consumer_final(void);
  * @param session The PCF connection session to create the new AppSessionContext on.
  * @param ue_connection The address of the UE that this AppSessionContext will be for.
  * @param events The bit mask of the ORed `pcf_app_session_event_type_t` representing the notifications to report to
- *               @notify_callback.
+ *               @p notify_callback.
  * @param media_component The requested list of `MediaComponent` entries describing UE connections and requested bitrates that this
  *                        AppSessionContext will manage.
- * @param notify_callback The callback to use when a notification matching one of @events is received for this AppSessionContext.
- * @param notify_user_data The `user_data` to pass to the @notify_callback when it's called.
+ * @param notify_callback The callback to use when a notification matching one of @p events is received for this AppSessionContext.
+ * @param notify_user_data The `user_data` to pass to the @p notify_callback when it's called.
  * @param change_callback The callback to call when an AppSessionContext is created or destroyed by the PCF.
- * @param change_user_data The `user_data` to pass to the @change_callback when it's called.
+ * @param change_user_data The `user_data` to pass to the @p change_callback when it's called.
  */
 PCF_SVC_CONSUMER_API bool pcf_session_create_app_session(pcf_session_t *session,
                 const ue_network_identifier_t *ue_connection, int events,
@@ -170,7 +170,7 @@ PCF_SVC_CONSUMER_API bool pcf_session_create_app_session(pcf_session_t *session,
  * Update the MediaComponents for an AppSessionContext
  *
  * @param sess The AppSessionContext to update the MediaComponents for.
- * @param media_component The map of MediaComponentRm entries for the update.
+ * @param media_component_rm_map The map of MediaComponentRm entries for the update.
  */
 PCF_SVC_CONSUMER_API bool pcf_session_update_app_session(pcf_app_session_t *sess, OpenAPI_list_t *media_component_rm_map);
 
@@ -213,8 +213,8 @@ PCF_SVC_CONSUMER_API bool pcf_session_process_event(ogs_event_t *event);
  *
  * @param app_session The AppSessionContext to add these notifications to.
  * @param evt_subsc_req The event subscription data, the notification URLs will be overwritten by the service consumer.
- * @param callback The events notification callback to use for the events described in @evt_subsc_req.
- * @param user_data The `user_data` to pass to @callback when it is called.
+ * @param callback The events notification callback to use for the events described in @p evt_subsc_req.
+ * @param user_data The `user_data` to pass to @p callback when it is called.
  */
 PCF_SVC_CONSUMER_API bool pcf_app_session_subscribe_event(pcf_app_session_t *app_session,
                 OpenAPI_events_subsc_req_data_t *evt_subsc_req, pcf_app_session_notification_callback callback,

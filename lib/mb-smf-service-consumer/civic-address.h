@@ -28,36 +28,36 @@ extern "C" {
 /** Civic Address
  */
 typedef struct mb_smf_sc_civic_address_s {
-    ogs_lnode_t node;
-    char *country;
-    char *a[6];
-    char *prd;
-    char *pod;
-    char *sts;
-    char *hno;
-    char *hns;
-    char *lmk;
-    char *loc;
-    char *nam;
-    char *pc;
-    char *bld;
-    char *unit;
-    char *flr;
-    char *room;
-    char *plc;
-    char *pcn;
-    char *pobox;
-    char *addcode;
-    char *seat;
-    char *rd;
-    char *rdsec;
-    char *rdbr;
-    char *rdsubbr;
-    char *prm;
-    char *pom;
-    char *usage_rules;
-    char *method;
-    char *provided_by;
+    ogs_lnode_t node;           /**< This type can be placed into an ogs_list_t list. */
+    char *country;              /**< The country for the address */
+    char *a[6];                 /**< The address lines: 0=State/County, 1=Province, 2=City/Town, 3=Borough, 4=Neighbourhood, 5=Group of streets */
+    char *prd;                  /**< Street direction prefix, e.g. "N." */
+    char *pod;                  /**< Street trailing suffix, e.g. "SW" */
+    char *sts;                  /**< Street suffix (type), e.g. "Ave" */
+    char *hno;                  /**< House number, e.g. "123" */
+    char *hns;                  /**< House number suffix, e.g. "A" */
+    char *lmk;                  /**< Landmark or vanity address, e.g. "Columbia University" */
+    char *loc;                  /**< Additional location information, e.g. "South Wing" */
+    char *nam;                  /**< Name, e.g. "Joe Bloggs" */
+    char *pc;                   /**< Postal code, e.g. "AB12 3CD" */
+    char *bld;                  /**< Building, e.g. "Library" */
+    char *unit;                 /**< Unit, e.g. "Appt. 12" */
+    char *flr;                  /**< Floor, e.g. "4" */
+    char *room;                 /**< Room, e.g. "B505" */
+    char *plc;                  /**< Type of place, e.g. "office" */
+    char *pcn;                  /**< Postal community name, e.g. "Leonia" */
+    char *pobox;                /**< Post office box, e.g. "12345" */
+    char *addcode;              /**< Additional code, e.g. "13203000003" */
+    char *seat;                 /**< Seat/desk/cubicle/workstation, e.g. "WS 181" */
+    char *rd;                   /**< Primary road name, e.g. "Broadway" */
+    char *rdsec;                /**< Road section, e.g. "14" */
+    char *rdbr;                 /**< Branch road name, e.g. "Lane 7" */
+    char *rdsubbr;              /**< Sub-branch road name, e.g. "Alley 8" */
+    char *prm;                  /**< Street name pre-modifier, e.g. "Old" */
+    char *pom;                  /**< Street name post-modifier, e.g. "Service" */
+    char *usage_rules;          /**< XML Usage Rules element contents, see RFC 4119 section 2.2.2 */
+    char *method;               /**< Method by which the address was obtained, e.g. "GPS" */
+    char *provided_by;          /**< Who provided the address, e.g. "Provider Name" */
 } mb_smf_sc_civic_address_t;
 
 /* mb_smf_sc_civic_address Type functions */

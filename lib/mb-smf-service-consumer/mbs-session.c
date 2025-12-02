@@ -589,7 +589,7 @@ ogs_list_t *_mbs_session_public_patch_list(const mb_smf_sc_mbs_session_t *a, con
         APPEND_PATCH_LIST(mbs_service_info, "mbsServiceInfo", _mbs_service_info_patch_list);
         if (a->service_type == MBS_SERVICE_TYPE_BROADCAST) {
             FIELD_NOT_UPDATEABLE(activity_status, "activity status");
-            APPEND_INLINE_PATCH_LIST(mbs_fsa_ids, "mbsFsaIds", _mbs_fsa_ids_patch_list);
+            APPEND_INLINE_PATCH_LIST(mbs_fsa_ids, "mbsFsaIdList", _mbs_fsa_ids_patch_list);
         } else {
             PATCH_NULLABLE_FIELD(activity_status, "activityStatus", __activity_status_to_cJSON, MBS_SESSION_ACTIVITY_STATUS_NONE);
             FIELD_INLINE_NOT_UPDATEABLE(mbs_fsa_ids, "MBS FSA Ids", _mbs_fsa_ids_equal);

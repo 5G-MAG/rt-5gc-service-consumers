@@ -26,25 +26,25 @@ extern "C" {
 /** Preemption Capability enumeration
  */
 typedef enum {
-    ARP_PREEMPT_CAPABILITY_NULL = 0,
-    ARP_PREEMPT_CAPABILITY_NOT_PREEMPT,
-    ARP_PREEMPT_CAPABILITY_MAY_PREEMPT
+    ARP_PREEMPT_CAPABILITY_NULL = 0,    /**< No Preemption Capability */
+    ARP_PREEMPT_CAPABILITY_NOT_PREEMPT, /**< Must not preempt */
+    ARP_PREEMPT_CAPABILITY_MAY_PREEMPT  /**< May preempt */
 } mb_smf_sc_preemption_capability_e;
 
 /** Preemption Vulnerability enumeration
  */
 typedef enum {
-    ARP_PREEMPT_VULNERABILITY_NULL = 0,
-    ARP_PREEMPT_VULNERABILITY_NOT_PREEMPTABLE,
-    ARP_PREEMPT_VULNERABILITY_PREEMPTABLE
+    ARP_PREEMPT_VULNERABILITY_NULL = 0,        /**< No Preemption Vulnerability */
+    ARP_PREEMPT_VULNERABILITY_NOT_PREEMPTABLE, /**< Is not preemptable */
+    ARP_PREEMPT_VULNERABILITY_PREEMPTABLE      /**< Is preemptable */
 } mb_smf_sc_preemption_vulnerability_e;
 
 /** ARP
  */
 typedef struct mb_smf_sc_arp_s {
-    uint8_t priority_level; /* 1 <= priority_level <= 15 */
-    mb_smf_sc_preemption_capability_e preemption_capability;
-    mb_smf_sc_preemption_vulnerability_e preemption_vulnerability;
+    uint8_t priority_level;                                        /**< Priority level between 1 and 15 inclusive*/
+    mb_smf_sc_preemption_capability_e preemption_capability;       /**< Preemption capability */
+    mb_smf_sc_preemption_vulnerability_e preemption_vulnerability; /**< Preemption vulnerability */
 } mb_smf_sc_arp_t;
 
 /* mb_smf_sc_arp Type functions */

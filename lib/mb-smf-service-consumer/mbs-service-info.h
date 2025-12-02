@@ -30,9 +30,9 @@ extern "C" {
 /** MBS Service Info
  */
 typedef struct mb_smf_sc_mbs_service_info_s {
-    ogs_hash_t *mbs_media_comps; /**< Media Components, must be at least one entry */
-    char *af_app_id;
-    uint64_t *mbs_session_ambr; /**< NULL or pointer to MBS Service Info AMBR as a bitrate */
+    ogs_hash_t *mbs_media_comps;      /**< Media Components, must be at least one entry */
+    char *af_app_id;                  /**< AF Application Id */
+    uint64_t *mbs_session_ambr;       /**< `NULL` or pointer to MBS Service Info AMBR as a bit rate */
     uint8_t mbs_sdf_reserve_priority; /**< MBS SDF Reserve Priority (1-16 inclusive or 0 to unset) */
 } mb_smf_sc_mbs_service_info_t;
 

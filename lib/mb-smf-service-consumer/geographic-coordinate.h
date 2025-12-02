@@ -25,10 +25,14 @@ extern "C" {
  * @{
  */
 
+/** Geographic Coordinate
+ *
+ * Expressed as a longitude and latitude
+ */
 typedef struct mb_smf_sc_geographic_coordinate_s {
-    ogs_lnode_t node;
-    double longitude; /* degrees -180 <= longitude <= 180 */
-    double latitude; /* degrees -90 <= latitude <= 90 */
+    ogs_lnode_t node; /**< Can be used in an ogs_list_t list */
+    double longitude; /**< Longitude in degrees between -180 and 180 */
+    double latitude;  /**< Latitude in degrees -90 to 90 */
 } mb_smf_sc_geographic_coordinate_t;
 
 /* mb_smf_sc_geographic_coordinate Type functions */

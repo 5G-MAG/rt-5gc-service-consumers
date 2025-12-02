@@ -28,8 +28,8 @@ extern "C" {
 /** Flow Description
  */
 typedef struct mb_smf_sc_flow_description_s {
-    ogs_lnode_t node;
-    char *string;
+    ogs_lnode_t node; /**< This can be part of an ogs_list_t list */
+    char *string;     /**< The flow description */
 } mb_smf_sc_flow_description_t;
 
 /* mb_smf_sc_flow_description Type functions */

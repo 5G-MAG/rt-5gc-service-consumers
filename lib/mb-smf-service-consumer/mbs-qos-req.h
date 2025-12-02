@@ -29,11 +29,11 @@ typedef struct mb_smf_sc_arp_s mb_smf_sc_arp_t;
 /** MBS QoS Requirements
  */
 typedef struct mb_smf_sc_mbs_qos_req_s {
-    uint8_t five_qi;
-    uint64_t *guarenteed_bit_rate;
-    uint64_t *max_bit_rate;
-    uint16_t *averaging_window; /* NULL or 1 <= aver_window <= 4095 (default assumed when NULL = 2000) */
-    mb_smf_sc_arp_t *req_mbs_arp;
+    uint8_t five_qi;               /**< 5Qi value */
+    uint64_t *guarenteed_bit_rate; /**< Guaranteed (minimum) bit rate or `NULL` to omit */
+    uint64_t *max_bit_rate;        /**< Maximum bit rate or `NULL` to omit */
+    uint16_t *averaging_window;    /**< Averaging window in milliseconds (1 to 4095) or `NULL` to omit (default 2000) */
+    mb_smf_sc_arp_t *req_mbs_arp;  /**< ARP or `NULL` to omit */
 } mb_smf_sc_mbs_qos_req_t;
 
 /* mb_smf_sc_mbs_qos_req Type functions */

@@ -32,8 +32,8 @@ extern "C" {
 typedef struct mb_smf_sc_tai_s {
     ogs_lnode_t node;      /**< This can be part of an ogs_list_t list */
     ogs_plmn_id_t plmn_id; /**< The mandatory PLMN Id */
-    uint32_t tac : 24;       /**< The mandatory Tac, 16-bit or 24-bit unsigned */
-    uint64_t *nid;      /**< Optional Network ID, NULL to omit or pointer to 44-bit unsigned */
+    uint32_t tac : 24;     /**< The mandatory TAC, 16-bit or 24-bit unsigned */
+    uint64_t *nid;         /**< Optional Network ID, `NULL` to omit or pointer to 44-bit unsigned */
 } mb_smf_sc_tai_t;
 
 /* mb_smf_sc_tai Type functions */
@@ -145,14 +145,13 @@ MB_SMF_CLIENT_API mb_smf_sc_tai_t *mb_smf_sc_tai_set_tac(mb_smf_sc_tai_t *tai, u
  */
 MB_SMF_CLIENT_API mb_smf_sc_tai_t *mb_smf_sc_tai_set_network_id(mb_smf_sc_tai_t *tai, uint64_t nid);
 
-/** Set the Network Id
+/** Unset the Network Id
  * @memberof mb_smf_sc_tai_s
  * @public
  *
- * Sets the TAI Network Id.
+ * Unsets the TAI Network Id.
  *
- * @param tai The TAI to set the Network Id for.
- * @param nid The Network Id to set in the TAI..
+ * @param tai The TAI to unset the Network Id for.
  *
  * @return @p tai.
  */

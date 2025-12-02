@@ -29,11 +29,11 @@ typedef struct mb_smf_sc_tai_s mb_smf_sc_tai_t;
 
 /** MBS Service Area
  *
- * Structure to hold an MBS Service Area. This represents the union of a list of NCGI TAI structures and a list of TAI structures.
+ * This is the union of a list of NCGI TAI structures and a list of TAI structures.
  */
 typedef struct mb_smf_sc_mbs_service_area_s {
-    ogs_list_t ncgi_tais; /* list of mb_smf_sc_ncgi_tai_t */
-    ogs_list_t tais;      /* list of mb_smf_sc_tai_t */
+    ogs_list_t ncgi_tais; /**< List of mb_smf_sc_ncgi_tai_t objects */
+    ogs_list_t tais;      /**< List of mb_smf_sc_tai_t objects */
 } mb_smf_sc_mbs_service_area_t;
 
 /* mb_smf_sc_mbs_service_area Type functions */

@@ -28,10 +28,12 @@ typedef struct mb_smf_sc_civic_address_s mb_smf_sc_civic_address_t;
  */
 
 /** External MBS Service Area
+ *
+ * The external MBS Service area is the union of the @a geographic_areas and @a civic_addresses lists.
  */
 typedef struct mb_smf_sc_ext_mbs_service_area_s {
-    ogs_list_t geographic_areas;
-    ogs_list_t civic_addresses;
+    ogs_list_t geographic_areas; /**< The list of mb_smf_sc_geographic_area_t objects */
+    ogs_list_t civic_addresses;  /**< The list of mb_smf_sc_civic_address_t objects */
 } mb_smf_sc_ext_mbs_service_area_t;
 
 /* mb_smf_sc_ext_mbs_service_area Type functions */

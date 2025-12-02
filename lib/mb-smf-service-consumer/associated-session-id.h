@@ -25,10 +25,12 @@ extern "C" {
  */
 
 /** External MBS Service Area
+ *
+ * This is a placeholder to Rel 18 compatibility.
  */
 typedef struct mb_smf_sc_associated_session_id_s {
-    mb_smf_sc_ssm_addr_t ssm;
-    char *string;
+    mb_smf_sc_ssm_addr_t ssm; /**< The source specific multicast address */
+    char *string;             /**< The id string */
 } mb_smf_sc_associated_session_id_t;
 
 /* mb_smf_sc_associated_session_id Type functions */

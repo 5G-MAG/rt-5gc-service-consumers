@@ -29,14 +29,17 @@ typedef struct mb_smf_sc_mbs_qos_req_s mb_smf_sc_mbs_qos_req_t;
  */
 
 /** MBS Media Component
+ *
+ * The @a media_info, @a qos_ref and @a mbs_qos_req fields are mutally exclusive. If more than one is present then the precedence
+ * is @a media_info then @a qos_ref then @a mbs_qos_req.
  */
 typedef struct mb_smf_sc_mbs_media_comp_s {
-    int id;
-    ogs_list_t *flow_descriptions;
-    uint8_t mbs_sdf_reserve_priority; /**< MBS SDF Reserve Priority (1-16 inclusive or 0 to unset) */
-    mb_smf_sc_mbs_media_info_t *media_info;
-    char *qos_ref;
-    mb_smf_sc_mbs_qos_req_t *mbs_qos_req;
+    int id;                                 /**< Component Id */
+    ogs_list_t *flow_descriptions;          /**< List of mb_smf_sc_flow_description_t objects */
+    uint8_t mbs_sdf_reserve_priority;       /**< MBS SDF Reserve Priority (1-16 inclusive or 0 to unset) */
+    mb_smf_sc_mbs_media_info_t *media_info; /**< MBS Media Info */
+    char *qos_ref;                          /**< QoS Reference */
+    mb_smf_sc_mbs_qos_req_t *mbs_qos_req;   /**< MBS QoS Requirments */
 } mb_smf_sc_mbs_media_comp_t;
 
 /* mb_smf_sc_mbs_media_comp Type functions */

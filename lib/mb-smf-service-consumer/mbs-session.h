@@ -56,17 +56,23 @@ typedef enum {
     MBS_SESSION_ACTIVITY_STATUS_INACTIVE
 } mb_smf_sc_activity_status_e;
 
-/** MBS Session creation callback
+/** MBS Session creation/destruction callback
  *
- * This callback is used when an MBS Session create has either succeeded or failed. On success @p result will be OGS_OK, and will
- * be any other value on failure. If the failure result has a ProblemDetails associated with it then it is passed in the
- * @p problem_details parameter.
+ * This callback is used when an MBS Session create has either succeeded or failed or when the MBS Session is destroyed.
+ *
+ * On creation, @p result will be `OGS_OK` when the creation succeeded, `OGS_ERROR` for an error during creation or `OGS_TIMEOUT`
+ * if the creation operation timed out. If the @p result is `OGS_ERROR` then a ProblemDetails associated with the error is passed
+ * in the @p problem_details parameter.
+ *
+ * On destruction, @p result will be `OGS_DONE`.
  *
  * @param session The MBS Session object this callback is about.
- * @param result `OGS_OK` on success, `OGS_ERROR` for a general error and `OGS_TIMEDOUT` for a timeout failure.
+ * @param result `OGS_OK` on creation, `OGS_ERROR` for a general error, `OGS_TIMEDOUT` for a timeout failure and `OGS_DONE` when
+ *               the MBS Session is destroyed.
  * @param problem_details The ProblemDetails object associated with the error or `NULL` if no ProblemDetails are available.
- * @param data The value of @ref mb_smf_sc_mbs_session_s::create_result_cb_data "create_result_cb_data" from the MBS Session
- *             associated with this callback.
+ * @param data The value of @p data passed to mb_smf_sc_mbs_session_set_callback() when the callback was set.
+ *
+ * @see mb_smf_sc_mbs_session_set_callback()
  */
 typedef void (*mb_smf_sc_mbs_session_create_result_cb)(mb_smf_sc_mbs_session_t *session, int result,
                                                        const OpenAPI_problem_details_t *problem_details, void *data);
@@ -81,21 +87,21 @@ typedef struct mb_smf_sc_mbs_session_s {
     mb_smf_sc_tmgi_t *tmgi;            /**< TMGI for this session, NULL if no TMGI assigned */
     ogs_sockaddr_t *mb_upf_udp_tunnel; /**< Tunnel address assigned by the MB-UPF for this session */
     bool tunnel_req;                   /**< Tunnel required, true to ask the MB-SMF for a UDP tunnel if mb_upf_udp_tunnel is NULL */
-    bool tmgi_req;                     /**< Request a TMGI be allocated, must be false if tmgi is not NULL */
-    bool location_dependent;           /**< true if this MBS Session is location dependent */
-    bool any_ue_ind;
-    bool contact_pcf_ind;
-    uint16_t *area_session_id;          /**< The Area Session Identifier when location_dependent is true */
-    mb_smf_sc_mbs_service_area_t *mbs_service_area; /**< The optional MBS Service Area (union of ncgi_tais and tais lists) */
+    bool tmgi_req;                     /**< Request a TMGI be allocated, must be false if tmgi is not `NULL` */
+    bool location_dependent;           /**< `true` if this MBS Session is location dependent */
+    bool any_ue_ind;                   /**< `true` if this MBS Session is for any UE */
+    bool contact_pcf_ind;              /**< `true` if the MB-SMF should contact the PCF during an update of this MBS Session */
+    uint16_t *area_session_id;         /**< The Area Session Identifier when location_dependent is true */
+    mb_smf_sc_mbs_service_area_t *mbs_service_area; /**< The optional MBS Service Area */
     mb_smf_sc_ext_mbs_service_area_t *ext_mbs_service_area; /**< The optional External MBS Service Area */
-    char *dnn;
-    ogs_s_nssai_t *snssai;
-    ogs_time_t *start_time;
-    ogs_time_t *termination_time;
-    mb_smf_sc_mbs_service_info_t *mbs_service_info;
-    mb_smf_sc_activity_status_e activity_status;
-    ogs_list_t mbs_fsa_ids;
-    mb_smf_sc_associated_session_id_t *associated_session_id;
+    char *dnn;                         /**< The network name that this MBS Session is for */
+    ogs_s_nssai_t *snssai;             /**< The S-NSSAI that this MBS Session is for */
+    ogs_time_t *start_time;            /**< The time at which the MBS Session activates */
+    ogs_time_t *termination_time;      /**< The time at which the MBS Session will deactivate */
+    mb_smf_sc_mbs_service_info_t *mbs_service_info; /**< The media components and QoS parameters for the MBS Session */
+    mb_smf_sc_activity_status_e activity_status; /**< The activity status of a multicast MBS Session (service_type == multicast) */
+    ogs_list_t mbs_fsa_ids;            /**< The MBS FSA Ids list for a broadcast MBS Session (service_type == broadcast) */
+    mb_smf_sc_associated_session_id_t *associated_session_id; /**< The Associated Session Id (for Rel 18, currently unused) */
 } mb_smf_sc_mbs_session_t;
 
 /* mb_smf_sc_mbs_session Type functions */

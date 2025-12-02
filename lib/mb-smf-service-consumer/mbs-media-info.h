@@ -28,24 +28,24 @@ extern "C" {
 /** MBS Media Type enumeration
  */
 typedef enum {
-    MEDIA_TYPE_NULL = 0,
-    MEDIA_TYPE_AUDIO,
-    MEDIA_TYPE_VIDEO,
-    MEDIA_TYPE_DATA,
-    MEDIA_TYPE_APPLICATION,
-    MEDIA_TYPE_CONTROL,
-    MEDIA_TYPE_TEXT,
-    MEDIA_TYPE_MESSAGE,
-    MEDIA_TYPE_OTHER
+    MEDIA_TYPE_NULL = 0,    /**< No media type */
+    MEDIA_TYPE_AUDIO,       /**< Audio media */
+    MEDIA_TYPE_VIDEO,       /**< Video media */
+    MEDIA_TYPE_DATA,        /**< Data */
+    MEDIA_TYPE_APPLICATION, /**< Aplication specific */
+    MEDIA_TYPE_CONTROL,     /**< Control signals */
+    MEDIA_TYPE_TEXT,        /**< Text */
+    MEDIA_TYPE_MESSAGE,     /**< Message */
+    MEDIA_TYPE_OTHER        /**< Other media type */
 } mb_smf_sc_mbs_media_type_e;
 
 /** MBS Media Info
  */
 typedef struct mb_smf_sc_mbs_media_info_s {
-    mb_smf_sc_mbs_media_type_e mbs_media_type;
-    uint64_t *max_requested_mbs_bandwidth_downlink;
-    uint64_t *min_requested_mbs_bandwidth_downlink;
-    char *codecs[2];
+    mb_smf_sc_mbs_media_type_e mbs_media_type;      /**< The media type */
+    uint64_t *max_requested_mbs_bandwidth_downlink; /**< The maximum guaranteed bit rate requested for downlink traffic */
+    uint64_t *min_requested_mbs_bandwidth_downlink; /**< The minimum guaranteed bit rate requested for downlink traffic */
+    char *codecs[2];                                /**< The CODEC or CODECs used */
 } mb_smf_sc_mbs_media_info_t;
 
 /* mb_smf_sc_mbs_media_info Type functions */

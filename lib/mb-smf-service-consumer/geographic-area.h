@@ -30,16 +30,16 @@ typedef struct mb_smf_sc_geographic_area_s mb_smf_sc_geographic_area_t;
  */
 
 typedef enum {
-    GEOGRAPHIC_AREA_SHAPE_NONE = 0,
-    GEOGRAPHIC_AREA_SHAPE_POINT,
-    GEOGRAPHIC_AREA_SHAPE_POINT_UNCERTAINTY_CIRCLE,
-    GEOGRAPHIC_AREA_SHAPE_POINT_UNCERTAINTY_ELLIPSE,
-    GEOGRAPHIC_AREA_SHAPE_POLYGON,
-    GEOGRAPHIC_AREA_SHAPE_POINT_ALTITUDE,
-    GEOGRAPHIC_AREA_SHAPE_POINT_ALTITUDE_UNCERTAINTY,
-    GEOGRAPHIC_AREA_SHAPE_ELLIPSOID_ARC,
-    GEOGRAPHIC_AREA_SHAPE_LOCAL_2D_POINT_UNCERTAINTY_ELLIPSE,
-    GEOGRAPHIC_AREA_SHAPE_LOCAL_3D_POINT_UNCERTAINTY_ELLIPSOID/*,*/
+    GEOGRAPHIC_AREA_SHAPE_NONE = 0,                              /**< No geographic area */
+    GEOGRAPHIC_AREA_SHAPE_POINT,                                 /**< Single point */
+    GEOGRAPHIC_AREA_SHAPE_POINT_UNCERTAINTY_CIRCLE,              /**< Point with uncertainty circle */
+    GEOGRAPHIC_AREA_SHAPE_POINT_UNCERTAINTY_ELLIPSE,             /**< Point with uncertainty ellipse */
+    GEOGRAPHIC_AREA_SHAPE_POLYGON,                               /**< Geographic area described by a polygon */
+    GEOGRAPHIC_AREA_SHAPE_POINT_ALTITUDE,                        /**< Point with altitude */
+    GEOGRAPHIC_AREA_SHAPE_POINT_ALTITUDE_UNCERTAINTY,            /**< Point with altitude and uncertainty ellipsoid */
+    GEOGRAPHIC_AREA_SHAPE_ELLIPSOID_ARC,                         /**< Ellipsoid arc around a point */
+    GEOGRAPHIC_AREA_SHAPE_LOCAL_2D_POINT_UNCERTAINTY_ELLIPSE,    /**< Relative Point with uncertainty ellipse */
+    GEOGRAPHIC_AREA_SHAPE_LOCAL_3D_POINT_UNCERTAINTY_ELLIPSOID/*,*/ /**< Relative Point with altitude and uncertainty ellipsoid */
     /* GEOGRAPHIC_AREA_SHAPE_DISTANCE_DIRECTION, */
     /* GEOGRAPHIC_AREA_SHAPE_RELATIVE_2D_LOCATION_UNCERTAINTY_ELLIPSE, */
     /* GEOGRAPHIC_AREA_SHAPE_RELATIVE_3D_LOCATION_UNCERTAINTY_ELLIPSOID */

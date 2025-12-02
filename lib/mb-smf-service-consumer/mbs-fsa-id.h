@@ -30,8 +30,8 @@ extern "C" {
 /** MBS FSA Id
  */
 typedef struct mb_smf_sc_mbs_fsa_id_s {
-    ogs_lnode_t node;
-    uint32_t id; /* 0 <= id <= 16777215 */
+    ogs_lnode_t node; /**< Can be used in an ogs_list_t list */
+    uint32_t id;      /**< Id number between 0 and 16777215 */
 } mb_smf_sc_mbs_fsa_id_t;
 
 /* mb_smf_sc_mbs_fsa_id Type functions */

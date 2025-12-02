@@ -30,9 +30,9 @@ typedef struct mb_smf_sc_ncgi_s mb_smf_sc_ncgi_t;
 /** NCGI TAI
  */
 typedef struct mb_smf_sc_ncgi_tai_s {
-    ogs_lnode_t node;
-    mb_smf_sc_tai_t tai;
-    ogs_list_t ncgis; /* list of mb_smf_sc_ncgi_t */
+    ogs_lnode_t node;     /**< This can be used in an ogs_list_t list */
+    mb_smf_sc_tai_t tai;  /**< The TAI */
+    ogs_list_t ncgis;     /**< List of mb_smf_sc_ncgi_t objects */
 } mb_smf_sc_ncgi_tai_t;
 
 /* mb_smf_sc_ncgi_tai Type functions */

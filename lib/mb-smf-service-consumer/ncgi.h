@@ -31,10 +31,10 @@ extern "C" {
 /** NCGI
  */
 typedef struct mb_smf_sc_ncgi_s {
-    ogs_lnode_t node;
-    ogs_plmn_id_t plmn_id;
-    uint64_t nr_cell_id : 36; /* 36-bit unsigned */
-    uint64_t *nid; /* NULL or pointer to 44-bit unsigned */
+    ogs_lnode_t node;         /**< This can be used in an ogs_list_t list */
+    ogs_plmn_id_t plmn_id;    /**< PLMN Id */
+    uint64_t nr_cell_id : 36; /**< Nr Cell Id (36-bit unsigned value) */
+    uint64_t *nid;            /**< `NULL` or pointer to 44-bit unsigned Network Id value */
 } mb_smf_sc_ncgi_t;
 
 /* mb_smf_sc_ncgi Type functions */
@@ -44,7 +44,7 @@ typedef struct mb_smf_sc_ncgi_s {
  * @static
  * @public
  *
- * Creates an empty NCGI with PLMN set to 000-00, Nr Cell Id set to 0 and no Network Id.
+ * Creates an empty NCGI with PLMN set to 000-00, NR Cell Id set to 0 and no Network Id.
  *
  * @return A new, empty, NCGI.
  */
