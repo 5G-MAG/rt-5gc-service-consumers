@@ -31,8 +31,10 @@
 #include "priv_mbs-service-info.h"
 #include "priv_mbs-media-comp.h"
 #include "priv_mbs-media-info.h"
+#include "priv_mbs-qos-req.h"
 #include "nmbsmf-mbs-session-build.h"
 #include "nmbsmf-tmgi-build.h"
+#include "utils.h"
 
 #include "unit-test.h"
 
@@ -251,7 +253,7 @@ ogs_list_t *_mbs_session_public_patch_list(const mb_smf_sc_mbs_session_t *a, con
         FIELD_STRUCT_NOT_UPDATEABLE(snssai, "S-NSSAI", __snssai_equal);
         FIELD_STRUCT_NOT_UPDATEABLE(start_time, "start time", __ogs_time_equal);
         FIELD_STRUCT_NOT_UPDATEABLE(termination_time, "termination time", __ogs_time_equal);
-        APPEND_PATCH_LIST(mbs_service_info, "mbsServiceInfo", _mbs_service_info_patch_list);
+        APPEND_PATCH_LIST(mbs_service_info, "mbsServInfo", _mbs_service_info_patch_list);
         if (a->service_type == MBS_SERVICE_TYPE_BROADCAST) {
             FIELD_NOT_UPDATEABLE(activity_status, "activity status");
             APPEND_INLINE_PATCH_LIST(mbs_fsa_ids, "mbsFsaIds", _mbs_fsa_ids_patch_list);
@@ -260,6 +262,8 @@ ogs_list_t *_mbs_session_public_patch_list(const mb_smf_sc_mbs_session_t *a, con
             FIELD_INLINE_NOT_UPDATEABLE(mbs_fsa_ids, "MBS FSA Ids", _mbs_fsa_ids_equal);
         }
         /* associated_session_id not present in current Open5GS model */
+        /* mbs_security_context not currently implemented */
+        /* area_session_policy_id not present in current Open5GS model */
 
 #undef FIELD_NOT_UPDATEABLE
 #undef FIELD_STRUCT_NOT_UPDATEABLE
@@ -1007,6 +1011,8 @@ static bool test_create_sess_all_fields(unit_test_ctx *ctx)
 
 static bool test_update_sess(unit_test_ctx *ctx)
 {
+    OpenAPI_patch_item_t *patch_item = NULL;
+    ogs_sbi_request_t *req = NULL;
     _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
     session->id = ogs_strdup(FAKE_SESSION_ID);
     session->session.service_type = MBS_SERVICE_TYPE_MULTICAST;
@@ -1014,28 +1020,28 @@ static bool test_update_sess(unit_test_ctx *ctx)
 
     session->session.activity_status = MBS_SESSION_ACTIVITY_STATUS_ACTIVE;
 
-    ogs_sbi_request_t *req = _nmbsmf_mbs_session_build_update((void*)session, NULL);
+    req = _nmbsmf_mbs_session_build_update((void*)session, NULL);
 
-    UT_STR_EQUAL(req->h.method, OGS_SBI_HTTP_METHOD_PATCH);
+    UT_STR_EQUAL_GOTO(req->h.method, OGS_SBI_HTTP_METHOD_PATCH, error);
     if (!req->h.uri) {
-        UT_STR_EQUAL(req->h.service.name, OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION);
-        UT_STR_EQUAL(req->h.api.version, OGS_SBI_API_V1);
-        UT_STR_EQUAL(req->h.resource.component[0], OGS_SBI_RESOURCE_NAME_MBS_SESSIONS);
-        UT_STR_EQUAL(req->h.resource.component[1], FAKE_SESSION_ID);
-        UT_STR_NULL(req->h.resource.component[2]);
+        UT_STR_EQUAL_GOTO(req->h.service.name, OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION, error);
+        UT_STR_EQUAL_GOTO(req->h.api.version, OGS_SBI_API_V1, error);
+        UT_STR_EQUAL_GOTO(req->h.resource.component[0], OGS_SBI_RESOURCE_NAME_MBS_SESSIONS, error);
+        UT_STR_EQUAL_GOTO(req->h.resource.component[1], FAKE_SESSION_ID, error);
+        UT_STR_NULL_GOTO(req->h.resource.component[2], error);
     } else {
-        UT_STR_MATCHES(req->h.uri, "^https?://(?:[a-zA-Z0-9.]*|\\[[0-9A-Fa-f:]*\\])(?::[1-9][0-9]*)?/" OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION "/" OGS_SBI_API_V1 "/" OGS_SBI_RESOURCE_NAME_MBS_SESSIONS "/" FAKE_SESSION_ID "$");
+        UT_STR_MATCHES_GOTO(req->h.uri, "^https?://(?:[a-zA-Z0-9.]*|\\[[0-9A-Fa-f:]*\\])(?::[1-9][0-9]*)?/" OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION "/" OGS_SBI_API_V1 "/" OGS_SBI_RESOURCE_NAME_MBS_SESSIONS "/" FAKE_SESSION_ID "$", error);
     }
 
     cJSON *json = cJSON_Parse(req->http.content);
     if (!json) {
         fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON\n");
-        return false;
+        goto error;
     }
 
     if (!cJSON_IsArray(json)) {
         fprintf(stderr, "expected req->http.content to be a JSON array\n");
-        return false;
+        goto error;
     }
 
     cJSON *item;
@@ -1044,35 +1050,190 @@ static bool test_update_sess(unit_test_ctx *ctx)
         count++;
         if (!cJSON_IsObject(item)) {
             fprintf(stderr, "expected req->http.content to be a JSON array of objects\n");
-            return false;
+            goto error;
         }
 
         OpenAPI_patch_item_t *patch_item = OpenAPI_patch_item_parseFromJSON(item);
         if (!patch_item) {
             fprintf(stderr, "expected req->http.content to be a JSON array of patch objects\n");
-            return false;
+            goto error;
         }
 
         if (count == 1) {
-            UT_ENUM_EQUAL(patch_item->op, OpenAPI_patch_operation_add);
-            UT_STR_EQUAL(patch_item->path, "/activityStatus");
-            UT_PTR_NOT_NULL(patch_item->value);
-            UT_PTR_NOT_NULL(patch_item->value->json);
+            UT_ENUM_EQUAL_GOTO(patch_item->op, OpenAPI_patch_operation_add, error);
+            UT_STR_EQUAL_GOTO(patch_item->path, "/activityStatus", error);
+            UT_PTR_NOT_NULL_GOTO(patch_item->value, error);
+            UT_PTR_NOT_NULL_GOTO(patch_item->value->json, error);
             if (!cJSON_IsString(patch_item->value->json)) {
                 fprintf(stderr, "expected patch_item->value->json to be a string value\n");
-                return false;
+                goto error;
             }
             const char *value = cJSON_GetStringValue(patch_item->value->json);
-            UT_STR_EQUAL(value, "ACTIVE");
+            UT_STR_EQUAL_GOTO(value, "ACTIVE", error);
+        }
+
+        OpenAPI_patch_item_free(patch_item);
+        patch_item = NULL;
+    }
+
+    if (count != 1) {
+        fprintf(stderr, "MBS Session update, line " OGS_STRINGIFY(__LINE__) ": expected 1 JSON patch, got %zu\n", count);
+        goto error;
+    }
+
+    ogs_sbi_request_free(req);
+    req = NULL;
+
+    // Add mbs_service_info.mbs_media_comp["1"]
+    _mbs_session_public_copy(&session->previous_session, &session->session);
+
+    session->session.mbs_service_info = mb_smf_sc_mbs_service_info_new();
+    mb_smf_sc_mbs_media_comp_t *media_comp = mb_smf_sc_mbs_media_comp_new();
+    media_comp->id = 1;
+    media_comp->mbs_qos_req =  mb_smf_sc_mbs_qos_req_new();
+    media_comp->mbs_qos_req->five_qi = 9;
+    media_comp->mbs_qos_req->guarenteed_bit_rate = ogs_malloc(sizeof(*media_comp->mbs_qos_req->guarenteed_bit_rate));
+    *media_comp->mbs_qos_req->guarenteed_bit_rate = 20000;
+    media_comp->mbs_qos_req->max_bit_rate = ogs_malloc(sizeof(*media_comp->mbs_qos_req->max_bit_rate));
+    *media_comp->mbs_qos_req->max_bit_rate = 100000;
+    mb_smf_sc_mbs_service_info_set_mbs_media_comp(session->session.mbs_service_info, media_comp);
+
+    req = _nmbsmf_mbs_session_build_update((void*)session, NULL);
+
+    UT_STR_EQUAL_GOTO(req->h.method, OGS_SBI_HTTP_METHOD_PATCH, error);
+    if (!req->h.uri) {
+        UT_STR_EQUAL_GOTO(req->h.service.name, OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION, error);
+        UT_STR_EQUAL_GOTO(req->h.api.version, OGS_SBI_API_V1, error);
+        UT_STR_EQUAL_GOTO(req->h.resource.component[0], OGS_SBI_RESOURCE_NAME_MBS_SESSIONS, error);
+        UT_STR_EQUAL_GOTO(req->h.resource.component[1], FAKE_SESSION_ID, error);
+        UT_STR_NULL_GOTO(req->h.resource.component[2], error);
+    } else {
+        UT_STR_MATCHES_GOTO(req->h.uri, "^https?://(?:[a-zA-Z0-9.]*|\\[[0-9A-Fa-f:]*\\])(?::[1-9][0-9]*)?/" OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION "/" OGS_SBI_API_V1 "/" OGS_SBI_RESOURCE_NAME_MBS_SESSIONS "/" FAKE_SESSION_ID "$", error);
+    }
+
+    json = cJSON_Parse(req->http.content);
+    if (!json) {
+        fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON\n");
+        goto error;
+    }
+
+    if (!cJSON_IsArray(json)) {
+        fprintf(stderr, "expected req->http.content to be a JSON array\n");
+        goto error;
+    }
+
+    count = 0;
+    cJSON_ArrayForEach(item, json) {
+        count++;
+        if (!cJSON_IsObject(item)) {
+            fprintf(stderr, "expected req->http.content to be a JSON array of objects\n");
+            goto error;
+        }
+
+        OpenAPI_patch_item_t *patch_item = OpenAPI_patch_item_parseFromJSON(item);
+        if (!patch_item) {
+            fprintf(stderr, "expected req->http.content to be a JSON array of patch objects\n");
+            goto error;
+        }
+
+        if (count == 1) {
+            UT_ENUM_EQUAL_GOTO(patch_item->op, OpenAPI_patch_operation_add, error);
+            UT_STR_EQUAL_GOTO(patch_item->path, "/mbsServInfo", error);
+            UT_PTR_NOT_NULL_GOTO(patch_item->value, error);
+            UT_PTR_NOT_NULL_GOTO(patch_item->value->json, error);
+            OpenAPI_mbs_service_info_t *serv_info = OpenAPI_mbs_service_info_parseFromJSON(patch_item->value->json);
+            if (!serv_info) {
+                fprintf(stderr, "Unable to parse patch value as MbsServiceInfo\n");
+                goto error;
+            }
+            // TODO: check serv_info for correct values
+        }
+
+        OpenAPI_patch_item_free(patch_item);
+        patch_item = NULL;
+    }
+
+    if (count != 1) {
+        fprintf(stderr, "MBS Session update, line " OGS_STRINGIFY(__LINE__) ": expected 1 JSON patch, got %zu\n", count);
+        goto error;
+    }
+
+    ogs_sbi_request_free(req);
+    req = NULL;
+
+    // Change mbs_service_info.mbs_media_comp["1"].mbs_qos_req.max_bit_rate
+    _mbs_session_public_copy(&session->previous_session, &session->session);
+
+    *media_comp->mbs_qos_req->max_bit_rate = 70000;
+
+    req = _nmbsmf_mbs_session_build_update((void*)session, NULL);
+
+    UT_STR_EQUAL_GOTO(req->h.method, OGS_SBI_HTTP_METHOD_PATCH, error);
+    if (!req->h.uri) {
+        UT_STR_EQUAL_GOTO(req->h.service.name, OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION, error);
+        UT_STR_EQUAL_GOTO(req->h.api.version, OGS_SBI_API_V1, error);
+        UT_STR_EQUAL_GOTO(req->h.resource.component[0], OGS_SBI_RESOURCE_NAME_MBS_SESSIONS, error);
+        UT_STR_EQUAL_GOTO(req->h.resource.component[1], FAKE_SESSION_ID, error);
+        UT_STR_NULL_GOTO(req->h.resource.component[2], error);
+    } else {
+        UT_STR_MATCHES_GOTO(req->h.uri, "^https?://(?:[a-zA-Z0-9.]*|\\[[0-9A-Fa-f:]*\\])(?::[1-9][0-9]*)?/" OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION "/" OGS_SBI_API_V1 "/" OGS_SBI_RESOURCE_NAME_MBS_SESSIONS "/" FAKE_SESSION_ID "$", error);
+    }
+
+    json = cJSON_Parse(req->http.content);
+    if (!json) {
+        fprintf(stderr, "expected req->http.content to be valid JSON, could not parse string as JSON\n");
+        goto error;
+    }
+
+    if (!cJSON_IsArray(json)) {
+        fprintf(stderr, "expected req->http.content to be a JSON array\n");
+        goto error;
+    }
+
+    count = 0;
+    cJSON_ArrayForEach(item, json) {
+        count++;
+        if (!cJSON_IsObject(item)) {
+            fprintf(stderr, "expected req->http.content to be a JSON array of objects\n");
+            goto error;
+        }
+
+        OpenAPI_patch_item_t *patch_item = OpenAPI_patch_item_parseFromJSON(item);
+        if (!patch_item) {
+            fprintf(stderr, "expected req->http.content to be a JSON array of patch objects\n");
+            goto error;
+        }
+
+        if (count == 1) {
+            UT_ENUM_EQUAL_GOTO(patch_item->op, OpenAPI_patch_operation_replace, error);
+            UT_STR_EQUAL_GOTO(patch_item->path, "/mbsServInfo/mbsMediaComps/1/mbsQoSReq/maxBitRate", error);
+            UT_PTR_NOT_NULL_GOTO(patch_item->value, error);
+            UT_PTR_NOT_NULL_GOTO(patch_item->value->json, error);
+            if (!cJSON_IsString(patch_item->value->json)) {
+                fprintf(stderr, "expected patch_item->value->json to be a string value\n");
+                goto error;
+            }
+            const char *value = cJSON_GetStringValue(patch_item->value->json);
+            char *br = _bitrate_to_str(70000);
+            UT_STR_EQUAL_GOTO(value, br, error);
+            ogs_free(br);
         }
     }
 
     if (count != 1) {
-        fprintf(stderr, "expected 1 JSON patch, got %zu\n", count);
-        return false;
+        fprintf(stderr, "MBS Session update, line " OGS_STRINGIFY(__LINE__) ": expected 1 JSON patch, got %zu\n", count);
+        goto error;
     }
 
+    ogs_sbi_request_free(req);
+    req = NULL;
+
     return true;
+
+error:
+    if (patch_item) OpenAPI_patch_item_free(patch_item);
+    if (req) ogs_sbi_request_free(req);
+    return false;
 }
 
 static bool test_delete_sess(unit_test_ctx *ctx)
