@@ -102,6 +102,8 @@ typedef struct mb_smf_sc_mbs_session_s {
     mb_smf_sc_activity_status_e activity_status; /**< The activity status of a multicast MBS Session (service_type == multicast) */
     ogs_list_t mbs_fsa_ids;            /**< The MBS FSA Ids list for a broadcast MBS Session (service_type == broadcast) */
     mb_smf_sc_associated_session_id_t *associated_session_id; /**< The Associated Session Id (for Rel 18, currently unused) */
+    /* mb_smf_sc_mbs_security_context_t *mbs_security_context; **< The optional MBS Security Context */
+    /* uint16_t *area_session_policy_id; **< The optional Area Session Policy Id (for Rel 18, currently unused) */
 } mb_smf_sc_mbs_session_t;
 
 /* mb_smf_sc_mbs_session Type functions */

@@ -21,6 +21,8 @@ extern "C" {
 
 /* Forward declarations */
 
+typedef struct mb_smf_sc_mbs_media_comp_s mb_smf_sc_mbs_media_comp_t;
+
 /* Data types */
 
 /** @defgroup mbs_service_info_class MBS Service Info management
@@ -54,6 +56,22 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_service_info_t *mb_smf_sc_mbs_service_info_new()
  * @param service_info The MBS Service Info to destroy.
  */
 MB_SMF_CLIENT_API void mb_smf_sc_mbs_service_info_delete(mb_smf_sc_mbs_service_info_t *service_info);
+
+/** Set Media Component
+ *
+ * Sets a Media Component to the component given in @p media_comp. The @a id attribute of @p media_comp will provide the id to
+ * store the media comp as. The Media Component will be freed when the MBS Service Info is destroyed or when another MBS Media
+ * Component is set with the same @a id value.
+ *
+ * @param service_info The MBS Service Info to set the MBS Media Comp for.
+ * @param media_comp The Media Component to set. This will be deleted when the MBS Service Info is destroyed or when another MBS
+ *                   Media Component is set with the same @a id value.
+ *
+ * @return @p service_info.
+ */
+MB_SMF_CLIENT_API mb_smf_sc_mbs_service_info_t *mb_smf_sc_mbs_service_info_set_mbs_media_comp(
+                                                                            mb_smf_sc_mbs_service_info_t *service_info,
+                                                                            mb_smf_sc_mbs_media_comp_t *media_comp);
 
 /**@}*/
 

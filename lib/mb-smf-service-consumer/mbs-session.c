@@ -586,7 +586,7 @@ ogs_list_t *_mbs_session_public_patch_list(const mb_smf_sc_mbs_session_t *a, con
         FIELD_STRUCT_NOT_UPDATEABLE(snssai, "S-NSSAI", __snssai_equal);
         FIELD_STRUCT_NOT_UPDATEABLE(start_time, "start time", __ogs_time_equal);
         FIELD_STRUCT_NOT_UPDATEABLE(termination_time, "termination time", __ogs_time_equal);
-        APPEND_PATCH_LIST(mbs_service_info, "mbsServiceInfo", _mbs_service_info_patch_list);
+        APPEND_PATCH_LIST(mbs_service_info, "mbsServInfo", _mbs_service_info_patch_list);
         if (a->service_type == MBS_SERVICE_TYPE_BROADCAST) {
             FIELD_NOT_UPDATEABLE(activity_status, "activity status");
             APPEND_INLINE_PATCH_LIST(mbs_fsa_ids, "mbsFsaIdList", _mbs_fsa_ids_patch_list);
@@ -595,6 +595,8 @@ ogs_list_t *_mbs_session_public_patch_list(const mb_smf_sc_mbs_session_t *a, con
             FIELD_INLINE_NOT_UPDATEABLE(mbs_fsa_ids, "MBS FSA Ids", _mbs_fsa_ids_equal);
         }
         /* associated_session_id not present in current Open5GS model */
+        /* mbs_security_context not currently implemented */
+        /* area_session_policy_id not present in current Open5GS model */
 
 #undef FIELD_NOT_UPDATEABLE
 #undef FIELD_STRUCT_NOT_UPDATEABLE

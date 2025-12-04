@@ -30,6 +30,8 @@ bool _mbs_service_info_equal(const mb_smf_sc_mbs_service_info_t *a, const mb_smf
 ogs_list_t *_mbs_service_info_patch_list(const mb_smf_sc_mbs_service_info_t *a, const mb_smf_sc_mbs_service_info_t *b);
 OpenAPI_mbs_service_info_t *_mbs_service_info_to_openapi(const mb_smf_sc_mbs_service_info_t *mbs_service_info);
 cJSON *_mbs_service_info_to_json(const mb_smf_sc_mbs_service_info_t *mbs_service_info);
+mb_smf_sc_mbs_service_info_t *_mbs_service_info_set_mbs_media_comp(mb_smf_sc_mbs_service_info_t *svc_info,
+                                                                   mb_smf_sc_mbs_media_comp_t *media_comp);
 
 #ifdef __cplusplus
 }

@@ -31,16 +31,29 @@ MB_SMF_CLIENT_API void mb_smf_sc_mbs_service_info_delete(mb_smf_sc_mbs_service_i
     _mbs_service_info_free(service_info);
 }
 
+MB_SMF_CLIENT_API mb_smf_sc_mbs_service_info_t *mb_smf_sc_mbs_service_info_set_mbs_media_comp(
+                                                                            mb_smf_sc_mbs_service_info_t *service_info,
+                                                                            mb_smf_sc_mbs_media_comp_t *media_comp)
+{
+    return _mbs_service_info_set_mbs_media_comp(service_info, media_comp);
+}
+
 /* Library internal mbs_service_info methods (protected) */
 mb_smf_sc_mbs_service_info_t *_mbs_service_info_new()
 {
-    return (mb_smf_sc_mbs_service_info_t*)ogs_calloc(1, sizeof(mb_smf_sc_mbs_service_info_t));
+    mb_smf_sc_mbs_service_info_t *ret = (mb_smf_sc_mbs_service_info_t*)ogs_calloc(1, sizeof(mb_smf_sc_mbs_service_info_t));
+    ret->mbs_media_comps = ogs_hash_make();
+    return ret;
 }
 
 void _mbs_service_info_free(mb_smf_sc_mbs_service_info_t *service_info)
 {
     if (!service_info) return;
     _mbs_service_info_clear(service_info);
+    if (service_info->mbs_media_comps) {
+        ogs_hash_destroy(service_info->mbs_media_comps);
+        service_info->mbs_media_comps = NULL;
+    }
     ogs_free(service_info);
 }
 
@@ -56,8 +69,6 @@ void _mbs_service_info_clear(mb_smf_sc_mbs_service_info_t *mbs_svc_info)
             _mbs_media_comp_free(media_comp);
         }
         ogs_free(idx);
-        ogs_hash_destroy(mbs_svc_info->mbs_media_comps);
-        mbs_svc_info->mbs_media_comps = NULL;
     }
     if (mbs_svc_info->af_app_id) {
         ogs_free(mbs_svc_info->af_app_id);
@@ -211,7 +222,7 @@ ogs_list_t *_mbs_service_info_patch_list(const mb_smf_sc_mbs_service_info_t *a, 
         }
     }
 
-    return NULL;
+    return patches;
 }
 
 OpenAPI_mbs_service_info_t *_mbs_service_info_to_openapi(const mb_smf_sc_mbs_service_info_t *svc_info)
@@ -235,6 +246,24 @@ cJSON *_mbs_service_info_to_json(const mb_smf_sc_mbs_service_info_t *svc_info)
     OpenAPI_mbs_service_info_free(api_svc_info);
 
     return json;
+}
+
+mb_smf_sc_mbs_service_info_t *_mbs_service_info_set_mbs_media_comp(mb_smf_sc_mbs_service_info_t *svc_info,
+                                                                   mb_smf_sc_mbs_media_comp_t *media_comp)
+{
+    if (!svc_info || !media_comp) return NULL;
+
+    if (!svc_info->mbs_media_comps) svc_info->mbs_media_comps = ogs_hash_make();
+
+    mb_smf_sc_mbs_media_comp_t *old_comp =
+                (mb_smf_sc_mbs_media_comp_t*)ogs_hash_get(svc_info->mbs_media_comps, &media_comp->id, sizeof(media_comp->id));
+    if (old_comp) {
+        if (old_comp == media_comp) return svc_info; // setting the same object again, just ignore
+        mb_smf_sc_mbs_media_comp_delete(old_comp);
+    }
+    ogs_hash_set(svc_info->mbs_media_comps, &media_comp->id, sizeof(media_comp->id), media_comp);
+
+    return svc_info;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:
