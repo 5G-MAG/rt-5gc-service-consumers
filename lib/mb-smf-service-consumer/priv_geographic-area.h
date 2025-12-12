@@ -25,6 +25,7 @@ typedef struct OpenAPI_geographic_area_s OpenAPI_geographic_area_t;
 /* Library internal geographic_area methods (protected) */
 void _geographic_areas_free(ogs_list_t *geographic_areas);
 void _geographic_areas_clear(ogs_list_t *geographic_areas);
+void _geographic_areas_copy_values(ogs_list_t *dst, const ogs_list_t *src);
 void _geographic_areas_copy(ogs_list_t **dst, const ogs_list_t *src);
 bool _geographic_areas_equal(const ogs_list_t *a, const ogs_list_t *b);
 ogs_list_t *_geographic_areas_patch_list(const ogs_list_t *a, const ogs_list_t *b);

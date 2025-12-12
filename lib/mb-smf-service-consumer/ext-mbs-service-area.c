@@ -73,10 +73,8 @@ void _ext_mbs_service_area_copy(mb_smf_sc_ext_mbs_service_area_t **dst, const mb
     }
 
     /* copy src to dst */
-    ogs_list_t *l = &(*dst)->geographic_areas;
-    _geographic_areas_copy(&l, &src->geographic_areas);
-    l = &(*dst)->civic_addresses;
-    _civic_addresses_copy(&l, &src->civic_addresses);
+    _geographic_areas_copy_values(&(*dst)->geographic_areas, &src->geographic_areas);
+    _civic_addresses_copy_values(&(*dst)->civic_addresses, &src->civic_addresses);
 }
 
 bool _ext_mbs_service_area_equal(const mb_smf_sc_ext_mbs_service_area_t *a, const mb_smf_sc_ext_mbs_service_area_t *b)

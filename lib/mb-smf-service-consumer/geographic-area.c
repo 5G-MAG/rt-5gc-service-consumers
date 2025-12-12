@@ -54,6 +54,24 @@ void _geographic_areas_clear(ogs_list_t *geog_areas)
     }
 }
 
+void _geographic_areas_copy_values(ogs_list_t *dst, const ogs_list_t *src)
+{
+    if (src && ogs_list_count(src) == 0) src = NULL;
+
+    if (!dst) return;
+
+    _geographic_areas_clear(dst);
+
+    if (!src) return;
+
+    mb_smf_sc_geographic_area_t *area;
+    ogs_list_for_each(src, area) {
+        mb_smf_sc_geographic_area_t *new_area = NULL;
+        _geographic_area_copy(&new_area, area);
+        ogs_list_add(dst, new_area);
+    }
+}
+
 void _geographic_areas_copy(ogs_list_t **dst, const ogs_list_t *src)
 {
     if (src && ogs_list_count(src) == 0) src = NULL;
@@ -67,16 +85,9 @@ void _geographic_areas_copy(ogs_list_t **dst, const ogs_list_t *src)
 
     if (!*dst) {
         *dst = (typeof(*dst))ogs_calloc(1, sizeof(**dst));
-    } else {
-        _geographic_areas_clear(*dst);
     }
 
-    mb_smf_sc_geographic_area_t *area;
-    ogs_list_for_each(src, area) {
-        mb_smf_sc_geographic_area_t *new_area = NULL;
-        _geographic_area_copy(&new_area, area);
-        ogs_list_add(*dst, new_area);
-    }
+    _geographic_areas_copy_values(*dst, src);
 }
 
 bool _geographic_areas_equal(const ogs_list_t *a, const ogs_list_t *b)

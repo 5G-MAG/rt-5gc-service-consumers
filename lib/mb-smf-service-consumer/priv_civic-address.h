@@ -25,6 +25,7 @@ typedef struct OpenAPI_civic_address_s OpenAPI_civic_address_t;
 /* Library internal civic_address methods (protected) */
 void _civic_addresses_free(ogs_list_t *civic_addresses);
 void _civic_addresses_clear(ogs_list_t *civic_addresses);
+void _civic_addresses_copy_values(ogs_list_t *dst, const ogs_list_t *src);
 void _civic_addresses_copy(ogs_list_t **dst, const ogs_list_t *src);
 bool _civic_addresses_equal(const ogs_list_t *a, const ogs_list_t *b);
 ogs_list_t *_civic_addresses_patch_list(const ogs_list_t *a, const ogs_list_t *b);

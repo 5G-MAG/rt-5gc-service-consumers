@@ -47,6 +47,25 @@ void _civic_addresses_clear(ogs_list_t *civic_addresses)
     }
 }
 
+void _civic_addresses_copy_values(ogs_list_t *dst, const ogs_list_t *src)
+{
+    if (src && ogs_list_count(src) == 0) src = NULL;
+
+    if (!dst) return;
+
+    _civic_addresses_clear(dst);
+
+    if (!src) return;
+
+    mb_smf_sc_civic_address_t *addr;
+    ogs_list_for_each(src, addr) {
+        mb_smf_sc_civic_address_t *new_addr = NULL;
+        _civic_address_copy(&new_addr, addr);
+        ogs_list_add(dst, new_addr);
+    }
+
+}
+
 void _civic_addresses_copy(ogs_list_t **dst, const ogs_list_t *src)
 {
     if (src && ogs_list_count(src) == 0) src = NULL;
@@ -57,19 +76,11 @@ void _civic_addresses_copy(ogs_list_t **dst, const ogs_list_t *src)
         }
         return;
     }
-
+    
     if (!*dst) {
         *dst = (typeof(*dst))ogs_calloc(1, sizeof(**dst));
-    } else {
-        _civic_addresses_clear(*dst);
     }
-
-    mb_smf_sc_civic_address_t *addr;
-    ogs_list_for_each(src, addr) {
-        mb_smf_sc_civic_address_t *new_addr = NULL;
-        _civic_address_copy(&new_addr, addr);
-        ogs_list_add(*dst, new_addr);
-    }
+    _civic_addresses_copy_values(*dst, src);
 }
 
 bool _civic_addresses_equal(const ogs_list_t *a, const ogs_list_t *b)
