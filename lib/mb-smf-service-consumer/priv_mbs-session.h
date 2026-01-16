@@ -87,6 +87,12 @@ void _mbs_session_send_create(_priv_mbs_session_t *session);
 void _mbs_session_send_update(_priv_mbs_session_t *session);
 void _mbs_session_send_remove(_priv_mbs_session_t *session);
 
+void _mbs_session_do_callback(_priv_mbs_session_t *session, int result, const OpenAPI_problem_details_t *problem_details);
+void _mbs_session_do_created_callback(_priv_mbs_session_t *session);
+void _mbs_session_do_deleted_callback(_priv_mbs_session_t *session);
+void _mbs_session_do_create_error_callback(_priv_mbs_session_t *session, const OpenAPI_problem_details_t *problem_details);
+void _mbs_session_do_create_timeout_callback(_priv_mbs_session_t *session);
+
 void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess);
 _priv_mbs_status_subscription_t *_mbs_session_find_active_subscription(const _priv_mbs_session_t *session, const char *id);
 _priv_mbs_status_subscription_t *_mbs_session_find_subscription(const _priv_mbs_session_t *session, const char *correlation_id);

@@ -161,6 +161,17 @@ int _nmbsmf_mbs_session_parse(ogs_sbi_message_t *message, _priv_mbs_session_t *s
     return OGS_OK;
 }
 
+void _nmbsmf_mbs_session_delete_response(_priv_mbs_session_t *sess, ogs_sbi_message_t *message, ogs_sbi_response_t *response)
+{
+    if (!sess || !message || !response) return;
+
+    /* Tell application that the MBS Session was deleted */
+    _mbs_session_do_deleted_callback(sess);
+
+    /* Remove session from context */
+    _context_remove_mbs_session(sess);
+}
+
 int _nmbsmf_mbs_session_subscription_report_list_handler(_priv_mbs_status_subscription_t *subsc,
                                                          OpenAPI_list_t *event_report_list)
 {

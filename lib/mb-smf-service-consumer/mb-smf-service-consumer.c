@@ -176,9 +176,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
             /* response to MB-SMF MBS SESSION API request or discovery */
             if (ogs_sbi_parse_header(&message, &response->h) != OGS_OK) {
                 ogs_error("Failed to parse header from client response for MB-SMF MBS Session transaction");
-                if (sess->create_result_cb) {
-                    sess->create_result_cb(_priv_mbs_session_to_public(sess), OGS_ERROR, NULL, sess->create_result_cb_data);
-                }
+                _mbs_session_do_create_error_callback(sess, message.ProblemDetails);
                 ogs_sbi_message_free(&message);
                 break;
             }
@@ -200,28 +198,16 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                             if (response->status >= 200 && response->status < 300) {
                                 ogs_debug("Client response for Create MBS Session received");
                                 if (_nmbsmf_mbs_session_parse(&message, sess) == OGS_OK) {
-                                    if (sess->create_result_cb) {
-                                        ogs_debug("Forwarding creation result to calling application");
-                                        sess->create_result_cb(_priv_mbs_session_to_public(sess), OGS_OK, NULL,
-                                                               sess->create_result_cb_data);
-                                    }
+                                    _mbs_session_do_created_callback(sess);
                                     /* push pending changes (further subscriptions, etc) */
                                     _mbs_session_push_changes(sess);
                                 } else {
                                     ogs_warn("Errors in response from MB-SMF");
-                                    if (sess->create_result_cb) {
-                                        ogs_debug("Forwarding creation failure to calling application");
-                                        sess->create_result_cb(_priv_mbs_session_to_public(sess), OGS_ERROR, NULL,
-                                                               sess->create_result_cb_data);
-                                    }
+                                    _mbs_session_do_create_error_callback(sess, NULL);
                                 }
                             } else {
                                 ogs_error("MB-SMF responded with a %i status code", response->status);
-                                if (sess->create_result_cb) {
-                                    ogs_debug("Forwarding creation error to calling application");
-                                    sess->create_result_cb(_priv_mbs_session_to_public(sess), OGS_ERROR,
-                                                           message.ProblemDetails, sess->create_result_cb_data);
-                                }
+                                _mbs_session_do_create_error_callback(sess, message.ProblemDetails);
                             }
                             break;
                         DEFAULT
@@ -246,7 +232,25 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                         END
                         break;
                     DEFAULT
-                        /* .../mbs-sessions/... */
+                        /* .../mbs-sessions/{mbs-session-id}/... */
+                        const char *mbs_session_id = xact->request->h.resource.component[1];
+
+                        SWITCH(xact->request->h.resource.component[2])
+                        CASE("OGS_SWITCH_NULL")
+                            /* .../mbs-sessions/{mbs-session-id} */
+                            SWITCH(xact->request->h.method)
+                            CASE(OGS_SBI_HTTP_METHOD_DELETE)
+                                _nmbsmf_mbs_session_delete_response(sess, &message, response);
+                                break;
+                            DEFAULT
+                                break;
+                            END
+                            break;
+                        DEFAULT
+                            /* .../mbs-sessions/{mbs-session-id}/... */
+                            ogs_warn("Response for unknown path: .../mbs-sessions/%s/%s...", mbs_session_id, xact->request->h.resource.component[2]);
+                            break;
+                        END
                         break;
                     END
                     break;
@@ -329,11 +333,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                         CASE(OGS_SBI_HTTP_METHOD_POST)
                             /* Create MBS Session */
                             ogs_warn("Create MBS Session request timed out");
-                            if (sess->create_result_cb) {
-                                ogs_debug("Calling application callback for MBS Session creation with ETIMEDOUT");
-                                sess->create_result_cb(_priv_mbs_session_to_public(sess), OGS_ETIMEDOUT, NULL,
-                                                       sess->create_result_cb_data);
-                            }
+                            _mbs_session_do_create_timeout_callback(sess);
                             break;
                         DEFAULT
                             break;

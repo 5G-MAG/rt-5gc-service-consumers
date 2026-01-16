@@ -647,10 +647,8 @@ bool _mbs_session_push_changes(_priv_mbs_session_t *sess)
     ogs_debug("Pushing changes for MbsSession [%p (%p)]", sess, _priv_mbs_session_to_public(sess));
 
     if (sess->deleted) {
-        ogs_debug("Session has been deleted, removing...");
+        ogs_debug("Session has been deleted, sending removal request...");
         _mbs_session_send_remove(sess);
-        _context_remove_mbs_session(sess); // TODO: This drops the MBS session object before the removal request has been responded
-        _mbs_session_delete(sess);         //       to. Move these two lines to client response for MBS Session removal?
         return true;
     }
 
@@ -758,6 +756,34 @@ void _mbs_session_send_remove(_priv_mbs_session_t *session)
                                             _nmbsmf_mbs_session_build_remove, session, NULL);
 
     ogs_sbi_discover_and_send(xact);
+}
+
+void _mbs_session_do_callback(_priv_mbs_session_t *sess, int result, const OpenAPI_problem_details_t *problem_details)
+{
+    if (!sess) return;
+    if (!sess->create_result_cb) return;
+
+    sess->create_result_cb(_priv_mbs_session_to_public(sess), result, problem_details, sess->create_result_cb_data);
+}
+
+void _mbs_session_do_created_callback(_priv_mbs_session_t *session)
+{
+    _mbs_session_do_callback(session, OGS_OK, NULL);
+}
+
+void _mbs_session_do_deleted_callback(_priv_mbs_session_t *session)
+{
+    _mbs_session_do_callback(session, OGS_DONE, NULL);
+}
+
+void _mbs_session_do_create_error_callback(_priv_mbs_session_t *session, const OpenAPI_problem_details_t *problem_details)
+{
+    _mbs_session_do_callback(session, OGS_ERROR, problem_details);
+}
+
+void _mbs_session_do_create_timeout_callback(_priv_mbs_session_t *session)
+{
+    _mbs_session_do_callback(session, OGS_ETIMEDOUT, NULL);
 }
 
 void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess)
