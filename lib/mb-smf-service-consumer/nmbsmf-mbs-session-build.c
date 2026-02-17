@@ -157,10 +157,19 @@ ogs_sbi_request_t *_nmbsmf_mbs_session_build_update(void *context, void *data)
             OpenAPI_list_add(msg.PatchItemList, patch->item);
             ogs_free(patch);
         }
+        ogs_free(patches);
     }
 
     ogs_sbi_request_t *req = ogs_sbi_build_request(&msg);
     ogs_expect(req);
+
+    if (msg.PatchItemList) {
+        OpenAPI_lnode_t *node = NULL;
+        OpenAPI_list_for_each(msg.PatchItemList, node) {
+            OpenAPI_patch_item_free(node->data);
+        }
+        OpenAPI_list_free(msg.PatchItemList);
+    }
 
     return req;
 }
