@@ -245,7 +245,9 @@ bool _context_is_notification_server(ogs_sbi_server_t *server)
         ogs_list_for_each(&sess->new_subscriptions, subsc) {
             if (subsc->cache && subsc->cache->notif_server == server) return true;
         }
-        if (!ogs_hash_do(__check_notification_server, server, sess->active_subscriptions)) return true;
+        if (sess->active_subscriptions && !ogs_hash_do(__check_notification_server, server, sess->active_subscriptions)) {
+            return true;
+        }
     }
     return false;
 }
