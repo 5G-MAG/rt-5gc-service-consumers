@@ -200,9 +200,44 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_all_changes()
     return ret;
 }
 
-MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_callback(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_create_result_cb callback, void *data)
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_callback(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data)
 {
     return _mbs_session_set_callback(_priv_mbs_session_from_public(session), callback, data);
+}
+
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_create_callback(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data)
+{
+    return _mbs_session_set_create_callback(_priv_mbs_session_from_public(session), callback, data);
+}
+
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_update_callback(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data)
+{
+    return _mbs_session_set_update_callback(_priv_mbs_session_from_public(session), callback, data);
+}
+
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_delete_callback(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data)
+{
+    return _mbs_session_set_delete_callback(_priv_mbs_session_from_public(session), callback, data);
+}
+
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_callback_with_freefn(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data, mb_smf_sc_mbs_session_cb_data_free_fn data_free_fn)
+{
+    return _mbs_session_set_callback_freefn(_priv_mbs_session_from_public(session), callback, data, data_free_fn);
+}
+
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_create_callback_with_freefn(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data, mb_smf_sc_mbs_session_cb_data_free_fn data_free_fn)
+{
+    return _mbs_session_set_create_callback_freefn(_priv_mbs_session_from_public(session), callback, data, data_free_fn);
+}
+
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_update_callback_with_freefn(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data, mb_smf_sc_mbs_session_cb_data_free_fn data_free_fn)
+{
+    return _mbs_session_set_update_callback_freefn(_priv_mbs_session_from_public(session), callback, data, data_free_fn);
+}
+
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_delete_callback_with_freefn(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data, mb_smf_sc_mbs_session_cb_data_free_fn data_free_fn)
+{
+    return _mbs_session_set_delete_callback_freefn(_priv_mbs_session_from_public(session), callback, data, data_free_fn);
 }
 
 MB_SMF_CLIENT_API const char *mb_smf_sc_mbs_session_get_resource_id(const mb_smf_sc_mbs_session_t *session)
@@ -243,9 +278,10 @@ void _mbs_session_delete(_priv_mbs_session_t *session)
     if (!session) return;
 
     // mb_smf_sc_mbs_session_t session->session
-    _mbs_session_public_clear(&session->session);
     _mbs_session_public_free(session->previous_session);
     session->previous_session = NULL;
+
+    _mbs_session_release_callback_data(session);
 
     _priv_mbs_status_subscription_t *next, *node;
 
@@ -275,6 +311,8 @@ void _mbs_session_delete(_priv_mbs_session_t *session)
         session->sbi_object = NULL;
     }
 
+    _mbs_session_public_clear(&session->session);
+
     // session
     ogs_free(session);
 }
@@ -295,7 +333,9 @@ void _mbs_session_public_clear(mb_smf_sc_mbs_session_t *session)
         session->ssm = NULL;
     }
 
-    /* session->tmgi: TMGI held elsewhere in context, don't free here */
+    if (session->tmgi_req && session->tmgi != NULL) {
+        _tmgi_free(_priv_tmgi_from_public(session->tmgi));
+    }
     session->tmgi = NULL;
     session->tmgi_req = true;
 
@@ -377,8 +417,16 @@ void _mbs_session_public_copy(mb_smf_sc_mbs_session_t **dest, const mb_smf_sc_mb
         }
     }
 
-    /* copy TMGI (we don't own, so copying pointer is fine) */
-    dst->tmgi = src->tmgi;
+    /* copy TMGI (we don't own if we didn't request it, so copying pointer is fine) */
+    if (src->tmgi_req) {
+        /* source owns the TMGI, so copy it too */
+        _priv_tmgi_t *dest_tmgi = _priv_tmgi_from_public(dst->tmgi);
+        _tmgi_copy(&dest_tmgi, _priv_tmgi_from_public_const(src->tmgi));
+        dst->tmgi = _priv_tmgi_to_public(dest_tmgi);
+    } else {
+        /* source doesn't own TMGI because it wasn't requested, so copying pointer is fine */
+        dst->tmgi = src->tmgi;
+    }
 
     /* copy UDP tunnel */
     if (dst->mb_upf_udp_tunnel) ogs_freeaddrinfo(dst->mb_upf_udp_tunnel);
@@ -632,11 +680,64 @@ bool _mbs_session_set_tmgi(_priv_mbs_session_t *session, _priv_tmgi_t *tmgi)
     return true;
 }
 
-bool _mbs_session_set_callback(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_create_result_cb callback, void *data)
+bool _mbs_session_set_callback(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data)
+{
+    return _mbs_session_set_callback_freefn(session, callback, data, NULL);
+}
+
+bool _mbs_session_set_create_callback(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data)
+{
+    return _mbs_session_set_create_callback_freefn(session, callback, data, NULL);
+}
+
+bool _mbs_session_set_update_callback(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data)
+{
+    return _mbs_session_set_update_callback_freefn(session, callback, data, NULL);
+}
+
+bool _mbs_session_set_delete_callback(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data)
+{
+    return _mbs_session_set_delete_callback_freefn(session, callback, data, NULL);
+}
+
+bool _mbs_session_set_callback_freefn(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data,
+                                       mb_smf_sc_mbs_session_cb_data_free_fn data_free)
 {
     if (!session || session->deleted) return false;
+    bool result = true;
+    result &= _mbs_session_set_create_callback_freefn(session, callback, data, data_free);
+    result &= _mbs_session_set_update_callback_freefn(session, callback, data, data_free);
+    result &= _mbs_session_set_delete_callback_freefn(session, callback, data, data_free);
+    return result;
+}
+
+bool _mbs_session_set_create_callback_freefn(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data,
+                                             mb_smf_sc_mbs_session_cb_data_free_fn data_free)
+{
+    if (session->create_result_cb_data != data) _mbs_session_release_create_callback_data(session);
     session->create_result_cb = callback;
     session->create_result_cb_data = data;
+    session->create_cb_data_free = data_free;
+    return true;
+}
+
+bool _mbs_session_set_update_callback_freefn(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data,
+                                             mb_smf_sc_mbs_session_cb_data_free_fn data_free)
+{
+    if (session->update_result_cb_data != data) _mbs_session_release_update_callback_data(session);
+    session->update_result_cb = callback;
+    session->update_result_cb_data = data;
+    session->update_cb_data_free = data_free;
+    return true;
+}
+
+bool _mbs_session_set_delete_callback_freefn(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data,
+                                             mb_smf_sc_mbs_session_cb_data_free_fn data_free)
+{
+    if (session->delete_result_cb_data != data) _mbs_session_release_delete_callback_data(session);
+    session->delete_result_cb = callback;
+    session->delete_result_cb_data = data;
+    session->delete_cb_data_free = data_free;
     return true;
 }
 
@@ -758,7 +859,47 @@ void _mbs_session_send_remove(_priv_mbs_session_t *session)
     ogs_sbi_discover_and_send(xact);
 }
 
-void _mbs_session_do_callback(_priv_mbs_session_t *sess, int result, const OpenAPI_problem_details_t *problem_details)
+void _mbs_session_release_callback_data(_priv_mbs_session_t *sess)
+{
+    _mbs_session_release_create_callback_data(sess);
+    _mbs_session_release_update_callback_data(sess);
+    _mbs_session_release_delete_callback_data(sess);
+}
+
+void _mbs_session_release_create_callback_data(_priv_mbs_session_t *sess)
+{
+    if (!sess) return;
+    if (!sess->create_result_cb_data) return;
+    if (sess->create_cb_data_free && sess->create_result_cb_data != sess->delete_result_cb_data &&
+         sess->create_result_cb_data != sess->update_result_cb_data) {
+        sess->create_cb_data_free(sess->create_result_cb_data);
+    }
+    sess->create_result_cb_data = NULL;
+}
+
+void _mbs_session_release_update_callback_data(_priv_mbs_session_t *sess)
+{
+    if (!sess) return;
+    if (!sess->update_result_cb_data) return;
+    if (sess->update_cb_data_free && sess->update_result_cb_data != sess->create_result_cb_data &&
+         sess->update_result_cb_data != sess->delete_result_cb_data) {
+        sess->update_cb_data_free(sess->update_result_cb_data);
+    }
+    sess->update_result_cb_data = NULL;
+}
+
+void _mbs_session_release_delete_callback_data(_priv_mbs_session_t *sess)
+{
+    if (!sess) return;
+    if (!sess->delete_result_cb_data) return;
+    if (sess->delete_cb_data_free && sess->delete_result_cb_data != sess->create_result_cb_data &&
+         sess->delete_result_cb_data != sess->update_result_cb_data) {
+        sess->delete_cb_data_free(sess->delete_result_cb_data);
+    }
+    sess->delete_result_cb_data = NULL;
+}
+
+void _mbs_session_do_create_callback(_priv_mbs_session_t *sess, int result, const OpenAPI_problem_details_t *problem_details)
 {
     if (!sess) return;
     if (!sess->create_result_cb) return;
@@ -766,24 +907,55 @@ void _mbs_session_do_callback(_priv_mbs_session_t *sess, int result, const OpenA
     sess->create_result_cb(_priv_mbs_session_to_public(sess), result, problem_details, sess->create_result_cb_data);
 }
 
+void _mbs_session_do_update_callback(_priv_mbs_session_t *sess, int result, const OpenAPI_problem_details_t *problem_details)
+{
+    if (!sess) return;
+    if (!sess->update_result_cb) return;
+
+    sess->update_result_cb(_priv_mbs_session_to_public(sess), result, problem_details, sess->update_result_cb_data);
+}
+
+void _mbs_session_do_delete_callback(_priv_mbs_session_t *sess, int result, const OpenAPI_problem_details_t *problem_details)
+{
+    if (!sess) return;
+    if (!sess->delete_result_cb) return;
+
+    sess->delete_result_cb(_priv_mbs_session_to_public(sess), result, problem_details, sess->delete_result_cb_data);
+}
+
 void _mbs_session_do_created_callback(_priv_mbs_session_t *session)
 {
-    _mbs_session_do_callback(session, OGS_OK, NULL);
+    _mbs_session_do_create_callback(session, OGS_OK, NULL);
 }
 
 void _mbs_session_do_deleted_callback(_priv_mbs_session_t *session)
 {
-    _mbs_session_do_callback(session, OGS_DONE, NULL);
+    _mbs_session_do_delete_callback(session, OGS_DONE, NULL);
+}
+
+void _mbs_session_do_updated_callback(_priv_mbs_session_t *session)
+{
+    _mbs_session_do_update_callback(session, OGS_OK, NULL);
 }
 
 void _mbs_session_do_create_error_callback(_priv_mbs_session_t *session, const OpenAPI_problem_details_t *problem_details)
 {
-    _mbs_session_do_callback(session, OGS_ERROR, problem_details);
+    _mbs_session_do_create_callback(session, OGS_ERROR, problem_details);
 }
 
 void _mbs_session_do_create_timeout_callback(_priv_mbs_session_t *session)
 {
-    _mbs_session_do_callback(session, OGS_ETIMEDOUT, NULL);
+    _mbs_session_do_create_callback(session, OGS_ETIMEDOUT, NULL);
+}
+
+void _mbs_session_do_update_error_callback(_priv_mbs_session_t *session, const OpenAPI_problem_details_t *problem_details)
+{
+    _mbs_session_do_update_callback(session, OGS_ERROR, problem_details);
+}
+
+void _mbs_session_do_update_timeout_callback(_priv_mbs_session_t *session)
+{
+    _mbs_session_do_update_callback(session, OGS_ETIMEDOUT, NULL);
 }
 
 void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess)

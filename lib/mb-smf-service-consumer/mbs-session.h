@@ -56,13 +56,18 @@ typedef enum {
     MBS_SESSION_ACTIVITY_STATUS_INACTIVE
 } mb_smf_sc_activity_status_e;
 
-/** MBS Session creation/destruction callback
+/** MBS Session creation/update/destruction callback
  *
- * This callback is used when an MBS Session create has either succeeded or failed or when the MBS Session is destroyed.
+ * This callback is used when an MBS Session create or update operation has either succeeded or failed or when the MBS Session is
+ * destroyed.
  *
- * On creation, @p result will be `OGS_OK` when the creation succeeded, `OGS_ERROR` for an error during creation or `OGS_TIMEOUT`
+ * On creation, @p result will be `OGS_OK` when the creation succeeded, `OGS_ERROR` for an error during creation or `OGS_ETIMEOUT`
  * if the creation operation timed out. If the @p result is `OGS_ERROR` then a ProblemDetails associated with the error is passed
  * in the @p problem_details parameter.
+ *
+ * On update, @p result will be `OGS_OK` when the update succeeded, `OGS_ERROR` for an error during update or `OGS_ETIMEOUT` if the
+ * update operation timed out. If the @p result is `OGS_ERROR` then a ProblemDetails associated with the error is passed in the
+ * @p problem_details parameter.
  *
  * On destruction, @p result will be `OGS_DONE`.
  *
@@ -74,8 +79,28 @@ typedef enum {
  *
  * @see mb_smf_sc_mbs_session_set_callback()
  */
-typedef void (*mb_smf_sc_mbs_session_create_result_cb)(mb_smf_sc_mbs_session_t *session, int result,
-                                                       const OpenAPI_problem_details_t *problem_details, void *data);
+typedef void (*mb_smf_sc_mbs_session_result_cb)(mb_smf_sc_mbs_session_t *session, int result,
+                                                const OpenAPI_problem_details_t *problem_details, void *data);
+
+/**@{
+ */
+/** MBS Session creation/update/destruction callback type aliases
+ *
+ * These alias the callback function type for the create, update and delete operations.
+ * The `mb_smf_sc_mbs_session_create_result_cb` type is kept for backward compatibility.
+ */
+typedef mb_smf_sc_mbs_session_result_cb mb_smf_sc_mbs_session_create_result_cb;
+typedef mb_smf_sc_mbs_session_result_cb mb_smf_sc_mbs_session_update_result_cb;
+typedef mb_smf_sc_mbs_session_result_cb mb_smf_sc_mbs_session_delete_result_cb;
+/**@}
+ */
+
+/** MBS Session callback data free function type
+ *
+ * If provided, a function of this prototype is called to free the @a data provided when setting the callback function.
+ * This function is only called if @a data was not `NULL` and the same @a data pointer has been freed for all callback operations.
+ */
+typedef void (*mb_smf_sc_mbs_session_cb_data_free_fn)(void *data);
 
 /** MBS Session
  *
@@ -240,11 +265,12 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_status_subscription_t *mb_smf_sc_mbs_session_fin
  */
 MB_SMF_CLIENT_API mb_smf_sc_mbs_status_subscription_t *mb_smf_sc_mbs_session_find_subscription_by_correlation(const mb_smf_sc_mbs_session_t *session, const char *correlation_id);
 
-/** Set the callback for the MBS Session
+/** Set all callbacks for the MBS Session
  * @memberof mb_smf_sc_mbs_session_s
  * @public
  *
- * The callback will be called when the MBS Session when the result of a create attempt on the MB-SMF is received.
+ * The callback will be called for the MBS Session when the result of a create or update attempt on the MB-SMF is received, or when
+ * the MBS Session is deleted.
  *
  * @param session The MBS Session to set the callback for.
  * @param callback The callback to set.
@@ -252,7 +278,110 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_status_subscription_t *mb_smf_sc_mbs_session_fin
  *
  * @return `true` if the callback is updated successfully.
  */
-MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_callback(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_create_result_cb callback, void *data);
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_callback(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data);
+
+/** Set the create callback for the MBS Session
+ * @memberof mb_smf_sc_mbs_session_s
+ * @public
+ *
+ * The callback will be called for the MBS Session when the result of a create attempt on the MB-SMF is received.
+ *
+ * @param session The MBS Session to set the callback for.
+ * @param callback The callback to set.
+ * @param data The @a data parameter to call the callback with.
+ *
+ * @return `true` if the callback is updated successfully.
+ */
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_create_callback(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data);
+
+/** Set the update callback for the MBS Session
+ * @memberof mb_smf_sc_mbs_session_s
+ * @public
+ *
+ * The callback will be called for the MBS Session when the result of an update attempt on the MB-SMF is received.
+ *
+ * @param session The MBS Session to set the callback for.
+ * @param callback The callback to set.
+ * @param data The @a data parameter to call the callback with.
+ *
+ * @return `true` if the callback is updated successfully.
+ */
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_update_callback(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data);
+
+/** Set the delete callback for the MBS Session
+ * @memberof mb_smf_sc_mbs_session_s
+ * @public
+ *
+ * The callback will be called for the MBS Session when the session is deleted.
+ *
+ * @param session The MBS Session to set the callback for.
+ * @param callback The callback to set.
+ * @param data The @a data parameter to call the callback with.
+ *
+ * @return `true` if the callback is updated successfully.
+ */
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_delete_callback(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data);
+
+/** Set all callbacks for the MBS Session (with data free function)
+ * @memberof mb_smf_sc_mbs_session_s
+ * @public
+ *
+ * The callback will be called for the MBS Session when the result of a create or update attempt on the MB-SMF is received, or when
+ * the MBS Session is deleted.
+ *
+ * @param session The MBS Session to set the callback for.
+ * @param callback The callback to set.
+ * @param data The @a data parameter to call the callback with.
+ * @param data_free_function The function to call to free @a data when it is no longer needed.
+ *
+ * @return `true` if the callback is updated successfully.
+ */
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_callback_with_freefn(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data, mb_smf_sc_mbs_session_cb_data_free_fn data_free_function);
+
+/** Set the create callback for the MBS Session (with data free function)
+ * @memberof mb_smf_sc_mbs_session_s
+ * @public
+ *
+ * The callback will be called for the MBS Session when the result of a create attempt on the MB-SMF is received.
+ *
+ * @param session The MBS Session to set the callback for.
+ * @param callback The callback to set.
+ * @param data The @a data parameter to call the callback with.
+ * @param data_free_function The function to call to free @a data when it is no longer needed.
+ *
+ * @return `true` if the callback is updated successfully.
+ */
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_create_callback_with_freefn(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data, mb_smf_sc_mbs_session_cb_data_free_fn data_free_function);
+
+/** Set the update callback for the MBS Session (with data free function)
+ * @memberof mb_smf_sc_mbs_session_s
+ * @public
+ *
+ * The callback will be called for the MBS Session when the result of an update attempt on the MB-SMF is received.
+ *
+ * @param session The MBS Session to set the callback for.
+ * @param callback The callback to set.
+ * @param data The @a data parameter to call the callback with.
+ * @param data_free_function The function to call to free @a data when it is no longer needed.
+ *
+ * @return `true` if the callback is updated successfully.
+ */
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_update_callback_with_freefn(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data, mb_smf_sc_mbs_session_cb_data_free_fn data_free_function);
+
+/** Set the delete callback for the MBS Session (with data free function)
+ * @memberof mb_smf_sc_mbs_session_s
+ * @public
+ *
+ * The callback will be called for the MBS Session when the session is deleted.
+ *
+ * @param session The MBS Session to set the callback for.
+ * @param callback The callback to set.
+ * @param data The @a data parameter to call the callback with.
+ * @param data_free_function The function to call to free @a data when it is no longer needed.
+ *
+ * @return `true` if the callback is updated successfully.
+ */
+MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_set_delete_callback_with_freefn(mb_smf_sc_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data, mb_smf_sc_mbs_session_cb_data_free_fn data_free_function);
 
 /** Get the resource ID for the MBS Session at the MB-SMF
  * @memberof mb_smf_sc_mbs_session_s

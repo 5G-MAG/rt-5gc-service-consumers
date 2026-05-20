@@ -104,11 +104,23 @@ void _tmgi_free(_priv_tmgi_t *tmgi)
 
     _context_remove_tmgi(tmgi);
 
-    if (tmgi->tmgi.mbs_service_id) ogs_free(tmgi->tmgi.mbs_service_id);
+    if (tmgi->tmgi.mbs_service_id) {
+        ogs_free(tmgi->tmgi.mbs_service_id);
+        tmgi->tmgi.mbs_service_id = NULL;
+    }
 
     if (tmgi->cache) {
-        if (tmgi->cache->repr) ogs_free(tmgi->cache->repr);
+        if (tmgi->cache->repr) {
+            ogs_free(tmgi->cache->repr);
+            tmgi->cache->repr = NULL;
+        }
         ogs_free(tmgi->cache);
+        tmgi->cache = NULL;
+    }
+
+    if (tmgi->sbi_object) {
+        _ref_count_sbi_object_unref(tmgi->sbi_object);
+        tmgi->sbi_object = NULL;
     }
 
     ogs_free(tmgi);
@@ -381,35 +393,38 @@ const char *_tmgi_repr(const _priv_tmgi_t *tmgi)
     return tmgi->cache->repr;
 }
 
-_priv_tmgi_t *_tmgi_copy(_priv_tmgi_t *old, const _priv_tmgi_t *src)
+_priv_tmgi_t *_tmgi_copy(_priv_tmgi_t **dest, const _priv_tmgi_t *src)
 {
     /* no change, just return */
-    if (old == src) return old;
+    if (*dest == src) return *dest;
 
     if (!src) {
-        _tmgi_free(old);
+        _tmgi_free(*dest);
+        *dest = NULL;
         return NULL;
     }
 
-    if (!old) old = _tmgi_create(src->callback, src->callback_data);
+    if (!*dest) *dest = _tmgi_create(src->callback, src->callback_data);
 
-    if (old->tmgi.mbs_service_id) {
-        ogs_free(old->tmgi.mbs_service_id);
-        old->tmgi.mbs_service_id = NULL;
+    _priv_tmgi_t *dst = *dest;
+
+    if (dst->tmgi.mbs_service_id) {
+        ogs_free(dst->tmgi.mbs_service_id);
+        dst->tmgi.mbs_service_id = NULL;
     }
     if (src->tmgi.mbs_service_id) {
-        old->tmgi.mbs_service_id = ogs_strdup(src->tmgi.mbs_service_id);
+        dst->tmgi.mbs_service_id = ogs_strdup(src->tmgi.mbs_service_id);
     }
 
-    memcpy(&old->tmgi.plmn, &src->tmgi.plmn, sizeof(src->tmgi.plmn));
+    memcpy(&dst->tmgi.plmn, &src->tmgi.plmn, sizeof(src->tmgi.plmn));
 
-    old->tmgi.expiry_time = src->tmgi.expiry_time;
+    dst->tmgi.expiry_time = src->tmgi.expiry_time;
 
-    _ref_count_sbi_object_unref(old->sbi_object);
-    old->sbi_object = _ref_count_sbi_object_ref(src->sbi_object);
-    _tmgi_clear_repr(old);
+    _ref_count_sbi_object_unref(dst->sbi_object);
+    dst->sbi_object = _ref_count_sbi_object_ref(src->sbi_object);
+    _tmgi_clear_repr(dst);
 
-    return old;
+    return dst;
 }
 
 _priv_tmgi_t *_tmgi_find_matching_openapi_type(const OpenAPI_tmgi_t *api_tmgi)

@@ -98,7 +98,7 @@ char *_tmgi_list_repr(const ogs_list_t *tmgis);
 bool _tmgi_equal(const _priv_tmgi_t *a, const _priv_tmgi_t *b);
 const char *_tmgi_repr(const _priv_tmgi_t *tmgi);
 
-_priv_tmgi_t *_tmgi_copy(_priv_tmgi_t *old, const _priv_tmgi_t *src);
+_priv_tmgi_t *_tmgi_copy(_priv_tmgi_t **dest, const _priv_tmgi_t *src);
 
 OpenAPI_tmgi_t *_tmgi_to_openapi_type(const _priv_tmgi_t *tmgi);
 _priv_tmgi_t *_tmgi_find_matching_openapi_type(const OpenAPI_tmgi_t *api_tmgi);

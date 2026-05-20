@@ -176,7 +176,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
             /* response to MB-SMF MBS SESSION API request or discovery */
             if (ogs_sbi_parse_header(&message, &response->h) != OGS_OK) {
                 ogs_error("Failed to parse header from client response for MB-SMF MBS Session transaction");
-                _mbs_session_do_create_error_callback(sess, message.ProblemDetails);
+                _mbs_session_do_create_error_callback(sess, message.ProblemDetails); // don't know if this is a create or update
                 ogs_sbi_message_free(&message);
                 break;
             }
@@ -241,6 +241,9 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                             SWITCH(xact->request->h.method)
                             CASE(OGS_SBI_HTTP_METHOD_DELETE)
                                 _nmbsmf_mbs_session_delete_response(sess, &message, response);
+                                break;
+                            CASE(OGS_SBI_HTTP_METHOD_PATCH)
+                                _nmbsmf_mbs_session_patch_response(sess, &message, response);
                                 break;
                             DEFAULT
                                 break;

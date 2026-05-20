@@ -40,8 +40,15 @@ typedef struct _priv_mbs_session_s {
     ogs_hash_t              *active_subscriptions; /**< list of _priv_mbs_status_subscription_t indexed by their id */
     ogs_list_t               deleted_subscriptions;/**< list of _priv_mbs_status_subscription_t that are scheduled for deletion */
     mb_smf_sc_mbs_session_t *previous_session;     /**< Cached copy of the MBS Session as last accepted by the MB-SMF */
-    mb_smf_sc_mbs_session_create_result_cb create_result_cb;
+    mb_smf_sc_mbs_session_result_cb create_result_cb;
+    mb_smf_sc_mbs_session_result_cb update_result_cb;
+    mb_smf_sc_mbs_session_result_cb delete_result_cb;
     void                    *create_result_cb_data;
+    void                    *update_result_cb_data;
+    void                    *delete_result_cb_data;
+    mb_smf_sc_mbs_session_cb_data_free_fn create_cb_data_free;
+    mb_smf_sc_mbs_session_cb_data_free_fn update_cb_data_free;
+    mb_smf_sc_mbs_session_cb_data_free_fn delete_cb_data_free;
     bool                     deleted;
     _ref_count_sbi_object_t *sbi_object;
 } _priv_mbs_session_t;
@@ -80,18 +87,41 @@ ogs_list_t *_mbs_session_public_patch_list(const mb_smf_sc_mbs_session_t *a, con
 ogs_list_t *_mbs_session_patch_list(const _priv_mbs_session_t *session);
 
 bool _mbs_session_set_tmgi(_priv_mbs_session_t *session, _priv_tmgi_t *tmgi);
-bool _mbs_session_set_callback(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_create_result_cb callback, void *data);
+bool _mbs_session_set_callback(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data);
+bool _mbs_session_set_create_callback(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data);
+bool _mbs_session_set_update_callback(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data);
+bool _mbs_session_set_delete_callback(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data);
+bool _mbs_session_set_callback_freefn(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data,
+                                      mb_smf_sc_mbs_session_cb_data_free_fn data_free_fn);
+bool _mbs_session_set_create_callback_freefn(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback,
+                                             void *data, mb_smf_sc_mbs_session_cb_data_free_fn data_free_fn);
+bool _mbs_session_set_update_callback_freefn(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback,
+                                             void *data, mb_smf_sc_mbs_session_cb_data_free_fn data_free_fn);
+bool _mbs_session_set_delete_callback_freefn(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback,
+                                             void *data, mb_smf_sc_mbs_session_cb_data_free_fn data_free_fn);
 
 bool _mbs_session_push_changes(_priv_mbs_session_t *session);
 void _mbs_session_send_create(_priv_mbs_session_t *session);
 void _mbs_session_send_update(_priv_mbs_session_t *session);
 void _mbs_session_send_remove(_priv_mbs_session_t *session);
 
+void _mbs_session_release_callback_data(_priv_mbs_session_t *sess);
+void _mbs_session_release_create_callback_data(_priv_mbs_session_t *sess);
+void _mbs_session_release_update_callback_data(_priv_mbs_session_t *sess);
+void _mbs_session_release_delete_callback_data(_priv_mbs_session_t *sess);
+
 void _mbs_session_do_callback(_priv_mbs_session_t *session, int result, const OpenAPI_problem_details_t *problem_details);
+void _mbs_session_do_create_callback(_priv_mbs_session_t *session, int result, const OpenAPI_problem_details_t *problem_details);
+void _mbs_session_do_update_callback(_priv_mbs_session_t *session, int result, const OpenAPI_problem_details_t *problem_details);
+void _mbs_session_do_delete_callback(_priv_mbs_session_t *session, int result, const OpenAPI_problem_details_t *problem_details);
+
 void _mbs_session_do_created_callback(_priv_mbs_session_t *session);
 void _mbs_session_do_deleted_callback(_priv_mbs_session_t *session);
+void _mbs_session_do_updated_callback(_priv_mbs_session_t *session);
 void _mbs_session_do_create_error_callback(_priv_mbs_session_t *session, const OpenAPI_problem_details_t *problem_details);
 void _mbs_session_do_create_timeout_callback(_priv_mbs_session_t *session);
+void _mbs_session_do_update_error_callback(_priv_mbs_session_t *session, const OpenAPI_problem_details_t *problem_details);
+void _mbs_session_do_update_timeout_callback(_priv_mbs_session_t *session);
 
 void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess);
 _priv_mbs_status_subscription_t *_mbs_session_find_active_subscription(const _priv_mbs_session_t *session, const char *id);

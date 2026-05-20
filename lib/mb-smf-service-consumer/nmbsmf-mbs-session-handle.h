@@ -20,6 +20,7 @@ typedef struct _priv_mbs_session_s _priv_mbs_session_t;
 
 int _nmbsmf_mbs_session_parse(ogs_sbi_message_t *message, _priv_mbs_session_t *sess);
 void _nmbsmf_mbs_session_delete_response(_priv_mbs_session_t *sess, ogs_sbi_message_t *message, ogs_sbi_response_t *response);
+void _nmbsmf_mbs_session_patch_response(_priv_mbs_session_t *sess, ogs_sbi_message_t *message, ogs_sbi_response_t *response);
 
 int _nmbsmf_mbs_session_subscription_report_list_handler(_priv_mbs_status_subscription_t *subsc, OpenAPI_list_t *event_report_list);
 void _nmbsmf_mbs_session_subscription_response(_priv_mbs_session_t *sess, ogs_sbi_message_t *message, ogs_sbi_response_t *response);

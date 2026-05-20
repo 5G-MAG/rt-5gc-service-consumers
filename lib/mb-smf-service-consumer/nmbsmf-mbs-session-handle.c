@@ -172,6 +172,27 @@ void _nmbsmf_mbs_session_delete_response(_priv_mbs_session_t *sess, ogs_sbi_mess
     _context_remove_mbs_session(sess);
 }
 
+void _nmbsmf_mbs_session_patch_response(_priv_mbs_session_t *sess, ogs_sbi_message_t *message, ogs_sbi_response_t *response)
+{
+    if (!sess || !message || !response) return;
+
+    if (message->res_status >= 200 && message->res_status <= 299) {
+        /* patch success, update copy */
+        _mbs_session_public_copy(&sess->previous_session, &sess->session);
+    } else if (message->res_status <= 199 || (message->res_status >= 300 && message->res_status <= 399)) {
+        /* no change */
+    } else if (message->res_status >= 400) {
+        /* error, revert changes */
+        if (sess->previous_session) {
+            mb_smf_sc_mbs_session_t *dst = &sess->session;
+            _mbs_session_public_copy(&dst, sess->previous_session);
+        }
+    }
+
+    /* callback to notify application of a change to MBS Session */
+    _mbs_session_do_updated_callback(sess);
+}
+
 int _nmbsmf_mbs_session_subscription_report_list_handler(_priv_mbs_status_subscription_t *subsc,
                                                          OpenAPI_list_t *event_report_list)
 {
