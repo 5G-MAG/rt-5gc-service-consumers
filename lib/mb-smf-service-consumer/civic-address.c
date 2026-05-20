@@ -76,7 +76,7 @@ void _civic_addresses_copy(ogs_list_t **dst, const ogs_list_t *src)
         }
         return;
     }
-    
+
     if (!*dst) {
         *dst = (typeof(*dst))ogs_calloc(1, sizeof(**dst));
     }
@@ -154,7 +154,7 @@ ogs_list_t *_civic_addresses_patch_list(const ogs_list_t *a, const ogs_list_t *b
                     if (!patches) patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
                     ogs_list_add(patches, patch);
                 }
-                idx++;   
+                idx++;
                 if (a_addr) a_addr = (mb_smf_sc_civic_address_t*)ogs_list_next(a_addr);
                 if (b_addr) b_addr = (mb_smf_sc_civic_address_t*)ogs_list_next(b_addr);
             }

@@ -105,7 +105,7 @@ char *_uint64_to_hex_str(uint64_t val, int min_digits, int max_digits)
 
 char *_bitrate_to_str(double bitrate)
 {
-    double divisor = 1.0; 
+    double divisor = 1.0;
     const char *units = "bps";
 
     if (bitrate >= 1e12) {

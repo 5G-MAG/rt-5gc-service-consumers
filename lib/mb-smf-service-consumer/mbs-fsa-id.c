@@ -34,7 +34,7 @@ MB_SMF_CLIENT_API void mb_smf_sc_mbs_fsa_id_delete(mb_smf_sc_mbs_fsa_id_t *fsa_i
 void _mbs_fsa_ids_copy(ogs_list_t *dst, const ogs_list_t *src)
 {
     _mbs_fsa_ids_clear(dst);
-    mb_smf_sc_mbs_fsa_id_t *fsa_id; 
+    mb_smf_sc_mbs_fsa_id_t *fsa_id;
     ogs_list_for_each(src, fsa_id) {
         mb_smf_sc_mbs_fsa_id_t *new_fsa_id = NULL;
         _mbs_fsa_id_copy(&new_fsa_id, fsa_id);
