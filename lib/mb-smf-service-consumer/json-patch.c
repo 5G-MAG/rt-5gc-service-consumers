@@ -56,6 +56,7 @@ _json_patch_t *_json_patch_new(OpenAPI_patch_operation_e op, const char *path, c
     _json_patch_t *dst = (_json_patch_t*)ogs_calloc(1, sizeof(*dst));
     dst->item = OpenAPI_patch_item_create(op, ogs_strdup(path), NULL,
                                           (value && cJSON_IsNull(value)), value?OpenAPI_any_type_create(value):NULL);
+    if (value) cJSON_Delete(value);
     return dst;
 }
 
