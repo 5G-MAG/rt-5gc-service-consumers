@@ -49,6 +49,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
 {
     ogs_sbi_xact_t *xact = NULL;
     ogs_sbi_response_t *response = NULL;
+    _ref_count_sbi_object_t *sbi_object = NULL;
 
     if (!e) return false;
 
@@ -162,6 +163,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                     _nmbsmf_tmgi_allocated(xact, &message);
                     break;
                 CASE(OGS_SBI_HTTP_METHOD_DELETE)
+                    sbi_object = _ref_count_sbi_object_ref(tmgi->sbi_object);
                     _nmbsmf_tmgi_deallocated(xact, &message);
                     break;
                 DEFAULT
@@ -240,6 +242,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                             /* .../mbs-sessions/{mbs-session-id} */
                             SWITCH(xact->request->h.method)
                             CASE(OGS_SBI_HTTP_METHOD_DELETE)
+                                sbi_object = _ref_count_sbi_object_ref(sess->sbi_object);
                                 _nmbsmf_mbs_session_delete_response(sess, &message, response);
                                 break;
                             CASE(OGS_SBI_HTTP_METHOD_PATCH)
@@ -366,6 +369,7 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
     }
 
     if (xact) ogs_sbi_xact_remove(xact);
+    if (sbi_object) _ref_count_sbi_object_unref(sbi_object);
 
     return true;
 }

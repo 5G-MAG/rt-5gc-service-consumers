@@ -36,7 +36,10 @@ static inline void _ref_count_sbi_object_unref(_ref_count_sbi_object_t *ref_obj)
 {
     if (ref_obj) {
         ref_obj->ref_count--;
-        if (!ref_obj->ref_count) ogs_free(ref_obj);
+        if (!ref_obj->ref_count) {
+            ogs_sbi_xact_remove_all(&ref_obj->sbi_object);
+            ogs_free(ref_obj);
+        }
     }
 }
 
