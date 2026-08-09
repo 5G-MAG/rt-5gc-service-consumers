@@ -54,6 +54,27 @@ typedef struct mb_smf_sc_tai_s {
  */
 MB_SMF_CLIENT_API mb_smf_sc_tai_t *mb_smf_sc_tai_new(uint16_t mcc, uint16_t mnc, uint32_t tac, const uint64_t *nid);
 
+/** Create a new TAI from values, with an explicit MNC digit length
+ * @memberof mb_smf_sc_tai_s
+ * @static
+ * @public
+ *
+ * Like mb_smf_sc_tai_new(), but takes the MNC digit length (2 or 3) explicitly
+ * instead of guessing it from the numeric MNC value, which misclassifies any
+ * 3-digit MNC whose value is below 100 (e.g. "001"-"099"). Callers that know
+ * the true digit count (e.g. because they parsed it from a 3GPP Mnc string)
+ * should use this instead of mb_smf_sc_tai_new().
+ *
+ * @param mcc The PLMN Id MCC for this TAI.
+ * @param mnc The PLMN Id MNC for this TAI.
+ * @param mnc_len The number of digits (2 or 3) in @p mnc.
+ * @param tac The Tac for this TAI.
+ * @param nid The Network Id to copy or NULL to leave unset.
+ *
+ * @return A new TAI object with the PLMN Id and TAC set.
+ */
+MB_SMF_CLIENT_API mb_smf_sc_tai_t *mb_smf_sc_tai_new_len(uint16_t mcc, uint16_t mnc, uint8_t mnc_len, uint32_t tac, const uint64_t *nid);
+
 /** Create a new TAI as a copy
  * @memberof mb_smf_sc_tai_s
  * @static
