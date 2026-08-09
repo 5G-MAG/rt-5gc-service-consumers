@@ -59,6 +59,14 @@ MB_SMF_CLIENT_API mb_smf_sc_ncgi_t *mb_smf_sc_ncgi_set_plmn_id(mb_smf_sc_ncgi_t 
     return ncgi;
 }
 
+MB_SMF_CLIENT_API mb_smf_sc_ncgi_t *mb_smf_sc_ncgi_set_plmn_id_len(mb_smf_sc_ncgi_t *ncgi, uint16_t mcc, uint16_t mnc, uint8_t mnc_len)
+{
+    if (ncgi) {
+        ogs_plmn_id_build(&ncgi->plmn_id, mcc, mnc, mnc_len);
+    }
+    return ncgi;
+}
+
 /* Library internal ncgi methods (protected) */
 ogs_list_t *_ncgis_patch_list(const ogs_list_t *a, const ogs_list_t *b)
 {

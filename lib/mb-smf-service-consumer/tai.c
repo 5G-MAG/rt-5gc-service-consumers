@@ -30,6 +30,13 @@ MB_SMF_CLIENT_API mb_smf_sc_tai_t *mb_smf_sc_tai_new(uint16_t mcc, uint16_t mnc,
     return _tai_new(&plmn_id, tac, nid);
 }
 
+MB_SMF_CLIENT_API mb_smf_sc_tai_t *mb_smf_sc_tai_new_len(uint16_t mcc, uint16_t mnc, uint8_t mnc_len, uint32_t tac, const uint64_t *nid)
+{
+    ogs_plmn_id_t plmn_id;
+    ogs_plmn_id_build(&plmn_id, mcc, mnc, mnc_len);
+    return _tai_new(&plmn_id, tac, nid);
+}
+
 MB_SMF_CLIENT_API mb_smf_sc_tai_t *mb_smf_sc_tai_new_copy(const mb_smf_sc_tai_t *other)
 {
     mb_smf_sc_tai_t *dst = NULL;
