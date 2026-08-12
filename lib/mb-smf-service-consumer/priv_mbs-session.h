@@ -127,6 +127,7 @@ void _mbs_session_subscriptions_update(_priv_mbs_session_t *sess);
 _priv_mbs_status_subscription_t *_mbs_session_find_active_subscription(const _priv_mbs_session_t *session, const char *id);
 _priv_mbs_status_subscription_t *_mbs_session_find_subscription(const _priv_mbs_session_t *session, const char *correlation_id);
 OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t *session);
+OpenAPI_ssm_t *_mbs_session_create_ssm(_priv_mbs_session_t *session);
 
 #ifdef __cplusplus
 }
