@@ -417,8 +417,15 @@ static ogs_sbi_server_t *__new_sbi_server(const ogs_sockaddr_t *address)
 static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *session, OpenAPI_ssm_t **ssm_ptr)
 {
     OpenAPI_mbs_session_id_t *mbs_session_id = _mbs_session_create_mbs_session_id(session);
-    if (mbs_session_id && ssm_ptr) {
-        *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, mbs_session_id->ssm);
+    // BUG FIX (found live, 2026-08-10): see _mbs_session_create_ssm()'s comment -- this used to
+    // copy from mbs_session_id->ssm, which is now correctly left unset for BROADCAST sessions
+    // (see _mbs_session_create_mbs_session_id()), so that copy would silently drop the flat
+    // top-level "ssm" field -- the actual content-delivery address -- for every BROADCAST
+    // session. Build it directly from the session instead, independent of mbsSessionId's shape.
+    if (ssm_ptr) {
+        OpenAPI_ssm_t *ssm = _mbs_session_create_ssm(session);
+        *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, ssm);
+        if (ssm) OpenAPI_ssm_free(ssm);
     }
     return mbs_session_id;
 }
@@ -440,7 +447,20 @@ static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *se
     int any_ue_ind = session->session.any_ue_ind?1:0;
     int contact_pcf_ind = (for_update && session->session.contact_pcf_ind)?1:0; /* only in update */
     OpenAPI_mbs_session_activity_status_e activity_status = OpenAPI_mbs_session_activity_status_NULL;
-    OpenAPI_mbs_service_type_e service_type = ssm?OpenAPI_mbs_service_type_MULTICAST:OpenAPI_mbs_service_type_BROADCAST;
+    /* BUG FIX (found live, 2026-08-10): this derived the outgoing wire serviceType purely from
+     * whether an SSM was present, ignoring session->session.service_type (the field the caller
+     * actually sets via mb_smf_sc_mbs_session_set_service_type()/MBSMFMBSSession::setServiceType()).
+     * Every real distribution session -- BROADCAST or MULTICAST alike -- carries an SSM (it's how
+     * FLUTE/content delivery gets addressed), so this heuristic always evaluated true and every
+     * MBS session was reported to the SMF as MULTICAST regardless of what was actually requested.
+     * SMF's Namf_MBSBroadcast trigger (n4mb-handler.c) only fires "if the service type is
+     * broadcast service" (TS 23.247 cl.7.3.1 step 2), so this silently skipped NGAP Broadcast
+     * Session Setup for every broadcast service: PFCP/N4mb and FLUTE transmission completed
+     * normally, but the gNB never created an MRB and content had no bearer to travel over.
+     */
+    OpenAPI_mbs_service_type_e service_type =
+        session->session.service_type == MBS_SERVICE_TYPE_BROADCAST
+            ? OpenAPI_mbs_service_type_BROADCAST : OpenAPI_mbs_service_type_MULTICAST;
     OpenAPI_mbs_service_area_t *mbs_service_area = NULL;
     OpenAPI_external_mbs_service_area_t *ext_mbs_service_area = NULL;
     char *dnn = session->session.dnn?ogs_strdup(session->session.dnn):NULL;
