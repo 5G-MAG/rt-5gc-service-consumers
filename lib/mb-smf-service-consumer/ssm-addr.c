@@ -10,6 +10,7 @@
 #include <netinet/in.h>
 
 #include "ogs-core.h"
+#include "ogs-sbi.h"
 
 #include "macros.h"
 
@@ -83,3 +84,46 @@ bool _ssm_addr_equal(const mb_smf_sc_ssm_addr_t *a, const mb_smf_sc_ssm_addr_t *
 
 /* vim:ts=8:sts=4:sw=4:expandtab:
  */
+
+/* OpenAPI conversions */
+
+OpenAPI_ip_addr_t *_openapi_ip_addr_from_inaddr(const struct in_addr *addr)
+{
+    OpenAPI_ip_addr_t *ret = NULL;
+    char addr_str[INET_ADDRSTRLEN];
+
+    if (inet_ntop(AF_INET, addr, addr_str, sizeof(addr_str))) {
+        ret = OpenAPI_ip_addr_create(ogs_strdup(addr_str), NULL, NULL);
+    }
+
+    return ret;
+}
+
+OpenAPI_ip_addr_t *_openapi_ip_addr_from_in6addr(const struct in6_addr *addr)
+{
+    OpenAPI_ip_addr_t *ret = NULL;
+    char addr_str[INET6_ADDRSTRLEN];
+
+    if (inet_ntop(AF_INET6, addr, addr_str, sizeof(addr_str))) {
+        ret = OpenAPI_ip_addr_create(NULL, ogs_strdup(addr_str), NULL);
+    }
+
+    return ret;
+}
+
+OpenAPI_ssm_t *_ssm_addr_to_openapi(const mb_smf_sc_ssm_addr_t *ssm)
+{
+    OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
+
+    if (!ssm) return NULL;
+
+    if (ssm->family == AF_INET) {
+        src = _openapi_ip_addr_from_inaddr(&ssm->source.ipv4);
+        dest = _openapi_ip_addr_from_inaddr(&ssm->dest_mc.ipv4);
+    } else {
+        src = _openapi_ip_addr_from_in6addr(&ssm->source.ipv6);
+        dest = _openapi_ip_addr_from_in6addr(&ssm->dest_mc.ipv6);
+    }
+
+    return OpenAPI_ssm_create(src, dest);
+}
