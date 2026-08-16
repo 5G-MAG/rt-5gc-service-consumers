@@ -41,8 +41,6 @@ typedef struct __mbs_session_find_subsc_filter_s {
     _priv_mbs_status_subscription_t *found;
 } __mbs_session_find_subsc_filter_t;
 
-static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr *addr);
-static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_addr *addr);
 static int __mbs_session_find_subsc_hash_do(void *rec, const void *key, int klen, const void *value);
 static int __update_status_subscription(void *rec, const void *key, int klen, const void *value);
 static int __free_status_subscription(void *rec, const void *key, int klen, const void *value);
@@ -1036,11 +1034,11 @@ OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t
     if (include_ssm_in_session_id) {
         OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
         if (session->session.ssm->family == AF_INET) {
-            src = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->source.ipv4);
-            dest = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->dest_mc.ipv4);
+            src = _openapi_ip_addr_from_inaddr(&session->session.ssm->source.ipv4);
+            dest = _openapi_ip_addr_from_inaddr(&session->session.ssm->dest_mc.ipv4);
         } else {
-            src = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->source.ipv6);
-            dest = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->dest_mc.ipv6);
+            src = _openapi_ip_addr_from_in6addr(&session->session.ssm->source.ipv6);
+            dest = _openapi_ip_addr_from_in6addr(&session->session.ssm->dest_mc.ipv6);
         }
         mbs_session_id->ssm = OpenAPI_ssm_create(src, dest);
     }
@@ -1052,52 +1050,7 @@ OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t
     return mbs_session_id;
 }
 
-/* BUG FIX (found live, 2026-08-10, companion to the fix above): the flat top-level "ssm" field
- * (distinct from mbsSessionId.ssm -- see the comment in _mbs_session_create_mbs_session_id()) used
- * to be derived by nmbsmf-mbs-session-build.c's __make_mbs_session_id() by copying it back out of
- * mbs_session_id->ssm after the fact. Now that mbs_session_id->ssm is correctly left unset for
- * BROADCAST, that copy would silently lose the SSM for BROADCAST sessions too (no content-delivery
- * address at all). This builds it directly and unconditionally from session->session.ssm instead. */
-OpenAPI_ssm_t *_mbs_session_create_ssm(_priv_mbs_session_t *session)
-{
-    if (!session->session.ssm) return NULL;
-
-    OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
-    if (session->session.ssm->family == AF_INET) {
-        src = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->source.ipv4);
-        dest = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->dest_mc.ipv4);
-    } else {
-        src = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->source.ipv6);
-        dest = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->dest_mc.ipv6);
-    }
-    return OpenAPI_ssm_create(src, dest);
-}
-
 /*========================== Local private functions ==========================*/
-
-static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr *addr)
-{
-    OpenAPI_ip_addr_t *ret = NULL;
-    char addr_str[INET_ADDRSTRLEN];
-
-    if (inet_ntop(AF_INET, addr, addr_str, sizeof(addr_str))) {
-        ret = OpenAPI_ip_addr_create(ogs_strdup(addr_str), NULL, NULL);
-    }
-
-    return ret;
-}
-
-static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_addr *addr)
-{
-    OpenAPI_ip_addr_t *ret = NULL;
-    char addr_str[INET6_ADDRSTRLEN];
-
-    if (inet_ntop(AF_INET6, addr, addr_str, sizeof(addr_str))) {
-        ret = OpenAPI_ip_addr_create(NULL, ogs_strdup(addr_str), NULL);
-    }
-
-    return ret;
-}
 
 static int __mbs_session_find_subsc_hash_do(void *rec, const void *key, int klen, const void *value)
 {

@@ -21,6 +21,7 @@
 #include "priv_ncgi-tai.h"
 #include "priv_ncgi.h"
 #include "priv_tai.h"
+#include "priv_ssm-addr.h"
 #include "priv_mbs-session.h"
 #include "priv_civic-address.h"
 #include "priv_ext-mbs-service-area.h"
@@ -417,15 +418,19 @@ static ogs_sbi_server_t *__new_sbi_server(const ogs_sockaddr_t *address)
 static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *session, OpenAPI_ssm_t **ssm_ptr)
 {
     OpenAPI_mbs_session_id_t *mbs_session_id = _mbs_session_create_mbs_session_id(session);
-    // BUG FIX (found live, 2026-08-10): see _mbs_session_create_ssm()'s comment -- this used to
-    // copy from mbs_session_id->ssm, which is now correctly left unset for BROADCAST sessions
-    // (see _mbs_session_create_mbs_session_id()), so that copy would silently drop the flat
-    // top-level "ssm" field -- the actual content-delivery address -- for every BROADCAST
-    // session. Build it directly from the session instead, independent of mbsSessionId's shape.
+    /* Build the flat top-level "ssm" field from the session's own SSM address rather than from
+       mbs_session_id->ssm. The two are distinct: mbsSessionId.ssm is unset for a BROADCAST session,
+       whose session identifier is a TMGI, while this field carries the content-delivery address and
+       applies to both session types. Deriving it from mbsSessionId would leave it empty for every
+       BROADCAST session. */
     if (ssm_ptr) {
-        OpenAPI_ssm_t *ssm = _mbs_session_create_ssm(session);
-        *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, ssm);
-        if (ssm) OpenAPI_ssm_free(ssm);
+        OpenAPI_ssm_t *ssm = _ssm_addr_to_openapi(session->session.ssm);
+        /* A session need not have an SSM, in which case there is nothing to copy.
+           OpenAPI_ssm_copy() asserts on a NULL source rather than tolerating it. */
+        if (ssm) {
+            *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, ssm);
+            OpenAPI_ssm_free(ssm);
+        }
     }
     return mbs_session_id;
 }
