@@ -72,6 +72,16 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv4(const 
         }
         memcpy(&session->session.ssm->dest_mc.ipv4, dest, sizeof(session->session.ssm->dest_mc.ipv4));
     }
+    /* BUG FIX (C4): _mbs_session_new() leaves service_type at its zero-valued default,
+       MBS_SERVICE_TYPE_BROADCAST -- correct for the empty session this function's own
+       mb_smf_sc_mbs_session_new() wrapper builds (source=dest=NULL), but this function's own
+       documented purpose is "a new multicast MBS Session using the IPv4 SSM"; an SSM is a
+       Multicast-only concept (TS 23.247) with no Broadcast equivalent. A caller using this
+       documented constructor as intended and not separately assigning the public service_type
+       field afterward got BROADCAST reported to the SMF regardless of the SSM it just built. */
+    if (session->session.ssm) {
+        session->session.service_type = MBS_SERVICE_TYPE_MULTICAST;
+    }
 
     _context_add_mbs_session(session);
 
@@ -93,6 +103,10 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv6(const 
             session->session.ssm->family = AF_INET6;
         }
         memcpy(&session->session.ssm->dest_mc.ipv6, dest, sizeof(session->session.ssm->dest_mc.ipv6));
+    }
+    /* BUG FIX (C4): see mb_smf_sc_mbs_session_new_ipv4()'s identical comment. */
+    if (session->session.ssm) {
+        session->session.service_type = MBS_SERVICE_TYPE_MULTICAST;
     }
 
     _context_add_mbs_session(session);
