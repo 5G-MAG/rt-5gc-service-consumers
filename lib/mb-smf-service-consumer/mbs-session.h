@@ -166,17 +166,6 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv4(const 
  */
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv6(const struct in6_addr *source, const struct in6_addr *dest);
 
-/** Create an MBS Session using a TMGI
- * @memberof mb_smf_sc_mbs_session_s
- * @static
- * @public
- *
- * @param tmgi The TMGI used to identify the MBS Session.
- *
- * @return A new broadcast MBS Session using the TMGI defined by @p tmgi.
- */
-MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_tmgi(mb_smf_sc_tmgi_t *tmgi);
-
 /** Destroy an MBS Session
  * @memberof mb_smf_sc_mbs_session_s
  * @public
