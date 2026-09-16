@@ -283,5 +283,51 @@ cJSON *_ncgi_to_json(const mb_smf_sc_ncgi_t *ncgi)
     return json;
 }
 
+
+mb_smf_sc_ncgi_t *_ncgi_from_openapi(const OpenAPI_ncgi_t *api_ncgi)
+{
+    if (!api_ncgi || !api_ncgi->plmn_id || !api_ncgi->nr_cell_id) return NULL;
+
+    /* ogs_sbi_parse_plmn_id() takes the MNC digit count from the string length, so a 3-digit MNC
+     * numerically below 100 ("001".."099") keeps its length instead of collapsing to 2 digits. */
+    ogs_plmn_id_t plmn_id;
+    if (!ogs_sbi_parse_plmn_id(&plmn_id, (OpenAPI_plmn_id_t*)api_ncgi->plmn_id)) return NULL;
+
+    mb_smf_sc_ncgi_t *ncgi = _ncgi_new();
+    if (!ncgi) return NULL;
+
+    memcpy(&ncgi->plmn_id, &plmn_id, sizeof(ncgi->plmn_id));
+
+    /* NrCellId and Nid are hex strings: the reverse of the encoding _ncgi_to_openapi() writes with
+     * _uint64_to_hex_str(). */
+    ncgi->nr_cell_id = ogs_uint64_from_string(api_ncgi->nr_cell_id);
+
+    if (api_ncgi->nid) {
+        ncgi->nid = (uint64_t*)ogs_malloc(sizeof(*ncgi->nid));
+        *ncgi->nid = ogs_uint64_from_string(api_ncgi->nid) & 0xFFFFFFFFFFFULL;
+    }
+
+    return ncgi;
+}
+
+int _ncgis_from_openapi(ogs_list_t *ncgis, const OpenAPI_list_t *api_ncgis)
+{
+    if (!ncgis || !api_ncgis) return 0;
+
+    int count = 0;
+    OpenAPI_lnode_t *node;
+    OpenAPI_list_for_each(api_ncgis, node) {
+        mb_smf_sc_ncgi_t *ncgi = _ncgi_from_openapi((const OpenAPI_ncgi_t*)node->data);
+        if (!ncgi) {
+            ogs_error("Skipping an Ncgi that could not be converted");
+            continue;
+        }
+        ogs_list_add(ncgis, ncgi);
+        count++;
+    }
+
+    return count;
+}
+
 /* vim:ts=8:sts=4:sw=4:expandtab:
  */

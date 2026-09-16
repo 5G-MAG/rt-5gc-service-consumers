@@ -236,5 +236,42 @@ cJSON *_ncgi_tai_to_json(const mb_smf_sc_ncgi_tai_t *ncgi_tai)
     return json;
 }
 
+
+mb_smf_sc_ncgi_tai_t *_ncgi_tai_from_openapi(const OpenAPI_ncgi_tai_t *api_ncgi_tai)
+{
+    if (!api_ncgi_tai || !api_ncgi_tai->tai) return NULL;
+
+    mb_smf_sc_ncgi_tai_t *ncgi_tai = _ncgi_tai_new();
+    if (!ncgi_tai) return NULL;
+
+    if (!_tai_set_from_openapi(&ncgi_tai->tai, api_ncgi_tai->tai)) {
+        _ncgi_tai_free(ncgi_tai);
+        return NULL;
+    }
+
+    _ncgis_from_openapi(&ncgi_tai->ncgis, api_ncgi_tai->cell_list);
+
+    return ncgi_tai;
+}
+
+int _ncgi_tais_from_openapi(ogs_list_t *ncgi_tais, const OpenAPI_list_t *api_ncgi_tais)
+{
+    if (!ncgi_tais || !api_ncgi_tais) return 0;
+
+    int count = 0;
+    OpenAPI_lnode_t *node;
+    OpenAPI_list_for_each(api_ncgi_tais, node) {
+        mb_smf_sc_ncgi_tai_t *ncgi_tai = _ncgi_tai_from_openapi((const OpenAPI_ncgi_tai_t*)node->data);
+        if (!ncgi_tai) {
+            ogs_error("Skipping an NcgiTai that could not be converted");
+            continue;
+        }
+        ogs_list_add(ncgi_tais, ncgi_tai);
+        count++;
+    }
+
+    return count;
+}
+
 /* vim:ts=8:sts=4:sw=4:expandtab:
  */

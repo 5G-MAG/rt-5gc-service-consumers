@@ -31,6 +31,8 @@ ogs_list_t *_mbs_service_area_patch_list(const mb_smf_sc_mbs_service_area_t *a, 
 cJSON *_mbs_service_area_to_json(const mb_smf_sc_mbs_service_area_t *area);
 OpenAPI_mbs_service_area_t *_mbs_service_area_to_openapi(const mb_smf_sc_mbs_service_area_t *area);
 
+mb_smf_sc_mbs_service_area_t *_mbs_service_area_from_openapi(const OpenAPI_mbs_service_area_t *api_area);
+
 #ifdef __cplusplus
 }
 #endif

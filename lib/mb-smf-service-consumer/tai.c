@@ -352,5 +352,63 @@ cJSON *_tai_to_json(const mb_smf_sc_tai_t *tai)
     return json;
 }
 
+
+bool _tai_set_from_openapi(mb_smf_sc_tai_t *tai, const OpenAPI_tai_t *api_tai)
+{
+    if (!tai || !api_tai || !api_tai->plmn_id || !api_tai->tac) return false;
+
+    /* ogs_sbi_parse_plmn_id() takes the MNC digit count from the string length, so a 3-digit MNC
+     * numerically below 100 ("001".."099") keeps its length instead of collapsing to 2 digits. */
+    ogs_plmn_id_t plmn_id;
+    if (!ogs_sbi_parse_plmn_id(&plmn_id, (OpenAPI_plmn_id_t*)api_tai->plmn_id)) return false;
+
+    _tai_clear(tai);
+    _tai_set_plmn_id(tai, &plmn_id);
+
+    /* Tac and Nid are hex strings: the reverse of the encoding _tai_to_openapi() writes with
+     * _uint32_to_hex_str() and _uint64_to_hex_str(). */
+    _tai_set_tac(tai, (uint32_t)ogs_uint64_from_string(api_tai->tac));
+
+    if (api_tai->nid) {
+        uint64_t nid = ogs_uint64_from_string(api_tai->nid);
+        _tai_set_network_id(tai, &nid);
+    }
+
+    return true;
+}
+
+mb_smf_sc_tai_t *_tai_from_openapi(const OpenAPI_tai_t *api_tai)
+{
+    mb_smf_sc_tai_t *tai = _tai_create();
+
+    if (!tai) return NULL;
+
+    if (!_tai_set_from_openapi(tai, api_tai)) {
+        _tai_free(tai);
+        return NULL;
+    }
+
+    return tai;
+}
+
+int _tais_from_openapi(ogs_list_t *tais, const OpenAPI_list_t *api_tais)
+{
+    if (!tais || !api_tais) return 0;
+
+    int count = 0;
+    OpenAPI_lnode_t *node;
+    OpenAPI_list_for_each(api_tais, node) {
+        mb_smf_sc_tai_t *tai = _tai_from_openapi((const OpenAPI_tai_t*)node->data);
+        if (!tai) {
+            ogs_error("Skipping a Tai that could not be converted");
+            continue;
+        }
+        ogs_list_add(tais, tai);
+        count++;
+    }
+
+    return count;
+}
+
 /* vim:ts=8:sts=4:sw=4:expandtab:
  */

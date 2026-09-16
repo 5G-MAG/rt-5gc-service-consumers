@@ -119,6 +119,10 @@ typedef struct mb_smf_sc_mbs_session_s {
     uint16_t *area_session_id;         /**< The Area Session Identifier when location_dependent is true */
     mb_smf_sc_mbs_service_area_t *mbs_service_area; /**< The optional MBS Service Area */
     mb_smf_sc_ext_mbs_service_area_t *ext_mbs_service_area; /**< The optional External MBS Service Area */
+    mb_smf_sc_mbs_service_area_t *red_mbs_service_area; /**< The reduced MBS Service Area the MB-SMF created the session
+                                                         *   with, `NULL` unless the MB-SMF trimmed @a mbs_service_area to
+                                                         *   fit its own MB-SMF service area. Supplied by the MB-SMF and
+                                                         *   never sent by this library: setting it has no effect. */
     char *dnn;                         /**< The network name that this MBS Session is for */
     ogs_s_nssai_t *snssai;             /**< The S-NSSAI that this MBS Session is for */
     ogs_time_t *start_time;            /**< The time at which the MBS Session activates */

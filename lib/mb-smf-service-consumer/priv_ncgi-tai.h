@@ -35,6 +35,9 @@ ogs_list_t *_ncgi_tai_patch_list(const mb_smf_sc_ncgi_tai_t *a, const mb_smf_sc_
 OpenAPI_ncgi_tai_t *_ncgi_tai_to_openapi(const mb_smf_sc_ncgi_tai_t *ncgi_tai);
 cJSON *_ncgi_tai_to_json(const mb_smf_sc_ncgi_tai_t *ncgi_tai);
 
+mb_smf_sc_ncgi_tai_t *_ncgi_tai_from_openapi(const OpenAPI_ncgi_tai_t *api_ncgi_tai);
+int _ncgi_tais_from_openapi(ogs_list_t *ncgi_tais, const OpenAPI_list_t *api_ncgi_tais);
+
 #ifdef __cplusplus
 }
 #endif
