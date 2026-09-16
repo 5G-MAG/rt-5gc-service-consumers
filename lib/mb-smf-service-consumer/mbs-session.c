@@ -367,6 +367,9 @@ void _mbs_session_public_clear(mb_smf_sc_mbs_session_t *session)
     _ext_mbs_service_area_free(session->ext_mbs_service_area);
     session->ext_mbs_service_area = NULL;
 
+    _mbs_service_area_free(session->red_mbs_service_area);
+    session->red_mbs_service_area = NULL;
+
     if (session->dnn) {
         ogs_free(session->dnn);
         session->dnn = NULL;
@@ -467,6 +470,9 @@ void _mbs_session_public_copy(mb_smf_sc_mbs_session_t **dest, const mb_smf_sc_mb
 
     /* copy external mbs service area lists */
     _ext_mbs_service_area_copy(&dst->ext_mbs_service_area, src->ext_mbs_service_area);
+
+    /* copy the MB-SMF supplied reduced mbs service area */
+    _mbs_service_area_copy(&dst->red_mbs_service_area, src->red_mbs_service_area);
 
     /* copy dnn */
     if (dst->dnn) {

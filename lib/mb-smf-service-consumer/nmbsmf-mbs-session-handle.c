@@ -20,6 +20,7 @@
 
 #include "context.h"
 #include "log.h"
+#include "priv_mbs-service-area.h"
 #include "priv_mbs-session.h"
 #include "priv_mbs-status-subscription.h"
 #include "priv_ssm-addr.h"
@@ -149,6 +150,14 @@ int _nmbsmf_mbs_session_parse(ogs_sbi_message_t *message, _priv_mbs_session_t *s
         }
     }
 
+    /* TS 29.532 V18.6.0 clause 5.3.2.2.1, step 2a: where the MB-SMF cannot cover the requested MBS
+     * service area it reduces it and reports the part it did create in redMbsServArea. This is kept
+     * apart from the requested mbs_service_area, which stays as the consumer set it, because
+     * overwriting that would make the next PATCH diff read as a request to restore the area the
+     * MB-SMF has just declined to serve. */
+    _mbs_service_area_free(sess->session.red_mbs_service_area);
+    sess->session.red_mbs_service_area = _mbs_service_area_from_openapi(mbs_session->red_mbs_service_area);
+
     _mbs_session_public_copy(&sess->previous_session, &sess->session);
 
     OpenAPI_mbs_session_event_report_list_t *event_list = create_rsp_data->event_list;
@@ -178,6 +187,11 @@ void _nmbsmf_mbs_session_patch_response(_priv_mbs_session_t *sess, ogs_sbi_messa
 
     if (message->res_status >= 200 && message->res_status <= 299) {
         /* patch success, update copy */
+        /* LIMITATION: TS 29.532 V18.6.0 clause 5.3.2.3.1 step 2b has the MB-SMF answer 200 OK with an
+         * MBS Session representation carrying redMbsServArea when it reduces the service area an
+         * Update asked for. That body is not read here: ogs_sbi_message_t models no MbsSession for a
+         * PATCH response, so there is nothing to read it from until open5gs parses one. A reduction
+         * reported on Create is captured, see _nmbsmf_mbs_session_parse(). */
         _mbs_session_public_copy(&sess->previous_session, &sess->session);
     } else if (message->res_status <= 199 || (message->res_status >= 300 && message->res_status <= 399)) {
         /* no change */
