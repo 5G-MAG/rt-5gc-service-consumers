@@ -171,6 +171,12 @@ void _ncgi_free(mb_smf_sc_ncgi_t *ncgi)
 void _ncgi_clear(mb_smf_sc_ncgi_t *ncgi)
 {
     if (!ncgi) return;
+    /* Released before the memset below, which would otherwise zero the pointer and lose the only
+     * reference to it. _tai_clear() releases the TAI's own Network Id the same way. */
+    if (ncgi->nid) {
+        ogs_free(ncgi->nid);
+        ncgi->nid = NULL;
+    }
     memset(&ncgi->plmn_id, 0, sizeof(*ncgi) - sizeof(ogs_lnode_t));
 }
 
@@ -191,6 +197,15 @@ void _ncgi_copy(mb_smf_sc_ncgi_t **dst, const mb_smf_sc_ncgi_t *src)
     }
 
     memcpy(&(*dst)->plmn_id, &src->plmn_id, sizeof(*src) - sizeof(ogs_lnode_t));
+
+    /* The memcpy brought the source's Network Id pointer across with the rest of the struct.
+     * Replace it with this NCGI's own allocation, or the two share one and whichever is cleared
+     * second frees it again. _tai_copy() allocates the TAI's Network Id the same way. */
+    (*dst)->nid = NULL;
+    if (src->nid) {
+        (*dst)->nid = (uint64_t*)ogs_malloc(sizeof(*(*dst)->nid));
+        *(*dst)->nid = *src->nid;
+    }
 }
 
 bool _ncgi_equal(const mb_smf_sc_ncgi_t *a, const mb_smf_sc_ncgi_t *b)
