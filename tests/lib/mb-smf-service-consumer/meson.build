@@ -25,6 +25,7 @@ mb_smf_test_libs = []
 nmbsmf_builders_src = files('''
     nmbsmf-builders.c
     nmbsmf-parsers.c
+    ncgi-tai-cells.c
 
     lib-arp.c
     lib-associated-session-id.c
