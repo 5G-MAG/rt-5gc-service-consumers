@@ -61,6 +61,34 @@ static bool test_ncgi_tai_copy_carries_cells(unit_test_ctx *ctx)
     return true;
 }
 
+static bool test_ncgi_copy_owns_its_network_id(unit_test_ctx *ctx)
+{
+    uint64_t nid = 0x2A;
+    mb_smf_sc_ncgi_tai_t *src = __ncgi_tai_with_cells(0x11, 0, &nid);
+
+    mb_smf_sc_ncgi_t *src_cell = ogs_list_first(&src->ncgis);
+    UT_PTR_NOT_NULL(src_cell);
+    UT_PTR_NOT_NULL(src_cell->nid);
+
+    mb_smf_sc_ncgi_tai_t *dst = NULL;
+    _ncgi_tai_copy(&dst, src);
+    UT_PTR_NOT_NULL(dst);
+
+    mb_smf_sc_ncgi_t *dst_cell = ogs_list_first(&dst->ncgis);
+    UT_PTR_NOT_NULL(dst_cell);
+    UT_PTR_NOT_NULL(dst_cell->nid);
+
+    /* A shared pointer here means whichever copy is cleared second frees it again. */
+    UT_BOOL_TRUE(src_cell->nid != dst_cell->nid);
+    UT_BOOL_TRUE(*src_cell->nid == *dst_cell->nid);
+
+    /* Both are released: with one shared allocation this is a double free. */
+    _ncgi_tai_free(src);
+    _ncgi_tai_free(dst);
+
+    return true;
+}
+
 static bool test_ncgi_tai_equal_compares_cells(unit_test_ctx *ctx)
 {
     mb_smf_sc_ncgi_tai_t *a = __ncgi_tai_with_cells(0x11, 0x22, NULL);
@@ -102,6 +130,11 @@ static const unit_test_t test_ncgi_tai_copy_carries_cells_desc = {
     .fn = test_ncgi_tai_copy_carries_cells
 };
 
+static const unit_test_t test_ncgi_copy_owns_its_network_id_desc = {
+    .name = "ncgi-tai: a copied cell owns its own Network Id",
+    .fn = test_ncgi_copy_owns_its_network_id
+};
+
 static const unit_test_t test_ncgi_tai_equal_compares_cells_desc = {
     .name = "ncgi-tai: equality compares the cell list, in any order",
     .fn = test_ncgi_tai_equal_compares_cells
@@ -116,6 +149,7 @@ __attribute__ ((constructor))
 static void _init_ncgi_tai_cells_fn()
 {
     register_unit_test(&test_ncgi_tai_copy_carries_cells_desc);
+    register_unit_test(&test_ncgi_copy_owns_its_network_id_desc);
     register_unit_test(&test_ncgi_tai_equal_compares_cells_desc);
     register_unit_test(&test_ncgi_tai_clear_empties_cells_desc);
 }
