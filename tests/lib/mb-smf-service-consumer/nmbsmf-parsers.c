@@ -18,7 +18,14 @@
 #include "openapi/model/plmn_id.h"
 #include "openapi/model/tai.h"
 
+#include "openapi/model/update_rsp_data.h"
+#include "openapi/model/ext_mbs_session.h"
+
 #include "priv_mbs-service-area.h"
+#include "priv_mbs-session.h"
+#include "priv_mbs-status-subscription.h"
+
+#include "nmbsmf-mbs-session-handle.h"
 #include "priv_ncgi-tai.h"
 #include "priv_ncgi.h"
 #include "priv_tai.h"
@@ -150,9 +157,76 @@ static bool test_mbs_service_area_from_openapi_absent(unit_test_ctx *ctx)
     return true;
 }
 
+static ogs_sbi_message_t *__update_response(OpenAPI_mbs_service_area_t *reduced, bool with_body)
+{
+    ogs_sbi_message_t *message = (ogs_sbi_message_t*)ogs_calloc(1, sizeof(*message));
+    message->res_status = OGS_SBI_HTTP_STATUS_OK;
+
+    if (with_body) {
+        OpenAPI_ext_mbs_session_t *ext =
+                (OpenAPI_ext_mbs_session_t*)ogs_calloc(1, sizeof(*ext));
+        ext->red_mbs_service_area = reduced;
+        message->UpdateRspData = OpenAPI_update_rsp_data_create(ext);
+    }
+
+    return message;
+}
+
+static bool test_patch_response_reduced_service_area(unit_test_ctx *ctx)
+{
+    _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
+    _mbs_session_public_copy(&session->previous_session, &session->session);
+
+    ogs_sbi_response_t response;
+    memset(&response, 0, sizeof(response));
+
+    /* An Update the MB-SMF could not cover in full answers 200 OK with the part it kept. */
+    ogs_sbi_message_t *message = __update_response(__build_api_area(), true);
+    _nmbsmf_mbs_session_patch_response(session, message, &response);
+    OpenAPI_update_rsp_data_free(message->UpdateRspData);
+    ogs_free(message);
+
+    UT_PTR_NOT_NULL(session->session.red_mbs_service_area);
+    UT_SIZE_T_EQUAL(ogs_list_count(&session->session.red_mbs_service_area->tais), 1);
+    UT_SIZE_T_EQUAL(ogs_list_count(&session->session.red_mbs_service_area->ncgi_tais), 1);
+
+    /* A success carrying no representation, the 204 of step 2a, says nothing about the service
+     * area and must not discard what the MB-SMF reported earlier. */
+    message = __update_response(NULL, false);
+    message->res_status = OGS_SBI_HTTP_STATUS_NO_CONTENT;
+    _nmbsmf_mbs_session_patch_response(session, message, &response);
+    ogs_free(message);
+
+    UT_PTR_NOT_NULL(session->session.red_mbs_service_area);
+    UT_SIZE_T_EQUAL(ogs_list_count(&session->session.red_mbs_service_area->tais), 1);
+
+    /* A representation that carries no reduced area is the MB-SMF saying the session is no longer
+     * reduced, which is not the same as saying nothing. */
+    message = __update_response(NULL, true);
+    _nmbsmf_mbs_session_patch_response(session, message, &response);
+    OpenAPI_update_rsp_data_free(message->UpdateRspData);
+    ogs_free(message);
+
+    UT_PTR_NULL(session->session.red_mbs_service_area);
+
+    _mbs_session_public_clear(&session->session);
+    if (session->previous_session) {
+        _mbs_session_public_clear(session->previous_session);
+        ogs_free(session->previous_session);
+    }
+    ogs_free(session);
+
+    return true;
+}
+
 static const unit_test_t test_mbs_service_area_from_openapi_desc = {
     .name = "mbs-service-area: parse an MbsServiceArea from OpenAPI",
     .fn = test_mbs_service_area_from_openapi
+};
+
+static const unit_test_t test_patch_response_reduced_service_area_desc = {
+    .name = "mbs-session: an Update response reports a reduced MBS service area",
+    .fn = test_patch_response_reduced_service_area
 };
 
 static const unit_test_t test_mbs_service_area_openapi_round_trip_desc = {
@@ -170,6 +244,7 @@ static void _init_parsers_fn()
 {
     register_unit_test(&test_mbs_service_area_from_openapi_desc);
     register_unit_test(&test_mbs_service_area_openapi_round_trip_desc);
+    register_unit_test(&test_patch_response_reduced_service_area_desc);
     register_unit_test(&test_mbs_service_area_from_openapi_absent_desc);
 }
 
