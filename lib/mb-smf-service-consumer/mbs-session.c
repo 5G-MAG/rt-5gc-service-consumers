@@ -1018,10 +1018,15 @@ OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t
 {
     OpenAPI_mbs_session_id_t *mbs_session_id = NULL;
     /* BUG FIX (found live, 2026-08-10): mbsSessionId.ssm is the MULTICAST-only "identify this
-     * session by its SSM" form (TS 29.514/29.502 Nmbsmf-MBSSession) -- the SMF explicitly rejects
-     * it combined with tmgiAllocReq for any other service_type ("MBS Session Create failed, SSM
-     * as [mbsSessionId] and [tmgiAllocReq] both present but service_type is not MULTICAST",
-     * nmbsmf-handler.c). This function always embedded session->session.ssm into mbsSessionId
+     * session by its SSM" form -- the SMF explicitly rejects it combined with tmgiAllocReq for
+     * any other service_type ("MBS Session Create failed, SSM as [mbsSessionId] and
+     * [tmgiAllocReq] both present but service_type is not MULTICAST", nmbsmf-handler.c).
+     * Code-derived from that rejection, not a quoted requirement: TS 29.532 V18.6.0 clause
+     * 5.3.2.2 (Create) and its Table 6.2.3.2.3.1-3 application errors describe this operation
+     * without stating the combination restriction in prose -- checked directly, not assumed.
+     * (The previously-cited "TS 29.514/29.502" was wrong: neither governs Nmbsmf_MBSSession,
+     * which is TS 29.532; corrected here rather than left uncorrected.) This function always
+     * embedded session->session.ssm into mbsSessionId
      * whenever it was set, with no service_type check, so every BROADCAST session create (which
      * legitimately also carries an SSM -- just as the flat top-level "ssm" field used for content
      * delivery addressing, built separately by __make_ext_mbs_session()/__make_mbs_session_id()'s
