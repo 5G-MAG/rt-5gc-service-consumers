@@ -418,18 +418,12 @@ static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *sess
 {
     OpenAPI_mbs_session_id_t *mbs_session_id = _mbs_session_create_mbs_session_id(session);
     // The flat top-level "ssm" field is built directly from the session, independent of
-    // mbsSessionId's own shape -- see _mbs_session_create_ssm().
+    // mbsSessionId's own shape -- see _mbs_session_create_ssm(). It returns a freshly allocated,
+    // uniquely-owned Ssm (or NULL for a session with no SSM), so ownership transfers directly
+    // rather than through OpenAPI_ssm_copy()'s serialize/parse round trip.
     if (ssm_ptr) {
-        OpenAPI_ssm_t *ssm = _mbs_session_create_ssm(session);
-        if (ssm) {
-            *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, ssm);
-            OpenAPI_ssm_free(ssm);
-        } else {
-            /* OpenAPI_ssm_copy() asserts its src; a session with no SSM returns NULL here, so
-               that case is handled directly rather than passed through. */
-            OpenAPI_ssm_free(*ssm_ptr);
-            *ssm_ptr = NULL;
-        }
+        if (*ssm_ptr) OpenAPI_ssm_free(*ssm_ptr);
+        *ssm_ptr = _mbs_session_create_ssm(session);
     }
     return mbs_session_id;
 }
