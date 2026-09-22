@@ -424,8 +424,17 @@ static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *sess
     // session. Build it directly from the session instead, independent of mbsSessionId's shape.
     if (ssm_ptr) {
         OpenAPI_ssm_t *ssm = _mbs_session_create_ssm(session);
-        *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, ssm);
-        if (ssm) OpenAPI_ssm_free(ssm);
+        if (ssm) {
+            *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, ssm);
+            OpenAPI_ssm_free(ssm);
+        } else {
+            /* _mbs_session_create_ssm() returns NULL for a session with no SSM set (e.g. one
+               created via the plain mb_smf_sc_mbs_session_new(), before any SSM is assigned).
+               OpenAPI_ssm_copy() asserts its src argument, so calling it with NULL here would
+               abort the process rather than simply propagate "no SSM" to the caller. */
+            OpenAPI_ssm_free(*ssm_ptr);
+            *ssm_ptr = NULL;
+        }
     }
     return mbs_session_id;
 }
