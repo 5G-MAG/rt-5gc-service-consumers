@@ -1291,10 +1291,8 @@ static bool test_create_status_subsc(unit_test_ctx *ctx)
 {
     _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
     session->id = ogs_strdup(FAKE_SESSION_ID);
-    /* mbsSessionId.ssm (what this test checks below) is the MULTICAST-only form -- see
-       _mbs_session_create_mbs_session_id() above -- so this has to be a MULTICAST session for the
-       assertions to hold; MBS_SERVICE_TYPE_BROADCAST is the enum's zero value, so this session was
-       silently BROADCAST (and mbsSessionId legitimately absent) before this was set explicitly. */
+    /* mbsSessionId.ssm (checked below) is MULTICAST-only -- see
+       _mbs_session_create_mbs_session_id() above -- so this session must be MULTICAST. */
     session->session.service_type = MBS_SERVICE_TYPE_MULTICAST;
     session->session.ssm = (mb_smf_sc_ssm_addr_t*)ogs_calloc(1, sizeof(*session->session.ssm));
     session->session.ssm->family = AF_INET;
