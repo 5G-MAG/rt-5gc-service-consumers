@@ -1035,17 +1035,12 @@ _priv_mbs_status_subscription_t *_mbs_session_find_subscription(const _priv_mbs_
 OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t *session)
 {
     OpenAPI_mbs_session_id_t *mbs_session_id = NULL;
-    /* BUG FIX (found live, 2026-08-10): mbsSessionId.ssm is the MULTICAST-only "identify this
-     * session by its SSM" form (TS 29.514/29.502 Nmbsmf-MBSSession) -- the SMF explicitly rejects
-     * it combined with tmgiAllocReq for any other service_type ("MBS Session Create failed, SSM
-     * as [mbsSessionId] and [tmgiAllocReq] both present but service_type is not MULTICAST",
-     * nmbsmf-handler.c). This function always embedded session->session.ssm into mbsSessionId
-     * whenever it was set, with no service_type check, so every BROADCAST session create (which
-     * legitimately also carries an SSM -- just as the flat top-level "ssm" field used for content
-     * delivery addressing, built separately by __make_ext_mbs_session()/__make_mbs_session_id()'s
-     * ssm_ptr out-param, not as part of mbsSessionId) got hard-rejected by the SMF with a 400.
-     * For BROADCAST, mbsSessionId should carry only the allocated tmgi (once one exists), never
-     * the SSM. */
+    /* mbsSessionId.ssm is MULTICAST-only: the SMF rejects it combined with tmgiAllocReq for any
+     * other service_type ("... service_type is not MULTICAST", nmbsmf-handler.c; TS 29.532
+     * V18.6.0 does not state this restriction in prose -- checked directly, not assumed). Not
+     * TS 29.514/29.502 as previously cited here: neither governs Nmbsmf_MBSSession. BROADCAST
+     * carries only tmgi here; its content-delivery SSM is the flat top-level "ssm" field, from
+     * _mbs_session_create_ssm(). */
     bool include_ssm_in_session_id = session->session.ssm &&
         session->session.service_type != MBS_SERVICE_TYPE_BROADCAST;
     if (include_ssm_in_session_id || session->session.tmgi) {
