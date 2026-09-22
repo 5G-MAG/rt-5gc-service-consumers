@@ -1017,10 +1017,17 @@ _priv_mbs_status_subscription_t *_mbs_session_find_subscription(const _priv_mbs_
 OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t *session)
 {
     OpenAPI_mbs_session_id_t *mbs_session_id = NULL;
-    if (session->session.ssm || session->session.tmgi) {
+    /* mbsSessionId.ssm is MULTICAST-only: the SMF rejects it combined with tmgiAllocReq for any
+     * other service_type ("... service_type is not MULTICAST", nmbsmf-handler.c; TS 29.532
+     * V18.6.0 does not state this restriction in prose). BROADCAST carries only tmgi here; its
+     * content-delivery SSM is the separate flat top-level "ssm" field, from
+     * _mbs_session_create_ssm(). */
+    bool include_ssm_in_session_id = session->session.ssm &&
+        session->session.service_type != MBS_SERVICE_TYPE_BROADCAST;
+    if (include_ssm_in_session_id || session->session.tmgi) {
         mbs_session_id = OpenAPI_mbs_session_id_create(NULL /*tmgi*/, NULL /*ssm*/, NULL /*nid*/);
     }
-    if (session->session.ssm) {
+    if (include_ssm_in_session_id) {
         OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
         if (session->session.ssm->family == AF_INET) {
             src = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->source.ipv4);
@@ -1037,6 +1044,24 @@ OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t
         mbs_session_id->tmgi = OpenAPI_tmgi_create(ogs_strdup(session->session.tmgi->mbs_service_id), plmn_id);
     }
     return mbs_session_id;
+}
+
+/* The flat top-level "ssm" field (content-delivery address, distinct from mbsSessionId.ssm --
+ * see _mbs_session_create_mbs_session_id()) is built directly from session->session.ssm,
+ * independent of service_type, so BROADCAST sessions still get one. */
+OpenAPI_ssm_t *_mbs_session_create_ssm(_priv_mbs_session_t *session)
+{
+    if (!session->session.ssm) return NULL;
+
+    OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
+    if (session->session.ssm->family == AF_INET) {
+        src = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->source.ipv4);
+        dest = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->dest_mc.ipv4);
+    } else {
+        src = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->source.ipv6);
+        dest = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->dest_mc.ipv6);
+    }
+    return OpenAPI_ssm_create(src, dest);
 }
 
 /*========================== Local private functions ==========================*/

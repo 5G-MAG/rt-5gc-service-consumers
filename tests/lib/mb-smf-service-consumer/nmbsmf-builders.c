@@ -386,10 +386,16 @@ void _mbs_session_public_copy(mb_smf_sc_mbs_session_t **dest, const mb_smf_sc_mb
 OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t *session)
 {
     OpenAPI_mbs_session_id_t *mbs_session_id = NULL;
-    if (session->session.ssm || session->session.tmgi) {
+    /* Mirrors lib/mb-smf-service-consumer/mbs-session.c's own _mbs_session_create_mbs_session_id():
+       mbsSessionId.ssm is the MULTICAST-only form and the SMF rejects it for any other
+       service_type, so a BROADCAST session's SSM is carried only via the flat top-level "ssm"
+       field (_mbs_session_create_ssm() below), never here. */
+    bool include_ssm_in_session_id = session->session.ssm &&
+        session->session.service_type != MBS_SERVICE_TYPE_BROADCAST;
+    if (include_ssm_in_session_id || session->session.tmgi) {
         mbs_session_id = OpenAPI_mbs_session_id_create(NULL /*tmgi*/, NULL /*ssm*/, NULL /*nid*/);
     }
-    if (session->session.ssm) {
+    if (include_ssm_in_session_id) {
         OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
         if (session->session.ssm->family == AF_INET) {
             src = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->source.ipv4);
@@ -406,6 +412,25 @@ OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t
         mbs_session_id->tmgi = OpenAPI_tmgi_create(ogs_strdup(session->session.tmgi->mbs_service_id), plmn_id);
     }
     return mbs_session_id;
+}
+
+/* Mirrors lib/mb-smf-service-consumer/mbs-session.c's own _mbs_session_create_ssm(): the flat
+   top-level "ssm" field, built directly from the session regardless of service_type (unlike
+   mbsSessionId.ssm above), since it addresses content delivery rather than identifying the
+   session to the SMF. */
+OpenAPI_ssm_t *_mbs_session_create_ssm(_priv_mbs_session_t *session)
+{
+    if (!session->session.ssm) return NULL;
+
+    OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
+    if (session->session.ssm->family == AF_INET) {
+        src = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->source.ipv4);
+        dest = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->dest_mc.ipv4);
+    } else {
+        src = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->source.ipv6);
+        dest = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->dest_mc.ipv6);
+    }
+    return OpenAPI_ssm_create(src, dest);
 }
 
 static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr *addr)
@@ -1266,6 +1291,9 @@ static bool test_create_status_subsc(unit_test_ctx *ctx)
 {
     _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
     session->id = ogs_strdup(FAKE_SESSION_ID);
+    /* mbsSessionId.ssm (checked below) is MULTICAST-only -- see
+       _mbs_session_create_mbs_session_id() above -- so this session must be MULTICAST. */
+    session->session.service_type = MBS_SERVICE_TYPE_MULTICAST;
     session->session.ssm = (mb_smf_sc_ssm_addr_t*)ogs_calloc(1, sizeof(*session->session.ssm));
     session->session.ssm->family = AF_INET;
     session->session.ssm->source.ipv4.s_addr = htonl(0xc0a80001); /* 192.168.0.1 */

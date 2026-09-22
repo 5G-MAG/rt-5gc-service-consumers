@@ -417,8 +417,13 @@ static ogs_sbi_server_t *__new_sbi_server(const ogs_sockaddr_t *address)
 static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *session, OpenAPI_ssm_t **ssm_ptr)
 {
     OpenAPI_mbs_session_id_t *mbs_session_id = _mbs_session_create_mbs_session_id(session);
-    if (mbs_session_id && ssm_ptr) {
-        *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, mbs_session_id->ssm);
+    // The flat top-level "ssm" field is built directly from the session, independent of
+    // mbsSessionId's own shape -- see _mbs_session_create_ssm(). It returns a freshly allocated,
+    // uniquely-owned Ssm (or NULL for a session with no SSM), so ownership transfers directly
+    // rather than through OpenAPI_ssm_copy()'s serialize/parse round trip.
+    if (ssm_ptr) {
+        if (*ssm_ptr) OpenAPI_ssm_free(*ssm_ptr);
+        *ssm_ptr = _mbs_session_create_ssm(session);
     }
     return mbs_session_id;
 }
@@ -440,7 +445,12 @@ static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *se
     int any_ue_ind = session->session.any_ue_ind?1:0;
     int contact_pcf_ind = (for_update && session->session.contact_pcf_ind)?1:0; /* only in update */
     OpenAPI_mbs_session_activity_status_e activity_status = OpenAPI_mbs_session_activity_status_NULL;
-    OpenAPI_mbs_service_type_e service_type = ssm?OpenAPI_mbs_service_type_MULTICAST:OpenAPI_mbs_service_type_BROADCAST;
+    /* Reflects session->session.service_type (set via mb_smf_sc_mbs_session_set_service_type()).
+     * The SMF's Namf_MBSBroadcast trigger only fires "if the service type is broadcast service"
+     * (TS 23.247 cl.7.3.1 step 2), so this must match what was actually requested. */
+    OpenAPI_mbs_service_type_e service_type =
+        session->session.service_type == MBS_SERVICE_TYPE_BROADCAST
+            ? OpenAPI_mbs_service_type_BROADCAST : OpenAPI_mbs_service_type_MULTICAST;
     OpenAPI_mbs_service_area_t *mbs_service_area = NULL;
     OpenAPI_external_mbs_service_area_t *ext_mbs_service_area = NULL;
     char *dnn = session->session.dnn?ogs_strdup(session->session.dnn):NULL;
