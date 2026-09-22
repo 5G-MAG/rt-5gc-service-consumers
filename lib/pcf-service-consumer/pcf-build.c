@@ -368,7 +368,15 @@ ogs_sbi_request_t *pcf_policyauthorization_request_subscribe_event(pcf_app_sessi
     server = ogs_list_first(&ogs_sbi_self()->server_list);
     ogs_assert(server);
 
-    evSubsc = OpenAPI_events_subsc_req_data_create(subsc_events, notif_uri, NULL, NULL, NULL, NULL, NULL, NULL, false, 0);
+    /* Assigned by field name rather than passed positionally to
+       OpenAPI_events_subsc_req_data_create(), which takes all 10 fields of
+       EventsSubscReqData in schema order -- see 5G-MAG/rt-5gc-service-consumers#33. */
+    evSubsc = ogs_calloc(1, sizeof(*evSubsc));
+    ogs_assert(evSubsc);
+    evSubsc->events = subsc_events;
+    evSubsc->notif_uri = notif_uri;
+    evSubsc->is_direct_notif_ind = false;
+    evSubsc->direct_notif_ind = 0;
 
 
     OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);
