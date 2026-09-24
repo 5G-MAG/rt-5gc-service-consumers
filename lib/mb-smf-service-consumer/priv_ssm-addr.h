@@ -9,6 +9,8 @@
  * program. If this file is missing then the license can be retrieved from
  * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
  */
+#include "ogs-sbi.h"
+
 #include "macros.h"
 
 #include "ssm-addr.h"
@@ -23,6 +25,12 @@ void _ssm_addr_free(mb_smf_sc_ssm_addr_t *ssm_addr);
 void _ssm_addr_clear(mb_smf_sc_ssm_addr_t *ssm_addr);
 void _ssm_addr_copy(mb_smf_sc_ssm_addr_t **dst, const mb_smf_sc_ssm_addr_t *src);
 bool _ssm_addr_equal(const mb_smf_sc_ssm_addr_t *a, const mb_smf_sc_ssm_addr_t *b);
+
+/* OpenAPI conversions. These live with the SSM address rather than with the MBS session so that
+   the Nmbsmf request builders can reach them without linking the session runtime. */
+OpenAPI_ip_addr_t *_openapi_ip_addr_from_inaddr(const struct in_addr *addr);
+OpenAPI_ip_addr_t *_openapi_ip_addr_from_in6addr(const struct in6_addr *addr);
+OpenAPI_ssm_t *_ssm_addr_to_openapi(const mb_smf_sc_ssm_addr_t *ssm);
 
 #ifdef __cplusplus
 }

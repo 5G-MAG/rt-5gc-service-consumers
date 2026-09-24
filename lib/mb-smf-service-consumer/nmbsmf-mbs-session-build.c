@@ -21,6 +21,7 @@
 #include "priv_ncgi-tai.h"
 #include "priv_ncgi.h"
 #include "priv_tai.h"
+#include "priv_ssm-addr.h"
 #include "priv_mbs-session.h"
 #include "priv_civic-address.h"
 #include "priv_ext-mbs-service-area.h"
@@ -417,8 +418,19 @@ static ogs_sbi_server_t *__new_sbi_server(const ogs_sockaddr_t *address)
 static OpenAPI_mbs_session_id_t *__make_mbs_session_id(_priv_mbs_session_t *session, OpenAPI_ssm_t **ssm_ptr)
 {
     OpenAPI_mbs_session_id_t *mbs_session_id = _mbs_session_create_mbs_session_id(session);
-    if (mbs_session_id && ssm_ptr) {
-        *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, mbs_session_id->ssm);
+    /* Build the flat top-level "ssm" field from the session's own SSM address rather than from
+       mbs_session_id->ssm. The two are distinct: mbsSessionId.ssm is unset for a BROADCAST session,
+       whose session identifier is a TMGI, while this field carries the content-delivery address and
+       applies to both session types. Deriving it from mbsSessionId would leave it empty for every
+       BROADCAST session. */
+    if (ssm_ptr) {
+        OpenAPI_ssm_t *ssm = _ssm_addr_to_openapi(session->session.ssm);
+        /* A session need not have an SSM, in which case there is nothing to copy.
+           OpenAPI_ssm_copy() asserts on a NULL source rather than tolerating it. */
+        if (ssm) {
+            *ssm_ptr = OpenAPI_ssm_copy(*ssm_ptr, ssm);
+            OpenAPI_ssm_free(ssm);
+        }
     }
     return mbs_session_id;
 }
@@ -440,7 +452,20 @@ static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *se
     int any_ue_ind = session->session.any_ue_ind?1:0;
     int contact_pcf_ind = (for_update && session->session.contact_pcf_ind)?1:0; /* only in update */
     OpenAPI_mbs_session_activity_status_e activity_status = OpenAPI_mbs_session_activity_status_NULL;
-    OpenAPI_mbs_service_type_e service_type = ssm?OpenAPI_mbs_service_type_MULTICAST:OpenAPI_mbs_service_type_BROADCAST;
+    /* BUG FIX (found live, 2026-08-10): this derived the outgoing wire serviceType purely from
+     * whether an SSM was present, ignoring session->session.service_type (the field the caller
+     * actually sets via mb_smf_sc_mbs_session_set_service_type()/MBSMFMBSSession::setServiceType()).
+     * Every real distribution session -- BROADCAST or MULTICAST alike -- carries an SSM (it's how
+     * FLUTE/content delivery gets addressed), so this heuristic always evaluated true and every
+     * MBS session was reported to the SMF as MULTICAST regardless of what was actually requested.
+     * SMF's Namf_MBSBroadcast trigger (n4mb-handler.c) only fires "if the service type is
+     * broadcast service" (TS 23.247 cl.7.3.1 step 2), so this silently skipped NGAP Broadcast
+     * Session Setup for every broadcast service: PFCP/N4mb and FLUTE transmission completed
+     * normally, but the gNB never created an MRB and content had no bearer to travel over.
+     */
+    OpenAPI_mbs_service_type_e service_type =
+        session->session.service_type == MBS_SERVICE_TYPE_BROADCAST
+            ? OpenAPI_mbs_service_type_BROADCAST : OpenAPI_mbs_service_type_MULTICAST;
     OpenAPI_mbs_service_area_t *mbs_service_area = NULL;
     OpenAPI_external_mbs_service_area_t *ext_mbs_service_area = NULL;
     char *dnn = session->session.dnn?ogs_strdup(session->session.dnn):NULL;
@@ -489,35 +514,52 @@ static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *se
         mbs_fsa_ids = _mbs_fsa_ids_to_openapi(&session->session.mbs_fsa_ids);
     }
 
-    ext_mbs_session = OpenAPI_ext_mbs_session_create(mbs_session_id, /* mbs_session_id */
-                                                     have_tmgi_req, tmgi_req, /* tmgi_alloc_req: write-only */
-                                                     NULL, /* tmgi: read-only */
-                                                     NULL, /* expiry_time: read-only */
-                                                     service_type, /* service_type: write-only */
-                                                     have_locn_dependent, locn_dependent, /* location_dependant */
-                                                     false, 0, /* area_session_id: read-only */
-                                                     have_tun_req, tun_req, /* ingress_tun_addr_req: write-only */
-                                                     NULL, /* ingress_tun_addr list: read-only */
-                                                     ssm,  /* ssm: write-only */
-                                                     mbs_service_area, /* mbs_service_area: write-only */
-                                                     ext_mbs_service_area, /* ext_mbs_service_area: write-only */
-                                                     /* red_mbs_serv_area: read-only */
-                                                     /* ext_red_mbs_serv_area: read-only */
-                                                     dnn, /* dnn: write-only */
-                                                     snssai, /* snssai: write-only */
-                                                     NULL, /* activation_time: deprecated */
-                                                     start_time, /* start_time */
-                                                     term_time, /* termination_time */
-                                                     mbs_service_info, /* mbs_serv_info */
-                                                     NULL, /* mbs_session_subsc */
-                                                     activity_status, /* activity_status */
-                                                     have_any_ue_ind, any_ue_ind, /* any_ue_ind */
-                                                     mbs_fsa_ids, /* mbs_fsa_id_list */
-                                                     /* associated_session_id */
-                                                     mbs_security_ctx, /* mbs_security_context */
-                                                     have_contact_pcf_ind, contact_pcf_ind /* contact_pcf_ind */
-                                                     /* area_session_policy_id */
-                                                    );
+    /* One argument per line, each named in a trailing comment, so a future field added to
+       ExtMbsSession is caught at compile time (wrong argument count) rather than silently
+       leaving the new field NULL/0 the way bypassing this constructor would -- see review on
+       5G-MAG/rt-5gc-service-consumers#31 (this restores the constructor issue #33 removed;
+       redMbsServArea being added between mbsServiceArea and extMbsServiceArea is the schema
+       change that made the original positional call wrong in the first place). Every argument
+       below not carrying a real value is deliberately NULL/false/0: the read-only fields the
+       MB-SMF supplies, the deprecated activationTime, mbs_session_subsc (set by the caller
+       after this returns), and the fields this builder does not populate. */
+    ext_mbs_session = OpenAPI_ext_mbs_session_create(
+        mbs_session_id,       /* mbs_session_id */
+        have_tmgi_req,        /* is_tmgi_alloc_req */
+        tmgi_req,             /* tmgi_alloc_req */
+        NULL,                 /* tmgi */
+        NULL,                 /* expiration_time */
+        service_type,         /* service_type */
+        have_locn_dependent,  /* is_location_dependent */
+        locn_dependent,       /* location_dependent */
+        false,                /* is_area_session_id */
+        0,                    /* area_session_id */
+        have_tun_req,         /* is_ingress_tun_addr_req */
+        tun_req,              /* ingress_tun_addr_req */
+        NULL,                 /* ingress_tun_addr */
+        ssm,                  /* ssm */
+        mbs_service_area,     /* mbs_service_area */
+        ext_mbs_service_area, /* ext_mbs_service_area */
+        dnn,                  /* dnn */
+        snssai,               /* snssai */
+        NULL,                 /* activation_time */
+        start_time,           /* start_time */
+        term_time,            /* termination_time */
+        mbs_service_info,     /* mbs_serv_info */
+        NULL,                 /* mbs_session_subsc */
+        activity_status,      /* activity_status */
+        have_any_ue_ind,      /* is_any_ue_ind */
+        any_ue_ind,           /* any_ue_ind */
+        mbs_fsa_ids,          /* mbs_fsa_id_list */
+        mbs_security_ctx,     /* mbs_security_context */
+        have_contact_pcf_ind, /* is_contact_pcf_ind */
+        contact_pcf_ind       /* contact_pcf_ind */
+    );
+    if (!ext_mbs_session) {
+        ogs_error("Failed to allocate ExtMbsSession");
+        return NULL;
+    }
+
     return ext_mbs_session;
 }
 

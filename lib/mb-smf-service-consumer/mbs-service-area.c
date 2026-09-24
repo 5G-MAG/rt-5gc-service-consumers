@@ -217,5 +217,19 @@ OpenAPI_mbs_service_area_t *_mbs_service_area_to_openapi(const mb_smf_sc_mbs_ser
     return api_area;
 }
 
+
+mb_smf_sc_mbs_service_area_t *_mbs_service_area_from_openapi(const OpenAPI_mbs_service_area_t *api_area)
+{
+    if (!api_area) return NULL;
+
+    mb_smf_sc_mbs_service_area_t *area = _mbs_service_area_new();
+    if (!area) return NULL;
+
+    _ncgi_tais_from_openapi(&area->ncgi_tais, api_area->ncgi_list);
+    _tais_from_openapi(&area->tais, api_area->tai_list);
+
+    return area;
+}
+
 /* vim:ts=8:sts=4:sw=4:expandtab:
  */

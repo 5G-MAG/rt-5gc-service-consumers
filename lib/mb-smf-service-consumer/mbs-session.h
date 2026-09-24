@@ -119,6 +119,10 @@ typedef struct mb_smf_sc_mbs_session_s {
     uint16_t *area_session_id;         /**< The Area Session Identifier when location_dependent is true */
     mb_smf_sc_mbs_service_area_t *mbs_service_area; /**< The optional MBS Service Area */
     mb_smf_sc_ext_mbs_service_area_t *ext_mbs_service_area; /**< The optional External MBS Service Area */
+    mb_smf_sc_mbs_service_area_t *red_mbs_service_area; /**< The reduced MBS Service Area the MB-SMF created the session
+                                                         *   with, `NULL` unless the MB-SMF trimmed @a mbs_service_area to
+                                                         *   fit its own MB-SMF service area. Supplied by the MB-SMF and
+                                                         *   never sent by this library: setting it has no effect. */
     char *dnn;                         /**< The network name that this MBS Session is for */
     ogs_s_nssai_t *snssai;             /**< The S-NSSAI that this MBS Session is for */
     ogs_time_t *start_time;            /**< The time at which the MBS Session activates */
@@ -165,17 +169,6 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv4(const 
  * @return A new multicast MBS Session using the IPv6 SSM defined by @p source and @p dest.
  */
 MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv6(const struct in6_addr *source, const struct in6_addr *dest);
-
-/** Create an MBS Session using a TMGI
- * @memberof mb_smf_sc_mbs_session_s
- * @static
- * @public
- *
- * @param tmgi The TMGI used to identify the MBS Session.
- *
- * @return A new broadcast MBS Session using the TMGI defined by @p tmgi.
- */
-MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_tmgi(mb_smf_sc_tmgi_t *tmgi);
 
 /** Destroy an MBS Session
  * @memberof mb_smf_sc_mbs_session_s

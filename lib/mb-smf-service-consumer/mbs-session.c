@@ -41,8 +41,6 @@ typedef struct __mbs_session_find_subsc_filter_s {
     _priv_mbs_status_subscription_t *found;
 } __mbs_session_find_subsc_filter_t;
 
-static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr *addr);
-static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_addr *addr);
 static int __mbs_session_find_subsc_hash_do(void *rec, const void *key, int klen, const void *value);
 static int __update_status_subscription(void *rec, const void *key, int klen, const void *value);
 static int __free_status_subscription(void *rec, const void *key, int klen, const void *value);
@@ -74,6 +72,16 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv4(const 
         }
         memcpy(&session->session.ssm->dest_mc.ipv4, dest, sizeof(session->session.ssm->dest_mc.ipv4));
     }
+    /* BUG FIX (C4): _mbs_session_new() leaves service_type at its zero-valued default,
+       MBS_SERVICE_TYPE_BROADCAST -- correct for the empty session this function's own
+       mb_smf_sc_mbs_session_new() wrapper builds (source=dest=NULL), but this function's own
+       documented purpose is "a new multicast MBS Session using the IPv4 SSM"; an SSM is a
+       Multicast-only concept (TS 23.247) with no Broadcast equivalent. A caller using this
+       documented constructor as intended and not separately assigning the public service_type
+       field afterward got BROADCAST reported to the SMF regardless of the SSM it just built. */
+    if (session->session.ssm) {
+        session->session.service_type = MBS_SERVICE_TYPE_MULTICAST;
+    }
 
     _context_add_mbs_session(session);
 
@@ -95,6 +103,10 @@ MB_SMF_CLIENT_API mb_smf_sc_mbs_session_t *mb_smf_sc_mbs_session_new_ipv6(const 
             session->session.ssm->family = AF_INET6;
         }
         memcpy(&session->session.ssm->dest_mc.ipv6, dest, sizeof(session->session.ssm->dest_mc.ipv6));
+    }
+    /* BUG FIX (C4): see mb_smf_sc_mbs_session_new_ipv4()'s identical comment. */
+    if (session->session.ssm) {
+        session->session.service_type = MBS_SERVICE_TYPE_MULTICAST;
     }
 
     _context_add_mbs_session(session);
@@ -355,6 +367,9 @@ void _mbs_session_public_clear(mb_smf_sc_mbs_session_t *session)
     _ext_mbs_service_area_free(session->ext_mbs_service_area);
     session->ext_mbs_service_area = NULL;
 
+    _mbs_service_area_free(session->red_mbs_service_area);
+    session->red_mbs_service_area = NULL;
+
     if (session->dnn) {
         ogs_free(session->dnn);
         session->dnn = NULL;
@@ -455,6 +470,9 @@ void _mbs_session_public_copy(mb_smf_sc_mbs_session_t **dest, const mb_smf_sc_mb
 
     /* copy external mbs service area lists */
     _ext_mbs_service_area_copy(&dst->ext_mbs_service_area, src->ext_mbs_service_area);
+
+    /* copy the MB-SMF supplied reduced mbs service area */
+    _mbs_service_area_copy(&dst->red_mbs_service_area, src->red_mbs_service_area);
 
     /* copy dnn */
     if (dst->dnn) {
@@ -1017,17 +1035,25 @@ _priv_mbs_status_subscription_t *_mbs_session_find_subscription(const _priv_mbs_
 OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t *session)
 {
     OpenAPI_mbs_session_id_t *mbs_session_id = NULL;
-    if (session->session.ssm || session->session.tmgi) {
+    /* mbsSessionId.ssm is MULTICAST-only: the SMF rejects it combined with tmgiAllocReq for any
+     * other service_type ("... service_type is not MULTICAST", nmbsmf-handler.c; TS 29.532
+     * V18.6.0 does not state this restriction in prose -- checked directly, not assumed). Not
+     * TS 29.514/29.502 as previously cited here: neither governs Nmbsmf_MBSSession. BROADCAST
+     * carries only tmgi here; its content-delivery SSM is the flat top-level "ssm" field, from
+     * _mbs_session_create_ssm(). */
+    bool include_ssm_in_session_id = session->session.ssm &&
+        session->session.service_type != MBS_SERVICE_TYPE_BROADCAST;
+    if (include_ssm_in_session_id || session->session.tmgi) {
         mbs_session_id = OpenAPI_mbs_session_id_create(NULL /*tmgi*/, NULL /*ssm*/, NULL /*nid*/);
     }
-    if (session->session.ssm) {
+    if (include_ssm_in_session_id) {
         OpenAPI_ip_addr_t *src = NULL, *dest = NULL;
         if (session->session.ssm->family == AF_INET) {
-            src = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->source.ipv4);
-            dest = __new_OpenAPI_ip_addr_from_inaddr(&session->session.ssm->dest_mc.ipv4);
+            src = _openapi_ip_addr_from_inaddr(&session->session.ssm->source.ipv4);
+            dest = _openapi_ip_addr_from_inaddr(&session->session.ssm->dest_mc.ipv4);
         } else {
-            src = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->source.ipv6);
-            dest = __new_OpenAPI_ip_addr_from_in6addr(&session->session.ssm->dest_mc.ipv6);
+            src = _openapi_ip_addr_from_in6addr(&session->session.ssm->source.ipv6);
+            dest = _openapi_ip_addr_from_in6addr(&session->session.ssm->dest_mc.ipv6);
         }
         mbs_session_id->ssm = OpenAPI_ssm_create(src, dest);
     }
@@ -1040,30 +1066,6 @@ OpenAPI_mbs_session_id_t *_mbs_session_create_mbs_session_id(_priv_mbs_session_t
 }
 
 /*========================== Local private functions ==========================*/
-
-static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_inaddr(const struct in_addr *addr)
-{
-    OpenAPI_ip_addr_t *ret = NULL;
-    char addr_str[INET_ADDRSTRLEN];
-
-    if (inet_ntop(AF_INET, addr, addr_str, sizeof(addr_str))) {
-        ret = OpenAPI_ip_addr_create(ogs_strdup(addr_str), NULL, NULL);
-    }
-
-    return ret;
-}
-
-static OpenAPI_ip_addr_t *__new_OpenAPI_ip_addr_from_in6addr(const struct in6_addr *addr)
-{
-    OpenAPI_ip_addr_t *ret = NULL;
-    char addr_str[INET6_ADDRSTRLEN];
-
-    if (inet_ntop(AF_INET6, addr, addr_str, sizeof(addr_str))) {
-        ret = OpenAPI_ip_addr_create(NULL, ogs_strdup(addr_str), NULL);
-    }
-
-    return ret;
-}
 
 static int __mbs_session_find_subsc_hash_do(void *rec, const void *key, int klen, const void *value)
 {
