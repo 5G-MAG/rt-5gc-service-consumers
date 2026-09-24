@@ -514,46 +514,51 @@ static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *se
         mbs_fsa_ids = _mbs_fsa_ids_to_openapi(&session->session.mbs_fsa_ids);
     }
 
-    /* Fields are assigned by name, not passed positionally to OpenAPI_ext_mbs_session_create().
-       That constructor takes every field of ExtMbsSession in schema order, so a field added to
-       the model shifts every argument after it. Only the change in argument count is an error;
-       the arguments that then land in the wrong parameter are warnings. redMbsServArea being
-       added between mbsServiceArea and extMbsServiceArea is what made that concrete.
-
-       ogs_calloc, not the constructor's ogs_malloc: the constructor assigns every field and so
-       needs none of them zeroed, while this sets only the fields the request carries and needs
-       the rest NULL. Anything not set below is deliberately absent from the request: the
-       read-only fields the MB-SMF supplies, the deprecated activationTime, and the fields this
-       builder does not populate. */
-    ext_mbs_session = ogs_calloc(1, sizeof(*ext_mbs_session));
+    /* One argument per line, each named in a trailing comment, so a future field added to
+       ExtMbsSession is caught at compile time (wrong argument count) rather than silently
+       leaving the new field NULL/0 the way bypassing this constructor would -- see review on
+       5G-MAG/rt-5gc-service-consumers#31 (this restores the constructor issue #33 removed;
+       redMbsServArea being added between mbsServiceArea and extMbsServiceArea is the schema
+       change that made the original positional call wrong in the first place). Every argument
+       below not carrying a real value is deliberately NULL/false/0: the read-only fields the
+       MB-SMF supplies, the deprecated activationTime, mbs_session_subsc (set by the caller
+       after this returns), and the fields this builder does not populate. */
+    ext_mbs_session = OpenAPI_ext_mbs_session_create(
+        mbs_session_id,       /* mbs_session_id */
+        have_tmgi_req,        /* is_tmgi_alloc_req */
+        tmgi_req,             /* tmgi_alloc_req */
+        NULL,                 /* tmgi */
+        NULL,                 /* expiration_time */
+        service_type,         /* service_type */
+        have_locn_dependent,  /* is_location_dependent */
+        locn_dependent,       /* location_dependent */
+        false,                /* is_area_session_id */
+        0,                    /* area_session_id */
+        have_tun_req,         /* is_ingress_tun_addr_req */
+        tun_req,              /* ingress_tun_addr_req */
+        NULL,                 /* ingress_tun_addr */
+        ssm,                  /* ssm */
+        mbs_service_area,     /* mbs_service_area */
+        ext_mbs_service_area, /* ext_mbs_service_area */
+        dnn,                  /* dnn */
+        snssai,               /* snssai */
+        NULL,                 /* activation_time */
+        start_time,           /* start_time */
+        term_time,            /* termination_time */
+        mbs_service_info,     /* mbs_serv_info */
+        NULL,                 /* mbs_session_subsc */
+        activity_status,      /* activity_status */
+        have_any_ue_ind,      /* is_any_ue_ind */
+        any_ue_ind,           /* any_ue_ind */
+        mbs_fsa_ids,          /* mbs_fsa_id_list */
+        mbs_security_ctx,     /* mbs_security_context */
+        have_contact_pcf_ind, /* is_contact_pcf_ind */
+        contact_pcf_ind       /* contact_pcf_ind */
+    );
     if (!ext_mbs_session) {
         ogs_error("Failed to allocate ExtMbsSession");
         return NULL;
     }
-
-    ext_mbs_session->mbs_session_id = mbs_session_id;
-    ext_mbs_session->is_tmgi_alloc_req = have_tmgi_req;
-    ext_mbs_session->tmgi_alloc_req = tmgi_req;
-    ext_mbs_session->service_type = service_type;
-    ext_mbs_session->is_location_dependent = have_locn_dependent;
-    ext_mbs_session->location_dependent = locn_dependent;
-    ext_mbs_session->is_ingress_tun_addr_req = have_tun_req;
-    ext_mbs_session->ingress_tun_addr_req = tun_req;
-    ext_mbs_session->ssm = ssm;
-    ext_mbs_session->mbs_service_area = mbs_service_area;
-    ext_mbs_session->ext_mbs_service_area = ext_mbs_service_area;
-    ext_mbs_session->dnn = dnn;
-    ext_mbs_session->snssai = snssai;
-    ext_mbs_session->start_time = start_time;
-    ext_mbs_session->termination_time = term_time;
-    ext_mbs_session->mbs_serv_info = mbs_service_info;
-    ext_mbs_session->activity_status = activity_status;
-    ext_mbs_session->is_any_ue_ind = have_any_ue_ind;
-    ext_mbs_session->any_ue_ind = any_ue_ind;
-    ext_mbs_session->mbs_fsa_id_list = mbs_fsa_ids;
-    ext_mbs_session->mbs_security_context = mbs_security_ctx;
-    ext_mbs_session->is_contact_pcf_ind = have_contact_pcf_ind;
-    ext_mbs_session->contact_pcf_ind = contact_pcf_ind;
 
     return ext_mbs_session;
 }
