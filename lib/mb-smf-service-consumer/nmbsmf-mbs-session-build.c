@@ -539,6 +539,7 @@ static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *se
         NULL,                 /* ingress_tun_addr */
         ssm,                  /* ssm */
         mbs_service_area,     /* mbs_service_area */
+        NULL,                 /* red_mbs_service_area, set by the MB-SMF in its response */
         ext_mbs_service_area, /* ext_mbs_service_area */
         dnn,                  /* dnn */
         snssai,               /* snssai */
