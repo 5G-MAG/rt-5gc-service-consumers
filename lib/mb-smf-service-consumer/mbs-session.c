@@ -721,7 +721,12 @@ bool _mbs_session_set_delete_callback(_priv_mbs_session_t *session, mb_smf_sc_mb
 bool _mbs_session_set_callback_freefn(_priv_mbs_session_t *session, mb_smf_sc_mbs_session_result_cb callback, void *data,
                                        mb_smf_sc_mbs_session_cb_data_free_fn data_free)
 {
-    if (!session || session->deleted) return false;
+    /* A deleted session may not gain a callback, but must always be able to lose one. An application
+       deletes a session and then frees what its callback points at, detaching the callback first;
+       refusing that detach left the delete-result callback aimed at freed memory, and the MB-SMF's
+       answer to the DELETE then called into it. */
+    if (!session) return false;
+    if (session->deleted && callback) return false;
     bool result = true;
     result &= _mbs_session_set_create_callback_freefn(session, callback, data, data_free);
     result &= _mbs_session_set_update_callback_freefn(session, callback, data, data_free);
