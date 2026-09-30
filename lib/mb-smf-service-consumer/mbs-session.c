@@ -868,6 +868,12 @@ void _mbs_session_send_update(_priv_mbs_session_t *session)
 void _mbs_session_send_remove(_priv_mbs_session_t *session)
 {
     if (!session) return;
+    if (!session->id) {
+        /* The session was never created, just remove */
+        _mbs_session_do_deleted_callback(session);
+        _context_remove_mbs_session(session);
+        return;
+    }
 
     ogs_debug("Send removal of MbsSession [%p (%p)]", session, _priv_mbs_session_to_public(session));
 
