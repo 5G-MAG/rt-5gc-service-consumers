@@ -205,9 +205,10 @@ MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_all_changes()
 {
     ogs_list_t *sessions = _context_mbs_sessions();
     _priv_mbs_session_t *sess, *next;
-    bool ret = true;
+    bool ret = false;
     ogs_list_for_each_safe(sessions, next, sess) {
-        ret &= _mbs_session_push_changes(sess);
+        /* Any session sent, as documented; an unchanged session sends nothing and is no failure. */
+        if (_mbs_session_push_changes(sess)) ret = true;
     }
     return ret;
 }
@@ -817,9 +818,15 @@ bool _mbs_session_push_changes(_priv_mbs_session_t *sess)
         _mbs_session_send_update(sess);
     } else {
         ogs_debug("MbsSession [%p (%p)] not changed", sess, _priv_mbs_session_to_public(sess));
+        /* main session not changed, let's update the subscriptions */
+        _mbs_session_subscriptions_update(sess);
+        /* Nothing was sent for the MBS Session, so no result will be reported for it. Answering true
+           here told the application a result was coming: one that waits for it before pushing again
+           never pushed again. */
+        return false;
     }
 
-    /* main session not changed, let's update the subscriptions */
+    /* let's update the subscriptions */
     _mbs_session_subscriptions_update(sess);
 
     return true;
