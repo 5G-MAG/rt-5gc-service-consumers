@@ -219,6 +219,59 @@ static bool test_patch_response_reduced_service_area(unit_test_ctx *ctx)
     return true;
 }
 
+extern int ut_updated_callbacks;
+extern int ut_update_error_callbacks;
+extern const OpenAPI_problem_details_t *ut_update_error_problem;
+
+static bool test_patch_response_refusal_reported(unit_test_ctx *ctx)
+{
+    _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
+    _mbs_session_public_copy(&session->previous_session, &session->session);
+    session->session.location_dependent = true; /* the change this Update asked for */
+
+    ogs_sbi_response_t response;
+    memset(&response, 0, sizeof(response));
+    OpenAPI_problem_details_t problem;
+    memset(&problem, 0, sizeof(problem));
+
+    /* A refusal is reported as a failure, with the MB-SMF's problem details, and the change undone. */
+    ogs_sbi_message_t *message = __update_response(NULL, false);
+    message->res_status = OGS_SBI_HTTP_STATUS_NOT_IMPLEMENTED;
+    message->ProblemDetails = &problem;
+    ut_updated_callbacks = ut_update_error_callbacks = 0;
+    _nmbsmf_mbs_session_patch_response(session, message, &response);
+    ogs_free(message);
+
+    UT_INT_EQUAL(ut_update_error_callbacks, 1);
+    UT_INT_EQUAL(ut_updated_callbacks, 0);
+    UT_BOOL_TRUE(ut_update_error_problem == &problem);
+    UT_BOOL_FALSE(session->session.location_dependent);
+
+    /* A success is reported as one. */
+    message = __update_response(NULL, false);
+    message->res_status = OGS_SBI_HTTP_STATUS_NO_CONTENT;
+    ut_updated_callbacks = ut_update_error_callbacks = 0;
+    _nmbsmf_mbs_session_patch_response(session, message, &response);
+    ogs_free(message);
+
+    UT_INT_EQUAL(ut_updated_callbacks, 1);
+    UT_INT_EQUAL(ut_update_error_callbacks, 0);
+
+    _mbs_session_public_clear(&session->session);
+    if (session->previous_session) {
+        _mbs_session_public_clear(session->previous_session);
+        ogs_free(session->previous_session);
+    }
+    ogs_free(session);
+
+    return true;
+}
+
+static const unit_test_t test_patch_response_refusal_reported_desc = {
+    .name = "mbs-session: an Update the MB-SMF refuses is reported as a failure and undone",
+    .fn = test_patch_response_refusal_reported
+};
+
 static const unit_test_t test_mbs_service_area_from_openapi_desc = {
     .name = "mbs-service-area: parse an MbsServiceArea from OpenAPI",
     .fn = test_mbs_service_area_from_openapi
@@ -245,6 +298,7 @@ static void _init_parsers_fn()
     register_unit_test(&test_mbs_service_area_from_openapi_desc);
     register_unit_test(&test_mbs_service_area_openapi_round_trip_desc);
     register_unit_test(&test_patch_response_reduced_service_area_desc);
+    register_unit_test(&test_patch_response_refusal_reported_desc);
     register_unit_test(&test_mbs_service_area_from_openapi_absent_desc);
 }
 

@@ -207,6 +207,11 @@ void _nmbsmf_mbs_session_patch_response(_priv_mbs_session_t *sess, ogs_sbi_messa
             mb_smf_sc_mbs_session_t *dst = &sess->session;
             _mbs_session_public_copy(&dst, sess->previous_session);
         }
+        /* Reported as the failure it is, with the MB-SMF's account of it. Reporting it through the
+           success callback told the application the update had been applied when the MB-SMF had
+           refused it, so the application kept a session the MB-SMF does not have. */
+        _mbs_session_do_update_error_callback(sess, message->ProblemDetails);
+        return;
     }
 
     /* callback to notify application of a change to MBS Session */

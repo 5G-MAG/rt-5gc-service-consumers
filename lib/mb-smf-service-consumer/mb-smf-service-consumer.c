@@ -273,6 +273,10 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                                 _nmbsmf_mbs_session_delete_response(sess, &message, response);
                                 break;
                             CASE(OGS_SBI_HTTP_METHOD_PATCH)
+                                /* Only the header was parsed above, which leaves res_status at 0 and the
+                                   body unread, so every answer, a refusal included, looked like "no
+                                   change". Parsed in full, as the create's response is. */
+                                __upgrade_to_full_response_parse(&message, response);
                                 _nmbsmf_mbs_session_patch_response(sess, &message, response);
                                 break;
                             DEFAULT
