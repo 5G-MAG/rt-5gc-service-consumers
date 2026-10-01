@@ -1,9 +1,38 @@
-<h1 align="center">5G Core Service Consumers</h1>
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/Status-Under_Development-yellow" alt="Under Development"></a>
-  <a href="https://github.com/5G-MAG/rt-5gc-service-consumers/releases/latest"><img src="https://img.shields.io/github/v/release/5G-MAG/rt-5gc-service-consumers?label=Version" alt="Version"></a>
-  <a href="https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view"><img src="https://img.shields.io/badge/License-5G--MAG%20Public%20License%20(v1.0)-blue" alt="License"></a>
+  <img src=".github/banner.svg" width="100%" alt="5G-MAG Reference Tools, 5G Core Service Consumers: 5G Core Service Consumers">
 </p>
+
+<p align="center">
+  Client libraries for consuming 5G Core service-based interfaces: BSF, PCF, MB-SMF and
+  the NRF discovery they rest on.
+</p>
+
+<p align="center">
+  <img alt="Status: under development"
+    src="https://img.shields.io/badge/Status-Under_Development-yellow">
+  <a href="https://github.com/5G-MAG/rt-5gc-service-consumers/releases"><img alt="Version"
+    src="https://img.shields.io/github/v/release/5G-MAG/rt-5gc-service-consumers?label=Version&sort=semver"></a>
+  <a href="LICENSE"><img alt="5G-MAG Public License v1.0"
+    src="https://img.shields.io/badge/License-5G--MAG%20PL%20v1.0-blue"></a>
+</p>
+
+<p align="center">
+  <a href="https://www.5g-mag.com/reference-tools">Project page</a> &nbsp;&middot;&nbsp;
+  <a href="https://github.com/5G-MAG/rt-5gc-service-consumers/issues">Issues</a> &nbsp;&middot;&nbsp;
+  <a href="https://www.5g-mag.com/contributing">Contributing</a>
+</p>
+
+---
+
+## At a glance
+
+|  |  |
+|---|---|
+| **Provides** | Service consumer libraries for the BSF, PCF and MB-SMF, plus command line tools that exercise them |
+| **Role** | Client-side libraries; not a deployable network function of its own |
+| **Built with** | C, meson, on top of Open5GS |
+| **Used by** | [rt-mbs-function](https://github.com/5G-MAG/rt-mbs-function) for its MB-SMF interactions, and other reference tools |
+| **Part of** | [5G-MAG Reference Tools](https://www.5g-mag.com/reference-tools) |
 
 ## Introduction
 
@@ -240,3 +269,13 @@ If you are using the Open5GS PCF, it will reject AppSessionContext requests if t
 `audio`, `video` or `control`. It will also reject if a default PCC Rule for the 5QI associated with the Media-Type has not been
 configured in the Open5GS Core. You will need a default PCC Rule for 5QI 1 for audio Media-Type, 2 for video Media-Type and 5 for
 control Media-Type. You can use the Open5GS WebUI to configure the default PCC Rules for a subscriber UE.
+
+## Contributing
+
+Contributions are welcome. How to raise an issue, fork the repository and open a pull request, and
+the Contributor License Agreement required before code can be merged, are described at
+<https://www.5g-mag.com/contributing>.
+
+## License
+
+See [LICENSE](LICENSE).

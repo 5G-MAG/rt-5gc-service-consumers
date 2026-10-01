@@ -42,6 +42,10 @@ void _tai_set_network_id(mb_smf_sc_tai_t *tai, const uint64_t *nid);
 OpenAPI_tai_t *_tai_to_openapi(const mb_smf_sc_tai_t *tai);
 cJSON *_tai_to_json(const mb_smf_sc_tai_t *tai);
 
+bool _tai_set_from_openapi(mb_smf_sc_tai_t *tai, const OpenAPI_tai_t *api_tai);
+mb_smf_sc_tai_t *_tai_from_openapi(const OpenAPI_tai_t *api_tai);
+int _tais_from_openapi(ogs_list_t *tais, const OpenAPI_list_t *api_tais);
+
 #ifdef __cplusplus
 }
 #endif

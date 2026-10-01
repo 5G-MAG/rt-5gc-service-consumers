@@ -368,7 +368,23 @@ ogs_sbi_request_t *pcf_policyauthorization_request_subscribe_event(pcf_app_sessi
     server = ogs_list_first(&ogs_sbi_self()->server_list);
     ogs_assert(server);
 
-    evSubsc = OpenAPI_events_subsc_req_data_create(subsc_events, notif_uri, NULL, NULL, NULL, NULL, NULL, NULL, false, 0);
+    /* One argument per line, each named in a trailing comment, so a future field added to
+       EventsSubscReqData is caught at compile time (wrong argument count) rather than silently
+       leaving the new field NULL/0 the way bypassing this constructor would -- see review on
+       5G-MAG/rt-5gc-service-consumers#31 (this restores the constructor issue #33 removed). */
+    evSubsc = OpenAPI_events_subsc_req_data_create(
+        subsc_events,   /* events */
+        notif_uri,      /* notif_uri */
+        NULL,           /* req_qos_mon_params */
+        NULL,           /* qos_mon */
+        NULL,           /* req_anis */
+        NULL,           /* usg_thres */
+        NULL,           /* notif_corre_id */
+        NULL,           /* af_app_ids */
+        false,          /* is_direct_notif_ind */
+        0               /* direct_notif_ind */
+    );
+    ogs_assert(evSubsc);
 
 
     OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);

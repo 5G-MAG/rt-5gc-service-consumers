@@ -36,6 +36,9 @@ ogs_list_t *_ncgi_patch_list(const mb_smf_sc_ncgi_t *a, const mb_smf_sc_ncgi_t *
 OpenAPI_ncgi_t *_ncgi_to_openapi(const mb_smf_sc_ncgi_t *ncgi);
 cJSON *_ncgi_to_json(const mb_smf_sc_ncgi_t *ncgi);
 
+mb_smf_sc_ncgi_t *_ncgi_from_openapi(const OpenAPI_ncgi_t *api_ncgi);
+int _ncgis_from_openapi(ogs_list_t *ncgis, const OpenAPI_list_t *api_ncgis);
+
 #ifdef __cplusplus
 }
 #endif

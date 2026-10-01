@@ -59,6 +59,14 @@ MB_SMF_CLIENT_API mb_smf_sc_ncgi_t *mb_smf_sc_ncgi_set_plmn_id(mb_smf_sc_ncgi_t 
     return ncgi;
 }
 
+MB_SMF_CLIENT_API mb_smf_sc_ncgi_t *mb_smf_sc_ncgi_set_plmn_id_len(mb_smf_sc_ncgi_t *ncgi, uint16_t mcc, uint16_t mnc, uint8_t mnc_len)
+{
+    if (ncgi) {
+        ogs_plmn_id_build(&ncgi->plmn_id, mcc, mnc, mnc_len);
+    }
+    return ncgi;
+}
+
 /* Library internal ncgi methods (protected) */
 ogs_list_t *_ncgis_patch_list(const ogs_list_t *a, const ogs_list_t *b)
 {
@@ -163,6 +171,12 @@ void _ncgi_free(mb_smf_sc_ncgi_t *ncgi)
 void _ncgi_clear(mb_smf_sc_ncgi_t *ncgi)
 {
     if (!ncgi) return;
+    /* Released before the memset below, which would otherwise zero the pointer and lose the only
+     * reference to it. _tai_clear() releases the TAI's own Network Id the same way. */
+    if (ncgi->nid) {
+        ogs_free(ncgi->nid);
+        ncgi->nid = NULL;
+    }
     memset(&ncgi->plmn_id, 0, sizeof(*ncgi) - sizeof(ogs_lnode_t));
 }
 
@@ -183,6 +197,15 @@ void _ncgi_copy(mb_smf_sc_ncgi_t **dst, const mb_smf_sc_ncgi_t *src)
     }
 
     memcpy(&(*dst)->plmn_id, &src->plmn_id, sizeof(*src) - sizeof(ogs_lnode_t));
+
+    /* The memcpy brought the source's Network Id pointer across with the rest of the struct.
+     * Replace it with this NCGI's own allocation, or the two share one and whichever is cleared
+     * second frees it again. _tai_copy() allocates the TAI's Network Id the same way. */
+    (*dst)->nid = NULL;
+    if (src->nid) {
+        (*dst)->nid = (uint64_t*)ogs_malloc(sizeof(*(*dst)->nid));
+        *(*dst)->nid = *src->nid;
+    }
 }
 
 bool _ncgi_equal(const mb_smf_sc_ncgi_t *a, const mb_smf_sc_ncgi_t *b)
@@ -273,6 +296,52 @@ cJSON *_ncgi_to_json(const mb_smf_sc_ncgi_t *ncgi)
     cJSON *json = OpenAPI_ncgi_convertToJSON(api_ncgi);
     OpenAPI_ncgi_free(api_ncgi);
     return json;
+}
+
+
+mb_smf_sc_ncgi_t *_ncgi_from_openapi(const OpenAPI_ncgi_t *api_ncgi)
+{
+    if (!api_ncgi || !api_ncgi->plmn_id || !api_ncgi->nr_cell_id) return NULL;
+
+    /* ogs_sbi_parse_plmn_id() takes the MNC digit count from the string length, so a 3-digit MNC
+     * numerically below 100 ("001".."099") keeps its length instead of collapsing to 2 digits. */
+    ogs_plmn_id_t plmn_id;
+    if (!ogs_sbi_parse_plmn_id(&plmn_id, (OpenAPI_plmn_id_t*)api_ncgi->plmn_id)) return NULL;
+
+    mb_smf_sc_ncgi_t *ncgi = _ncgi_new();
+    if (!ncgi) return NULL;
+
+    memcpy(&ncgi->plmn_id, &plmn_id, sizeof(ncgi->plmn_id));
+
+    /* NrCellId and Nid are hex strings: the reverse of the encoding _ncgi_to_openapi() writes with
+     * _uint64_to_hex_str(). */
+    ncgi->nr_cell_id = ogs_uint64_from_string(api_ncgi->nr_cell_id);
+
+    if (api_ncgi->nid) {
+        ncgi->nid = (uint64_t*)ogs_malloc(sizeof(*ncgi->nid));
+        *ncgi->nid = ogs_uint64_from_string(api_ncgi->nid) & 0xFFFFFFFFFFFULL;
+    }
+
+    return ncgi;
+}
+
+int _ncgis_from_openapi(ogs_list_t *ncgis, const OpenAPI_list_t *api_ncgis)
+{
+    if (!ncgis || !api_ncgis) return 0;
+
+    int count = 0;
+    OpenAPI_lnode_t *node;
+    OpenAPI_list_for_each(api_ncgis, node) {
+        mb_smf_sc_ncgi_t *ncgi = _ncgi_from_openapi((const OpenAPI_ncgi_t*)node->data);
+        if (!ncgi) {
+            ogs_error("Skipping an Ncgi that could not be converted");
+            continue;
+        }
+        ogs_list_add(ncgis, ncgi);
+        count++;
+    }
+
+    return count;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

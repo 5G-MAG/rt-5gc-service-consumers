@@ -155,13 +155,31 @@ void _ncgi_tai_free(mb_smf_sc_ncgi_tai_t *ncgi_tai)
     ogs_free(ncgi_tai);
 }
 
+static void __ncgis_clear(ogs_list_t *ncgis)
+{
+    mb_smf_sc_ncgi_t *ncgi, *next;
+    ogs_list_for_each_safe(ncgis, next, ncgi) {
+        ogs_list_remove(ncgis, ncgi);
+        _ncgi_free(ncgi);
+    }
+}
+
+static void __ncgis_copy(ogs_list_t *dst, const ogs_list_t *src)
+{
+    mb_smf_sc_ncgi_t *ncgi;
+    ogs_list_for_each(src, ncgi) {
+        mb_smf_sc_ncgi_t *copy = NULL;
+        _ncgi_copy(&copy, ncgi);
+        if (copy) ogs_list_add(dst, copy);
+    }
+}
+
 void _ncgi_tai_clear(mb_smf_sc_ncgi_tai_t *ncgi_tai)
 {
     if (!ncgi_tai) return;
 
     _tai_clear(&ncgi_tai->tai);
-
-    /* TODO: clear ncgi list */
+    __ncgis_clear(&ncgi_tai->ncgis);
 }
 
 void _ncgi_tai_copy(mb_smf_sc_ncgi_tai_t **dst, const mb_smf_sc_ncgi_tai_t *src)
@@ -184,7 +202,7 @@ void _ncgi_tai_copy(mb_smf_sc_ncgi_tai_t **dst, const mb_smf_sc_ncgi_tai_t *src)
     _tai_copy(&dst_tai, &src->tai);
     ogs_assert(dst_tai == &(*dst)->tai);
 
-    /* TODO: copy ncgi list */
+    __ncgis_copy(&(*dst)->ncgis, &src->ncgis);
 }
 
 bool _ncgi_tai_equal(const mb_smf_sc_ncgi_tai_t *a, const mb_smf_sc_ncgi_tai_t *b)
@@ -193,9 +211,38 @@ bool _ncgi_tai_equal(const mb_smf_sc_ncgi_tai_t *a, const mb_smf_sc_ncgi_tai_t *
     if (!a || !b) return false;
 
     if (!_tai_equal(&a->tai, &b->tai)) return false;
-    /* TODO: compare ncgi arrays */
 
-    return true;
+    if (ogs_list_count(&a->ncgis) != ogs_list_count(&b->ncgis)) return false;
+
+    /* Cells are compared without regard to their order, the way _mbs_service_area_equal()
+     * compares its own lists: match each entry of a against a not-yet-matched entry of a
+     * throwaway copy of b. */
+    ogs_list_t b_ncgis;
+    ogs_list_init(&b_ncgis);
+    __ncgis_copy(&b_ncgis, &b->ncgis);
+
+    bool equal = true;
+    mb_smf_sc_ncgi_t *a_ncgi;
+    ogs_list_for_each(&a->ncgis, a_ncgi) {
+        bool found = false;
+        mb_smf_sc_ncgi_t *next, *b_ncgi;
+        ogs_list_for_each_safe(&b_ncgis, next, b_ncgi) {
+            if (_ncgi_equal(a_ncgi, b_ncgi)) {
+                ogs_list_remove(&b_ncgis, b_ncgi);
+                _ncgi_free(b_ncgi);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            equal = false;
+            break;
+        }
+    }
+
+    __ncgis_clear(&b_ncgis);
+
+    return equal;
 }
 
 ogs_list_t *_ncgi_tai_patch_list(const mb_smf_sc_ncgi_tai_t *a, const mb_smf_sc_ncgi_tai_t *b)
@@ -234,6 +281,43 @@ cJSON *_ncgi_tai_to_json(const mb_smf_sc_ncgi_tai_t *ncgi_tai)
     cJSON *json = OpenAPI_ncgi_tai_convertToJSON(api_ncgi_tai);
     OpenAPI_ncgi_tai_free(api_ncgi_tai);
     return json;
+}
+
+
+mb_smf_sc_ncgi_tai_t *_ncgi_tai_from_openapi(const OpenAPI_ncgi_tai_t *api_ncgi_tai)
+{
+    if (!api_ncgi_tai || !api_ncgi_tai->tai) return NULL;
+
+    mb_smf_sc_ncgi_tai_t *ncgi_tai = _ncgi_tai_new();
+    if (!ncgi_tai) return NULL;
+
+    if (!_tai_set_from_openapi(&ncgi_tai->tai, api_ncgi_tai->tai)) {
+        _ncgi_tai_free(ncgi_tai);
+        return NULL;
+    }
+
+    _ncgis_from_openapi(&ncgi_tai->ncgis, api_ncgi_tai->cell_list);
+
+    return ncgi_tai;
+}
+
+int _ncgi_tais_from_openapi(ogs_list_t *ncgi_tais, const OpenAPI_list_t *api_ncgi_tais)
+{
+    if (!ncgi_tais || !api_ncgi_tais) return 0;
+
+    int count = 0;
+    OpenAPI_lnode_t *node;
+    OpenAPI_list_for_each(api_ncgi_tais, node) {
+        mb_smf_sc_ncgi_tai_t *ncgi_tai = _ncgi_tai_from_openapi((const OpenAPI_ncgi_tai_t*)node->data);
+        if (!ncgi_tai) {
+            ogs_error("Skipping an NcgiTai that could not be converted");
+            continue;
+        }
+        ogs_list_add(ncgi_tais, ncgi_tai);
+        count++;
+    }
+
+    return count;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

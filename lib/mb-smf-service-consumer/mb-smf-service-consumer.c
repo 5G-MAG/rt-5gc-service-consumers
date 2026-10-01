@@ -154,7 +154,12 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
 
             SWITCH(message.h.service.name)
             CASE(OGS_SBI_SERVICE_NAME_NNRF_DISC)
-                if (_nnrf_disc_handle(xact, &message, response) == OGS_OK) xact = NULL;
+                if (_nnrf_disc_handle(xact, &message, response) == OGS_OK) {
+                    xact = NULL;
+                } else if (tmgi->callback) {
+                    /* No MB-SMF was found, so the TMGI request was never sent; see the MBS Session case. */
+                    tmgi->callback(_priv_tmgi_to_public(tmgi), OGS_ERROR, NULL, tmgi->callback_data);
+                }
                 break;
             CASE(OGS_SBI_SERVICE_NAME_NMBSMF_TMGI)
                 /* process response to TMGI request */
@@ -184,7 +189,29 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
             }
             SWITCH(message.h.service.name)
             CASE(OGS_SBI_SERVICE_NAME_NNRF_DISC)
-                if (_nnrf_disc_handle(xact, &message, response) == OGS_OK) xact = NULL;
+                if (_nnrf_disc_handle(xact, &message, response) == OGS_OK) {
+                    xact = NULL;
+                } else {
+                    /* Discovery found no MB-SMF, so the request waiting on it was never sent. The
+                       transaction is removed below, and without a callback here the caller waited for a
+                       response that could not arrive: an MBS User Data Ingest Session created before the
+                       MB-SMF had registered with the NRF was never answered, and kept its MBS Session IDs.
+                       Only the session's own create and update have a callback to report through: a POST to
+                       the collection, and a PATCH on the session. A subscription request travels with the
+                       create, and reporting its failure as the session's own made the session fail twice. */
+                    const char *method = xact->request ? xact->request->h.method : NULL;
+                    const char *c1 = xact->request ? xact->request->h.resource.component[1] : NULL;
+                    const char *c2 = xact->request ? xact->request->h.resource.component[2] : NULL;
+                    if (method && !strcmp(method, OGS_SBI_HTTP_METHOD_POST) && !c1) {
+                        ogs_error("No MB-SMF found; reporting the MBS Session create as failed");
+                        _mbs_session_do_create_error_callback(sess, NULL);
+                    } else if (method && !strcmp(method, OGS_SBI_HTTP_METHOD_PATCH) && c1 && !c2) {
+                        ogs_error("No MB-SMF found; reporting the MBS Session update as failed");
+                        _mbs_session_do_update_error_callback(sess, NULL);
+                    } else {
+                        ogs_error("No MB-SMF found for a %s request; it was not sent", method ? method : "(unknown)");
+                    }
+                }
                 break;
             CASE(OGS_SBI_SERVICE_NAME_NMBSMF_MBS_SESSION)
                 /* process response to MBS Session request */
@@ -246,6 +273,10 @@ MB_SMF_CLIENT_API bool mb_smf_sc_process_event(ogs_event_t *e)
                                 _nmbsmf_mbs_session_delete_response(sess, &message, response);
                                 break;
                             CASE(OGS_SBI_HTTP_METHOD_PATCH)
+                                /* Only the header was parsed above, which leaves res_status at 0 and the
+                                   body unread, so every answer, a refusal included, looked like "no
+                                   change". Parsed in full, as the create's response is. */
+                                __upgrade_to_full_response_parse(&message, response);
                                 _nmbsmf_mbs_session_patch_response(sess, &message, response);
                                 break;
                             DEFAULT

@@ -46,7 +46,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    printf("%zi/%zi tests passed\n", success, total);
+    printf("%zi/%zi tests passed (%zi failures)\n", success, total, failed);
 
     if (success != total) return 1;
     return 0;

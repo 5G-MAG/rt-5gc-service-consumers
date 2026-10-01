@@ -98,6 +98,26 @@ MB_SMF_CLIENT_API void mb_smf_sc_ncgi_delete(mb_smf_sc_ncgi_t *ncgi);
  */
 MB_SMF_CLIENT_API mb_smf_sc_ncgi_t *mb_smf_sc_ncgi_set_plmn_id(mb_smf_sc_ncgi_t *ncgi, uint16_t mcc, uint16_t mnc);
 
+/** Set the PLMN Id, with an explicit MNC digit length
+ * @memberof mb_smf_sc_ncgi_s
+ * @public
+ *
+ * Like mb_smf_sc_ncgi_set_plmn_id(), but takes the MNC digit length (2 or 3)
+ * explicitly instead of guessing it from the numeric MNC value. A 3-digit MNC
+ * whose value happens to be below 100 (e.g. "001"-"099") cannot be told apart
+ * from a 2-digit MNC by value alone, so callers that know the true digit
+ * count (e.g. because they parsed it from a 3GPP Mnc string) should use this
+ * instead of mb_smf_sc_ncgi_set_plmn_id().
+ *
+ * @param ncgi The NCGI to set the PLMN Id for.
+ * @param mcc The PLMN MCC to set.
+ * @param mnc The PLMN MNC to set.
+ * @param mnc_len The number of digits (2 or 3) in @p mnc.
+ *
+ * @return @p ncgi.
+ */
+MB_SMF_CLIENT_API mb_smf_sc_ncgi_t *mb_smf_sc_ncgi_set_plmn_id_len(mb_smf_sc_ncgi_t *ncgi, uint16_t mcc, uint16_t mnc, uint8_t mnc_len);
+
 /**@}*/
 
 #ifdef __cplusplus
