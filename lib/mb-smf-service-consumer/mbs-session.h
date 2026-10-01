@@ -394,7 +394,9 @@ MB_SMF_CLIENT_API const char *mb_smf_sc_mbs_session_get_resource_id(const mb_smf
  *
  * @param session The MBS Session to commit to the MB-SMF.
  *
- * @return `true` if changes were sent.
+ * @return `true` if changes were sent for the MBS Session itself, whose result is then reported through its
+ *         create, update or delete callback; `false` if the MBS Session was unchanged, even where changes to its
+ *         notification subscriptions were sent.
  */
 MB_SMF_CLIENT_API bool mb_smf_sc_mbs_session_push_changes(mb_smf_sc_mbs_session_t *session);
 
