@@ -236,7 +236,8 @@ static void __parse_server_config(ogs_yaml_iter_t *iter, parse_server_add_f adde
                     ogs_warn("Ignore family(%d) : AF_UNSPEC(%d), AF_INET(%d), AF_INET6(%d) ", family, AF_UNSPEC, AF_INET, AF_INET6);
                     family = AF_UNSPEC;
                 }
-            } else if (!strcmp(sbi_key, "addr") || !strcmp(sbi_key, "name")) {
+            } else if (!strcmp(sbi_key, "address") || !strcmp(sbi_key, "addr") ||
+                       !strcmp(sbi_key, "name")) {
                 ogs_yaml_iter_t hostname_iter;
 
                 ogs_yaml_iter_recurse(&sbi_iter, &hostname_iter);
@@ -265,7 +266,7 @@ static void __parse_server_config(ogs_yaml_iter_t *iter, parse_server_add_f adde
                 dev = ogs_yaml_iter_value(&sbi_iter);
             } else if (!strcmp(sbi_key, "option")) {
                 int rv;
-                rv = ogs_app_config_parse_sockopt(&sbi_iter, &option);
+                rv = ogs_app_parse_sockopt_config(&sbi_iter, &option);
                 if (rv != OGS_OK) return;
                 is_option = true;
             } else {
@@ -289,17 +290,17 @@ static void __parse_server_config(ogs_yaml_iter_t *iter, parse_server_add_f adde
             ogs_list_init(&list6);
 
             if (addr) {
-                if (ogs_app()->parameter.no_ipv4 == 0)
+                if (ogs_global_conf()->parameter.no_ipv4 == 0)
                     ogs_socknode_add(&list, AF_INET, addr, NULL);
-                if (ogs_app()->parameter.no_ipv6 == 0)
+                if (ogs_global_conf()->parameter.no_ipv6 == 0)
                     ogs_socknode_add(&list6, AF_INET6, addr, NULL);
             }
 
             if (dev) {
                 int rv;
 
-                rv = ogs_socknode_probe(ogs_app()->parameter.no_ipv4 ? NULL : &list,
-                                        ogs_app()->parameter.no_ipv6 ? NULL : &list6,
+                rv = ogs_socknode_probe(ogs_global_conf()->parameter.no_ipv4 ? NULL : &list,
+                                        ogs_global_conf()->parameter.no_ipv6 ? NULL : &list6,
                                         dev, port, NULL);
                 ogs_assert(rv == OGS_OK);
             }
@@ -344,19 +345,21 @@ static int  __notification_listener_start(ogs_list_t *ipv4_listen, ogs_list_t *i
 
     node = ogs_list_first(ipv4_listen);
     if (node) {
-        ogs_sbi_server_t *server = ogs_sbi_server_add(node->addr, option);
+        ogs_sbi_server_t *server = ogs_sbi_server_add(
+                NULL, ogs_sbi_self()->tls.server.scheme, node->addr, option);
         ogs_assert(server);
 
-        if (addr && ogs_app()->parameter.no_ipv4 == 0)
+        if (addr && ogs_global_conf()->parameter.no_ipv4 == 0)
             ogs_sbi_server_set_advertise(server, AF_INET, addr);
     }
 
     node = ogs_list_first(ipv6_listen);
     if (node) {
-        ogs_sbi_server_t *server = ogs_sbi_server_add(node->addr, option);
+        ogs_sbi_server_t *server = ogs_sbi_server_add(
+                NULL, ogs_sbi_self()->tls.server.scheme, node->addr, option);
         ogs_assert(server);
 
-        if (addr && ogs_app()->parameter.no_ipv6 == 0)
+        if (addr && ogs_global_conf()->parameter.no_ipv6 == 0)
             ogs_sbi_server_set_advertise(server, AF_INET6, addr);
     }
 
@@ -373,7 +376,7 @@ static int  __bsf_client_context_validation(void)
     if (!_bsf_configuration_servers_exist(&__self->config) && _bsf_configuration_get_discover_flag(&__self->config)) {
         int rv;
         ogs_sbi_xact_t *xact;
-        xact = ogs_sbi_xact_add((ogs_sbi_object_t*)_bsf_client_sess_new() ,OGS_SBI_SERVICE_TYPE_NBSF_MANAGEMENT , NULL, NULL, NULL, NULL);
+        xact = ogs_sbi_xact_add(OGS_INVALID_POOL_ID, (ogs_sbi_object_t*)_bsf_client_sess_new(), OpenAPI_service_name_nbsf_management, NULL, NULL, NULL, NULL);
         if (!xact) {
             ogs_error("ogs_sbi_xact_add() failed");
             return OGS_ERROR;

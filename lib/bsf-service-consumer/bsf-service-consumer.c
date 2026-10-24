@@ -34,6 +34,11 @@ BSF_CLIENT_API bool bsf_retrieve_pcf_binding_for_pdu_session(ogs_sockaddr_t *ue_
     return _bsf_retrieve_pcf_binding_for_pdu_session(ue_address, callback, user_data);
 }
 
+BSF_CLIENT_API bool bsf_retrieve_pcf_binding_for_pdu_session_narrowed(ogs_sockaddr_t *ue_address, const bsf_pcf_binding_query_t *query, bsf_retrieve_callback_f callback, void *user_data)
+{
+    return _bsf_retrieve_pcf_binding_for_pdu_session_narrowed(ue_address, query, callback, user_data);
+}
+
 BSF_CLIENT_API bool bsf_process_event(ogs_event_t *e)
 {
     return _bsf_process_event(e);

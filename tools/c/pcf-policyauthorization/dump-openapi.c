@@ -601,10 +601,10 @@ void dump_flows(ogs_log_level_e lvl, const OpenAPI_flows_t *flows, int indent)
     }
 }
 
-void dump_final_unit_action(ogs_log_level_e lvl, const OpenAPI_final_unit_action_t *fua, int indent)
+void dump_final_unit_action(ogs_log_level_e lvl, OpenAPI_final_unit_action_e fua, int indent)
 {
-    if (fua) {
-        log_msg("Final Unit Action");
+    if (fua != OpenAPI_final_unit_action_NULL) {
+        log_msg("Final Unit Action: %s", OpenAPI_final_unit_action_ToString(fua));
     }
 }
 

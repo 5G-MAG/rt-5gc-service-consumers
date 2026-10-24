@@ -36,6 +36,9 @@ typedef struct pcf_app_session_s {
 
     char *pcf_app_session_id;
 
+    /* names this object in the notification URL; unrelated to its address */
+    uint64_t instance_id;
+
     char *ipv4addr;
     char *ipv6addr;
     char *ipv6prefix;
@@ -52,13 +55,24 @@ typedef struct pcf_app_session_s {
     OpenAPI_app_session_context_t *pcf_app_session_context_requested;
     OpenAPI_app_session_context_t *pcf_app_session_context_received;
     OpenAPI_app_session_context_update_data_patch_t *pcf_app_session_context_updates;
-    OpenAPI_app_session_context_update_data_patch_t *pcf_app_session_context_updates_received;
 
 
     struct {
         pcf_app_session_change_callback callback;
         void *user_data;
     } change;
+
+    /* the callback that reports each operation with its outcome (pcf_session_create_app_session_with_result()) */
+    struct {
+        pcf_app_session_result_callback callback;
+        void *user_data;
+    } result;
+
+    /* the operation that waits for the PCF, and what the last answer was */
+    pcf_app_session_operation_t operation;
+    int last_status;
+    char *problem_title;
+    char *problem_detail;
 
     ogs_list_t pcf_event_notifications; // Nodes of this list are of type pcf_event_notification_t *
 
@@ -85,6 +99,8 @@ extern bool _pcf_app_session_change_callback_call(pcf_app_session_t *app_session
 extern bool _pcf_app_session_notifications_callback_call(pcf_app_session_t *app_session,
 	       					         OpenAPI_events_notification_t *notifications);
 extern bool _pcf_app_session_exists(pcf_app_session_t *app_session);
+extern void _pcf_app_session_set_answer(pcf_app_session_t *app_session, int http_status, const OpenAPI_problem_details_t *problem);
+extern pcf_app_session_t *_pcf_app_session_find_by_instance_id(uint64_t instance_id);
 
 #ifdef __cplusplus
 }

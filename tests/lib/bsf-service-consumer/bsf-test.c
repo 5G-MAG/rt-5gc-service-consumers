@@ -37,13 +37,26 @@ typedef struct pcf_binding_result_s {
 
 int bsf_test_initialise(void)
 {
+    bool no_scp, no_nrf;
     int rv;
+
+    rv = ogs_app_parse_local_conf("af");
+    if (rv != OGS_OK) return rv;
 
     ogs_sbi_context_init(OpenAPI_nf_type_AF);
     bsf_test_context_init();
 
+    no_scp = ogs_global_conf()->parameter.no_scp;
+    no_nrf = ogs_global_conf()->parameter.no_nrf;
+
+    ogs_global_conf()->parameter.no_scp = false;
+    ogs_global_conf()->parameter.no_nrf = false;
+
     rv = ogs_sbi_context_parse_config("af", "nrf", "scp");
     if (rv != OGS_OK) return rv;
+
+    ogs_global_conf()->parameter.no_scp = no_scp;
+    ogs_global_conf()->parameter.no_nrf = no_nrf;
 
     rv = bsf_test_context_parse_config();
     if (rv != OGS_OK) return rv;
@@ -243,7 +256,7 @@ static void test1_func(abts_case *tc, void *data)
     test_ue->opc_string = "e8ed289deba952e4283b54e88e6183ca";
 
     /* gNB connects to AMF */
-    ngap = testngap_client(AF_INET);
+    ngap = testngap_client(1, AF_INET);
     ABTS_PTR_NOTNULL(tc, ngap);
 
     /* gNB connects to UPF */
@@ -471,7 +484,7 @@ static void test1_func(abts_case *tc, void *data)
     ABTS_INT_EQUAL(tc, OGS_OK, rv);
 
     af_local_discover_and_send(
-            OGS_SBI_SERVICE_TYPE_NBSF_MANAGEMENT,
+            OpenAPI_service_name_nbsf_management,
             bsf_sess, NULL,
             af_nbsf_management_build_discover);
 

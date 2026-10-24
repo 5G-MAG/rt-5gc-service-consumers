@@ -47,7 +47,6 @@ bool _pcf_client_sess_notification_callback_set(pcf_app_session_t *sess, pcf_app
 void _pcf_app_sess_event_notifications_remove(pcf_app_session_t *sess);
 
 bool _pcf_client_app_sess_context_updates_set(pcf_app_session_t *sess, OpenAPI_app_session_context_update_data_patch_t *AppSessionContext);
-bool _pcf_client_app_sess_context_received_updates_set(pcf_app_session_t *sess, OpenAPI_app_session_context_update_data_patch_t *AppSessionContext);
 
 
 bool _pcf_client_sess_change_callback_set(pcf_app_session_t *sess,  pcf_app_session_change_callback cb, void *user_data);

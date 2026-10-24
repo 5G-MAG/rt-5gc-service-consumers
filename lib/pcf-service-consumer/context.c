@@ -38,7 +38,8 @@ void pcf_context_init(void)
 
 void pcf_context_final(void)
 {
-    ogs_assert(self);
+    /* the context is created when it is first used: an application that never used the library has nothing to release */
+    if (!self) return;
     pcf_notification_listener_remove_all();
     pcf_session_remove_all();
     ogs_free(self);
@@ -137,7 +138,8 @@ bool pcf_parse_config(const char *local)
                                         family, AF_UNSPEC, AF_INET, AF_INET6);
                                     family = AF_UNSPEC;
                                 }
-                            } else if (!strcmp(sbi_key, "addr") ||
+                            } else if (!strcmp(sbi_key, "address") ||
+                                    !strcmp(sbi_key, "addr") ||
                                     !strcmp(sbi_key, "name")) {
                                 ogs_yaml_iter_t hostname_iter;
                                 ogs_yaml_iter_recurse(&sbi_iter,
@@ -188,7 +190,7 @@ bool pcf_parse_config(const char *local)
                             } else if (!strcmp(sbi_key, "dev")) {
                                 dev = ogs_yaml_iter_value(&sbi_iter);
                             } else if (!strcmp(sbi_key, "option")) {
-                                rv = ogs_app_config_parse_sockopt(
+                                rv = ogs_app_parse_sockopt_config(
                                         &sbi_iter, &option);
                                 if (rv != OGS_OK) return rv;
                                 is_option = true;
@@ -207,18 +209,18 @@ bool pcf_parse_config(const char *local)
                         ogs_list_init(&list6);
 
                         if (addr) {
-                            if (ogs_app()->parameter.no_ipv4 == 0)
+                            if (ogs_global_conf()->parameter.no_ipv4 == 0)
                                 ogs_socknode_add(
                                     &list, AF_INET, addr, NULL);
-                            if (ogs_app()->parameter.no_ipv6 == 0)
+                            if (ogs_global_conf()->parameter.no_ipv6 == 0)
                                 ogs_socknode_add(
                                     &list6, AF_INET6, addr, NULL);
                             ogs_freeaddrinfo(addr);
                         }
                         if (dev) {
                             rv = ogs_socknode_probe(
-                                ogs_app()->parameter.no_ipv4 ? NULL : &list,
-                                ogs_app()->parameter.no_ipv6 ? NULL : &list6,
+                                ogs_global_conf()->parameter.no_ipv4 ? NULL : &list,
+                                ogs_global_conf()->parameter.no_ipv6 ? NULL : &list6,
                                 dev, port, NULL);
                             ogs_assert(rv == OGS_OK);
                         }
@@ -231,20 +233,22 @@ bool pcf_parse_config(const char *local)
                         node = ogs_list_first(&list);
                         if (node) {
                             ogs_sbi_server_t *server = ogs_sbi_server_add(
+                                    NULL, ogs_sbi_self()->tls.server.scheme,
                                     node->addr, is_option ? &option : NULL);
                             ogs_assert(server);
 
-                            if (addr && ogs_app()->parameter.no_ipv4 == 0)
+                            if (addr && ogs_global_conf()->parameter.no_ipv4 == 0)
                                 ogs_sbi_server_set_advertise(
                                         server, AF_INET, addr);
                         }
                         node6 = ogs_list_first(&list6);
                         if (node6) {
                             ogs_sbi_server_t *server = ogs_sbi_server_add(
+                                    NULL, ogs_sbi_self()->tls.server.scheme,
                                     node6->addr, is_option ? &option : NULL);
                             ogs_assert(server);
 
-                            if (addr && ogs_app()->parameter.no_ipv6 == 0)
+                            if (addr && ogs_global_conf()->parameter.no_ipv6 == 0)
                                 ogs_sbi_server_set_advertise(
                                         server, AF_INET6, addr);
                         }

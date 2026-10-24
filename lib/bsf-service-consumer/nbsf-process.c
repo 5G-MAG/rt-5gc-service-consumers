@@ -35,7 +35,8 @@ bool _bsf_process_event(ogs_event_t *e)
             int rv;
             ogs_sbi_response_t *response = e->sbi.response;
             ogs_sbi_message_t message;
-            ogs_sbi_xact_t *xact = (ogs_sbi_xact_t*)e->sbi.data;
+            /* the event carries the id of the transaction, which may be gone */
+            ogs_sbi_xact_t *xact = ogs_sbi_xact_find_by_id(OGS_POINTER_TO_UINT(e->sbi.data));
             bsf_client_sess_t *sess;
  
             if (!xact) return false;
@@ -56,7 +57,7 @@ bool _bsf_process_event(ogs_event_t *e)
             ogs_debug("OGS_EVENT_SBI_CLIENT: service=%s, component[0]=%s", message.h.service.name, message.h.resource.component[0]);
 
             SWITCH(message.h.service.name)
-            CASE(OGS_SBI_SERVICE_NAME_NNRF_DISC)
+            CASE(OpenAPI_service_name_ToString(OpenAPI_service_name_nnrf_disc))
                 SWITCH(message.h.resource.component[0])
                 CASE(OGS_SBI_RESOURCE_NAME_NF_INSTANCES)
                     {
@@ -78,12 +79,28 @@ bool _bsf_process_event(ogs_event_t *e)
                                 rv = ogs_sbi_parse_response(&message, response);
                                 if (rv != OGS_OK) {
                                     ogs_error("Failed to parse response");
-                                    break;
+                                    /* the requester is told that there is no binding, and the request is released */
+                                    _bsf_client_sess_retrieve_callback_call(sess, NULL);
+                                    ogs_sbi_xact_remove(xact);
+                                    _bsf_client_sess_free(sess);
+                                    ogs_sbi_message_free(&message);
+                                    ogs_sbi_response_free(response);
+                                    return true;
                                 }
 
                                 ogs_nnrf_disc_handle_nf_discover_search_result(message.SearchResult);
-                                nf_instance = ogs_sbi_nf_instance_find_by_service_type(xact->service_type, xact->requester_nf_type);
-                                ogs_sbi_send_request_to_nf_instance(nf_instance, xact);
+                                nf_instance = ogs_sbi_nf_instance_find_by_service(xact->service_name, xact->requester_nf_type);
+                                if (!nf_instance) {
+                                    /* the NRF knows no BSF: the request cannot be sent, so its requester is told */
+                                    char *ip = ogs_ipstrdup(sess->ue_address);
+                                    ogs_error("The NRF found no BSF to ask for the PCF binding of %s", ip);
+                                    _bsf_client_sess_retrieve_callback_call(sess, NULL);
+                                    ogs_free(ip);
+                                    ogs_sbi_xact_remove(xact);
+                                    _bsf_client_sess_free(sess);
+                                } else {
+                                    ogs_sbi_send_request_to_nf_instance(nf_instance, xact);
+                                }
                             }
                             break;
 
@@ -97,7 +114,7 @@ bool _bsf_process_event(ogs_event_t *e)
                 DEFAULT
                 END
                 break;
-            CASE(OGS_SBI_SERVICE_NAME_NBSF_MANAGEMENT)
+            CASE(OpenAPI_service_name_ToString(OpenAPI_service_name_nbsf_management))
                 SWITCH(message.h.resource.component[0])
                 CASE(OGS_SBI_RESOURCE_NAME_PCF_BINDINGS)
                     {
@@ -117,7 +134,13 @@ bool _bsf_process_event(ogs_event_t *e)
                             rv = ogs_sbi_parse_response(&message, response);
                             if (rv != OGS_OK) {
                                 ogs_error("Failed to parse response");
-                                break;
+                                /* the requester is told that there is no binding, and the request is released */
+                                _bsf_client_sess_retrieve_callback_call(sess, NULL);
+                                ogs_sbi_xact_remove(xact);
+                                _bsf_client_sess_free(sess);
+                                ogs_sbi_message_free(&message);
+                                ogs_sbi_response_free(response);
+                                return true;
                             }
 
                             expires = _response_to_expiry_time(response);
@@ -166,7 +189,8 @@ bool _bsf_process_event(ogs_event_t *e)
             case OGS_TIMER_SBI_CLIENT_WAIT:
             {
                 /* NRF connection may have timed out */
-                ogs_sbi_xact_t *xact = (ogs_sbi_xact_t*)e->sbi.data;
+                /* the timer carries the id of the transaction, which may be gone */
+                ogs_sbi_xact_t *xact = ogs_sbi_xact_find_by_id(OGS_POINTER_TO_UINT(e->sbi.data));
                 bsf_client_sess_t *sess;
                 char *ip;
 

@@ -39,12 +39,19 @@ bool _pcf_process_event(ogs_event_t *e)
                 int rv;
                 ogs_sbi_request_t *request = e->sbi.request;
                 ogs_sbi_message_t message;
-                ogs_sbi_stream_t *stream = e->sbi.data;
+                ogs_sbi_stream_t *stream = NULL;
                 ogs_sbi_server_t *server;
                 pcf_session_t *pcf_session;
 
                 ogs_assert(request);
-                ogs_assert(stream);
+
+                /* the event carries the id of the stream, which may be gone */
+                stream = ogs_sbi_stream_find_by_id(
+                        OGS_POINTER_TO_UINT(e->sbi.data));
+                if (!stream) {
+                    /* not resolvable, so not one of our notifications */
+                    return false;
+                }
 
                 server = ogs_sbi_server_from_stream(stream);
                 ogs_assert(server);
@@ -72,19 +79,19 @@ bool _pcf_process_event(ogs_event_t *e)
                 ogs_debug("OGS_EVENT_SBI_SERVER: service=%s, component[0]=%s", message.h.service.name, message.h.resource.component[0]);
                 if (message.h.service.name) {
                     SWITCH(message.h.service.name)
-                    CASE(OGS_SBI_SERVICE_NAME_NPCF_POLICYAUTHORIZATION)
+                    CASE(OpenAPI_service_name_ToString(OpenAPI_service_name_npcf_policyauthorization))
                         if (message.h.resource.component[0]) {
                             SWITCH(message.h.resource.component[0])
                             CASE("app-session-instance")
                                 if (message.h.resource.component[1]) {
                                     char *endptr = NULL;
-                                    uintptr_t instance_id;
+                                    uint64_t instance_id;
 
-                                    instance_id = (uintptr_t)strtoull(message.h.resource.component[1], &endptr, 0);
+                                    instance_id = (uint64_t)strtoull(message.h.resource.component[1], &endptr, 10);
                                     if (endptr && *endptr == '\0') {
-                                        pcf_app_session_t *app_session = (pcf_app_session_t*)instance_id;
-                                        /* check if app_session is a valid pcf_app_session_t pointer by checking registered ones */
-                                        if (_pcf_app_session_exists(app_session)) {
+                                        /* the URL names the object by an identifier of its own, which is looked up in the registered ones */
+                                        pcf_app_session_t *app_session = _pcf_app_session_find_by_instance_id(instance_id);
+                                        if (app_session) {
                                             if (message.h.resource.component[2] &&
                                                 !strcmp(message.h.resource.component[2], "notify")) {
                                                 /* process notifications */
@@ -98,7 +105,7 @@ bool _pcf_process_event(ogs_event_t *e)
                                                     ogs_error("%s", error);
                                                     ogs_assert(true == ogs_sbi_server_send_error(stream,
                                                                 OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                                                &message, "Bad content", error));
+                                                                &message, "Bad content", error, NULL));
                                                     break;
                                                 }
                                                 notifications = OpenAPI_events_notification_parseFromJSON(json);
@@ -108,7 +115,7 @@ bool _pcf_process_event(ogs_event_t *e)
                                                     ogs_error("%s", error);
                                                     ogs_assert(true == ogs_sbi_server_send_error(stream,
                                                                 OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                                                &message, "Bad content", error));
+                                                                &message, "Bad content", error, NULL));
                                                 } else {
                                                     ogs_sbi_response_t *response;
 
@@ -123,27 +130,50 @@ bool _pcf_process_event(ogs_event_t *e)
                                                     ogs_assert(true == ogs_sbi_server_send_response(stream, response));
                                                 }
                                                 cJSON_Delete(json);
+                                            } else if (message.h.resource.component[2] &&
+                                                       !strcmp(message.h.resource.component[2], "terminate")) {
+                                                /* the PCF ended the AppSessionContext (TS 29.514 Npcf_PolicyAuthorization_Notify, termination request) */
+                                                ogs_sbi_response_t *response;
+
+                                                ogs_info("The PCF terminated an application session context");
+                                                response = ogs_sbi_build_response(&message, OGS_SBI_HTTP_STATUS_NO_CONTENT);
+                                                ogs_assert(response);
+                                                ogs_assert(true == ogs_sbi_server_send_response(stream, response));
+
+                                                app_session->operation = PCF_APP_SESSION_OP_TERMINATED;
+                                                _pcf_app_session_set_answer(app_session, 0, NULL);
+                                                if (!_pcf_app_session_change_callback_call(app_session, true))
+                                                    ogs_error("AppSession Change callback failed");
+                                                /*
+                                                 * The notification triggers the NF service consumer to request the termination of the
+                                                 * application session context (clause 4.2.5.3): the application has been told, so the
+                                                 * library deletes the context in the PCF by itself and releases the object when the
+                                                 * PCF has answered.
+                                                 */
+                                                app_session->result.callback = NULL;
+                                                app_session->change.callback = NULL;
+                                                pcf_app_session_free(app_session);
                                             } else {
                                                 char *err = ogs_msprintf("Unknown notification operation \"%s\"",
                                                                          message.h.resource.component[2]);
                                                 ogs_error("%s", err);
                                                 ogs_assert(true == ogs_sbi_server_send_error(stream,
                                                            OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                                           &message, "Bad content", err));
+                                                           &message, "Bad content", err, NULL));
                                                 ogs_free(err);
                                             }
                                         } else {
-                                            char *err = ogs_msprintf("Session instance %p does not exist", app_session);
+                                            char *err = ogs_msprintf("Session instance %s does not exist", message.h.resource.component[1]);
                                             ogs_warn("%s", err);
                                             ogs_assert(true == ogs_sbi_server_send_error(stream, OGS_SBI_HTTP_STATUS_NOT_FOUND,
-                                                       &message, "Not found", err));
+                                                       &message, "Not found", err, NULL));
                                             ogs_free(err);
                                         }
                                     } else {
                                         char *err = ogs_msprintf("Bad session instance id \"%s\"", message.h.resource.component[1]);
                                         ogs_error("%s", err);
                                         ogs_assert(true == ogs_sbi_server_send_error(stream, OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                                   &message, "Bad request", err));
+                                                   &message, "Bad request", err, NULL));
                                         ogs_free(err);
                                     }
                                 } else {
@@ -151,7 +181,7 @@ bool _pcf_process_event(ogs_event_t *e)
                                     ogs_error("%s", err);
                                     ogs_assert(true == ogs_sbi_server_send_error(stream,
                                                OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                               &message, "Missing path value", err));
+                                               &message, "Missing path value", err, NULL));
                                 }
                                 break;
                             DEFAULT
@@ -160,7 +190,7 @@ bool _pcf_process_event(ogs_event_t *e)
                                 ogs_error("%s", err);
                                 ogs_assert(true == ogs_sbi_server_send_error(stream,
                                            OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                           &message, "Bad request", err));
+                                           &message, "Bad request", err, NULL));
                                 ogs_free(err);
                             END
                         } else {
@@ -168,14 +198,14 @@ bool _pcf_process_event(ogs_event_t *e)
                             ogs_error("%s", err);
                             ogs_assert(true == ogs_sbi_server_send_error(stream,
                                        OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                       &message, "Missing path value", err));
+                                       &message, "Missing path value", err, NULL));
                         }
                         break;
                     DEFAULT
                         char *err = ogs_msprintf("Unknown service name \"%s\" in PCF notification", message.h.service.name);
                         ogs_error("%s", err);
                         ogs_assert(true == ogs_sbi_server_send_error(stream, OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                                   &message, "Bad request", err));
+                                   &message, "Bad request", err, NULL));
                         ogs_free(err);
                     END
                 } else {
@@ -183,10 +213,10 @@ bool _pcf_process_event(ogs_event_t *e)
                     ogs_error("%s", err);
                     ogs_assert(true == ogs_sbi_server_send_error(stream,
                                OGS_SBI_HTTP_STATUS_BAD_REQUEST,
-                               &message, "Missing service name", err));
+                               &message, "Missing service name", err, NULL));
                 }
                 ogs_sbi_message_free(&message);
-                ogs_sbi_request_free(request);
+                /* the request belongs to the SBI server, which releases it when the response has been sent */
                 return true;
             }
             break;
@@ -210,13 +240,21 @@ bool _pcf_process_event(ogs_event_t *e)
                 if (rv != OGS_OK) {
                     ogs_error("Failed to parse response");
                     ogs_sbi_message_free(&message);
+                    /* the requester is told: a creation that the PCF cannot be understood on is a failure, and so is an update */
+                    if (sess && sess->pcf_app_session_id)
+                        _pcf_app_session_change_callback_call(sess, true);
+                    else if (sess)
+                        pcf_app_sess_remove(sess);
                     break;
                 }
 
                 ogs_debug("OGS_EVENT_SBI_CLIENT: service=%s, component[0]=%s", message.h.service.name, message.h.resource.component[0]);
 
+                /* what the PCF answered, for the result that the requester gets */
+                _pcf_app_session_set_answer(sess, message.res_status, message.ProblemDetails);
+
                 SWITCH(message.h.service.name)
-                CASE(OGS_SBI_SERVICE_NAME_NPCF_POLICYAUTHORIZATION)
+                CASE(OpenAPI_service_name_ToString(OpenAPI_service_name_npcf_policyauthorization))
                     SWITCH(message.h.resource.component[0])
                     CASE(OGS_SBI_RESOURCE_NAME_APP_SESSIONS)
                         if (message.h.resource.component[1]) {
@@ -245,6 +283,8 @@ bool _pcf_process_event(ogs_event_t *e)
                                         pcf_policyauthorization_update(sess, &message);
 				    } else {
                                         ogs_error("HTTP response error [%d]", message.res_status);
+                                        /* the update was not accepted: the context in the PCF is unchanged and the requester is told */
+                                        _pcf_app_session_change_callback_call(sess, true);
                                     }
                                     break;
                                 DEFAULT
@@ -292,8 +332,15 @@ bool _pcf_process_event(ogs_event_t *e)
                 if (sess) pcf_app_sess_remove(sess);
                 break;
             case OGS_TIMEUP:
-                /* Client request took too long - leave state */
-                ogs_warn("Timeout connecting to the client - app session unchanged");
+                /* The PCF did not answer in time: the application session is as it was, and the requester is told */
+                ogs_warn("Timeout connecting to the PCF - app session unchanged");
+                if (sess) {
+                    _pcf_app_session_set_answer(sess, 0, NULL);
+                    if (sess->operation == PCF_APP_SESSION_OP_CREATE)
+                        pcf_app_sess_remove(sess);
+                    else if (sess->operation != PCF_APP_SESSION_OP_NONE)
+                        _pcf_app_session_change_callback_call(sess, true);
+                }
                 break;
             default:
                 /* Some other error happened - client request failed */
@@ -303,7 +350,10 @@ bool _pcf_process_event(ogs_event_t *e)
                 } else {
                     ogs_error("Problem with an HTTP request, no details given");
                 }
-                if (sess) pcf_app_sess_remove(sess);
+                if (sess) {
+                    _pcf_app_session_set_answer(sess, 0, NULL);
+                    pcf_app_sess_remove(sess);
+                }
                 break;
             }
 

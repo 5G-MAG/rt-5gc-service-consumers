@@ -161,7 +161,7 @@ static bool check_npcf_policyauthortization_af_session_create_result(pcf_app_ses
 
 static bool check_npcf_policyauthortization_af_session_update_result(pcf_app_session_t *result)
 {
-    if (!result  || !result->pcf_app_session_context_updates || !result->pcf_app_session_context_updates_received)
+    if (!result  || !result->pcf_app_session_context_updates || !result->pcf_app_session_context_received)
             return false;
     return true;
 }
@@ -543,7 +543,6 @@ static void test1_func(abts_case *tc, void *data)
     media_component = media_component_create(&af_param);
     ogs_assert(media_component);
     af_pcf_app_session->pcf_app_session_context_updates = NULL;
-    af_pcf_app_session->pcf_app_session_context_updates_received = NULL;
 
     pcf_session_update_app_session(af_pcf_app_session, media_component);
 

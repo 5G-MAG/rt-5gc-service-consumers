@@ -46,6 +46,10 @@ void _bsf_client_sess_free(bsf_client_sess_t *sess)
         ogs_free(sess->ipv4addr);
         sess->ipv4addr = NULL;
     }
+    if (sess->dnn) ogs_free(sess->dnn);
+    if (sess->supi) ogs_free(sess->supi);
+    if (sess->gpsi) ogs_free(sess->gpsi);
+    if (sess->ip_domain) ogs_free(sess->ip_domain);
     if (sess->ipv6prefix) {
         ogs_free(sess->ipv6prefix);
         sess->ipv6prefix = NULL;
@@ -80,6 +84,22 @@ bool _bsf_client_sess_ue_address_set(bsf_client_sess_t *sess, const ogs_sockaddr
         if (sess->ue_address) ogs_freeaddrinfo(sess->ue_address);
         ogs_copyaddrinfo(&sess->ue_address, (ogs_sockaddr_t*)ue_address);
     }
+    return true;
+}
+
+bool _bsf_client_sess_query_set(bsf_client_sess_t *sess, const bsf_pcf_binding_query_t *query)
+{
+    if (!sess || !query) return false;
+
+    if (query->dnn) sess->dnn = ogs_strdup(query->dnn);
+    if (query->s_nssai) {
+        sess->s_nssai = *query->s_nssai;
+        sess->s_nssai_presence = true;
+    }
+    if (query->supi) sess->supi = ogs_strdup(query->supi);
+    if (query->gpsi) sess->gpsi = ogs_strdup(query->gpsi);
+    if (query->ip_domain) sess->ip_domain = ogs_strdup(query->ip_domain);
+
     return true;
 }
 
@@ -148,7 +168,7 @@ bool _bsf_client_sess_discover_and_send(bsf_client_sess_t *sess)
 
     if (!sess) return false;
 
-    xact = ogs_sbi_xact_add(&sess->sbi, OGS_SBI_SERVICE_TYPE_NBSF_MANAGEMENT, NULL, (ogs_sbi_build_f)_nbsf_management_pcf_binding_build, sess, NULL);
+    xact = ogs_sbi_xact_add(OGS_INVALID_POOL_ID, &sess->sbi, OpenAPI_service_name_nbsf_management, NULL, (ogs_sbi_build_f)_nbsf_management_pcf_binding_build, sess, NULL);
     if (!xact) {
         ogs_error("bsf_client_sess_discover_and_send() failed");
         return false;

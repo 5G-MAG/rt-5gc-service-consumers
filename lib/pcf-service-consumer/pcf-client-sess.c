@@ -18,7 +18,6 @@ https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
 #include "pcf-evsubsc.h"
 #include "utils.h"
 
-extern ogs_sbi_server_actions_t ogs_sbi_server_actions;
 
 bool _pcf_client_sess_ue_address_set(pcf_app_session_t *sess, const ogs_sockaddr_t *ue_address)
 {
@@ -212,24 +211,6 @@ bool _pcf_client_app_sess_context_updates_set(pcf_app_session_t *sess, OpenAPI_a
     return true;
 }
 
-bool _pcf_client_app_sess_context_received_updates_set(pcf_app_session_t *sess, OpenAPI_app_session_context_update_data_patch_t *AppSessionContext)
-{
-    if (!sess) return false;
-    if(!AppSessionContext) {
-        if(sess->pcf_app_session_context_updates_received){
-            OpenAPI_app_session_context_update_data_patch_free(sess->pcf_app_session_context_updates_received);
-            sess->pcf_app_session_context_updates_received = NULL;
-            return true;
-        }
-        return false;
-    }
-    sess->pcf_app_session_context_updates_received = OpenAPI_app_session_context_update_data_patch_copy(sess->pcf_app_session_context_updates_received, AppSessionContext);
-    if(!sess->pcf_app_session_context_updates_received) return false;
-
-    return true;
-}
-
-
 pcf_app_session_t *pcf_session_find_by_pcf_app_session_id(char *pcf_app_session_id)
 {
     pcf_session_t *session;
@@ -300,9 +281,10 @@ ogs_sbi_server_t *_pcf_session_get_notifications_server(pcf_session_t *pcf_sessi
         } else if (sock->local_addr.ogs_sa_family == AF_INET6) {
             sock->local_addr.sin6.sin6_port = 0;
         }
-        pcf_session->notif_server = ogs_sbi_server_add(&sock->local_addr, NULL);
+        pcf_session->notif_server = ogs_sbi_server_add(
+                NULL, ogs_sbi_self()->tls.server.scheme, &sock->local_addr, NULL);
 
-        ogs_sbi_server_actions.start(pcf_session->notif_server, ogs_sbi_server_handler);
+        pcf_session->notif_server->actions->start(pcf_session->notif_server, ogs_sbi_server_handler);
 
         /* discover ephemeral port for server */
         sockaddr_size = sizeof(sock->local_addr.ss);

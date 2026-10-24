@@ -35,7 +35,7 @@ typedef struct bsf_test_event_s {
     ogs_pkbuf_t *pkbuf;
 
     struct {
-        ogs_sbi_service_type_e service_type;
+        OpenAPI_service_name_e service_name;
         void *data;
         ogs_sbi_request_t *(*build)(bsf_test_sess_t *sess, void *data);
     } local;

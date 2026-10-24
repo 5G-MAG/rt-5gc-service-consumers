@@ -22,55 +22,39 @@ https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
 void pcf_policyauthorization_update(
         pcf_app_session_t *sess, ogs_sbi_message_t *recvmsg)
 {
-    OpenAPI_app_session_context_update_data_patch_t *AppSessionContextUpdateDataPatch = NULL;
-    OpenAPI_app_session_context_update_data_t *AscUpdateData = NULL;
-
+    OpenAPI_app_session_context_t *AppSessionContext = NULL;
     cJSON *app_sess_context;
-    cJSON *asc_req_data;
     char *app_sess_context_text;
-    char *asc_req_data_text;
 
     if (!recvmsg->h.resource.component[1]) {
         ogs_error("[%s:%s] No AppSessionId[%s]",
                 sess->ipv4addr ? sess->ipv4addr : "Unknown",
                 sess->ipv6addr ? sess->ipv6addr : "Unknown",
                 recvmsg->http.location);
+        _pcf_app_session_change_callback_call(sess, true);
         return;
     }
 
-    AppSessionContextUpdateDataPatch = recvmsg->AppSessionContextUpdateDataPatch;
-    if (!AppSessionContextUpdateDataPatch) {
-        ogs_error("[%s:%s] No AppSessionContextUpdateDataPatch",
+    /* TS 29.514 V19.8.0 table 5.3.3.3.2-3: the 200 of a PATCH carries the AppSessionContext after the modification */
+    AppSessionContext = recvmsg->AppSessionContext;
+    if (!AppSessionContext) {
+        ogs_error("[%s:%s] No AppSessionContext",
                 sess->ipv4addr ? sess->ipv4addr : "Unknown",
                 sess->ipv6addr ? sess->ipv6addr : "Unknown");
+        _pcf_app_session_change_callback_call(sess, true);
         return;
     }
 
-
-    if(!_pcf_client_app_sess_context_received_updates_set(sess, recvmsg->AppSessionContextUpdateDataPatch))
+    if(!_pcf_client_received_app_sess_context_set(sess, AppSessionContext))
         ogs_error("Failed to set the updated app session context");
-
-    AscUpdateData = AppSessionContextUpdateDataPatch->asc_req_data;
-    if (!AscUpdateData) {
-        ogs_error("[%s:%s] No AscUpdateData",
-                sess->ipv4addr ? sess->ipv4addr : "Unknown",
-                sess->ipv6addr ? sess->ipv6addr : "Unknown");
-        return;
-    }
 
     ogs_debug("\n PCF policy authorization update (Respone header): \n Method: [%s] \n URI: [%s] \n  Resource Component: [%s]\n", recvmsg->h.method, recvmsg->h.uri, recvmsg->h.resource.component[0]);
 
-    app_sess_context = OpenAPI_app_session_context_update_data_patch_convertToJSON(AppSessionContextUpdateDataPatch);
+    app_sess_context = OpenAPI_app_session_context_convertToJSON(AppSessionContext);
     app_sess_context_text = cJSON_Print(app_sess_context);
     ogs_debug("Update app_sess_context_text: %s", app_sess_context_text);
     cJSON_Delete(app_sess_context);
     cJSON_free(app_sess_context_text);
-
-    asc_req_data = OpenAPI_app_session_context_update_data_convertToJSON(AppSessionContextUpdateDataPatch->asc_req_data);
-    asc_req_data_text = cJSON_Print(asc_req_data);
-    ogs_debug("Update: asc_req_data_text: %s", asc_req_data_text);
-    cJSON_Delete(asc_req_data);
-    cJSON_free(asc_req_data_text);
 
     if(!_pcf_app_session_change_callback_call(sess, false))
         ogs_error("AppSessionContext change callback failed");
@@ -100,13 +84,22 @@ void pcf_policyauthorization_event_notification(ogs_sbi_message_t *recvmsg, ogs_
             }
         }
         evt_notif = cJSON_Parse(response->http.content);
-        char *txt = cJSON_Print(evt_notif);
-        ogs_debug("Parsed JSON: %s", txt);
-        cJSON_free(txt);
+        if (!evt_notif) {
+            ogs_error("The PCF sent an EventsNotification that is not JSON");
+            return;
+        }
+        {
+            char *txt = cJSON_Print(evt_notif);
+            ogs_debug("Parsed JSON: %s", txt);
+            cJSON_free(txt);
+        }
 
         event_notif = OpenAPI_events_notification_parseFromJSON(evt_notif);
-        ogs_assert(event_notif);
         cJSON_Delete(evt_notif);
+        if (!event_notif) {
+            ogs_error("The PCF sent an EventsNotification that cannot be parsed");
+            return;
+        }
 
         /* Do something with event_notif */
 
@@ -169,11 +162,14 @@ void pcf_policyauthorization_create(
     char *app_sess_context_text;
 
     uint64_t supported_features = 0;
+    bool ok = false;
 
     if (!recvmsg->http.location) {
         ogs_error("[%s:%s] No http.location",
                 sess->ipv4addr ? sess->ipv4addr : "Unknown",
                 sess->ipv6addr ? sess->ipv6addr : "Unknown");
+        /* the PCF said "created" without saying where: the application session context cannot be used */
+        pcf_app_sess_remove(sess);
         return;
     }
 
@@ -186,6 +182,7 @@ void pcf_policyauthorization_create(
                 sess->ipv4addr ? sess->ipv4addr : "Unknown",
                 sess->ipv6addr ? sess->ipv6addr : "Unknown",
                 recvmsg->http.location);
+        pcf_app_sess_remove(sess);
         return;
     }
 
@@ -223,7 +220,7 @@ void pcf_policyauthorization_create(
     }
 
    
-    supported_features = ogs_uint64_from_string(AscReqData->supp_feat);
+    supported_features = ogs_uint64_from_string_hexadecimal(AscReqData->supp_feat);
     sess->policyauthorization_features &= supported_features;
     sess->pcf_app_session_id = ogs_strdup(message.h.resource.component[1]);
 
@@ -233,6 +230,7 @@ void pcf_policyauthorization_create(
     cJSON_Delete(app_sess_context);
     cJSON_free(app_sess_context_text);
     
+    ok = true;
     if(!_pcf_app_session_change_callback_call(sess, false))
     {
         ogs_error("AppSessionContext change callback failed");
@@ -240,6 +238,8 @@ void pcf_policyauthorization_create(
 
 cleanup:
     ogs_sbi_header_free(&header);
+    /* whatever went wrong, the requester is told (the callback with no application session) and the object is released */
+    if (!ok) pcf_app_sess_remove(sess);
 }
 
 void pcf_policyauthorization_delete(pcf_app_session_t *app_sess)
@@ -262,10 +262,8 @@ void pcf_policyauthorization_delete(pcf_app_session_t *app_sess)
 
    if(sess)
    {
-       ogs_list_remove(&session->pcf_app_sessions, sess);
-
+       /* pcf_app_sess_remove() tells the requester and releases the object, which takes it out of the session's list */
        pcf_app_sess_remove(sess);
-
    }
 
 

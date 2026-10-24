@@ -147,6 +147,59 @@ PCF_SVC_CONSUMER_API pcf_session_t *pcf_session_new(const ogs_sockaddr_t *pcf_ad
 PCF_SVC_CONSUMER_API void pcf_service_consumer_final(void);
 
 /**
+ * The operation that a result reports
+ */
+typedef enum pcf_app_session_operation_e {
+    PCF_APP_SESSION_OP_NONE = 0,
+    PCF_APP_SESSION_OP_CREATE,      /**< the AppSessionContext was (or was not) created in the PCF */
+    PCF_APP_SESSION_OP_UPDATE,      /**< the PCF accepted (or refused) the update */
+    PCF_APP_SESSION_OP_DELETE,      /**< the AppSessionContext was deleted (the object is released after the callback) */
+    PCF_APP_SESSION_OP_TERMINATED   /**< the PCF ended the AppSessionContext by itself (the object is released after the callback) */
+} pcf_app_session_operation_t;
+
+/**
+ * The outcome of one operation on an AppSessionContext
+ */
+typedef struct pcf_app_session_result_s {
+    pcf_app_session_operation_t operation;
+    bool success;
+    int http_status;                /**< Status of the PCF's answer; 0 if there was none (no connection, timeout, answer not usable). */
+    const char *problem_title;      /**< Title of the ProblemDetails of an error answer, or NULL. Valid during the callback only. */
+    const char *problem_detail;     /**< Detail of the ProblemDetails of an error answer, or NULL. Valid during the callback only. */
+} pcf_app_session_result_t;
+
+/**
+ * Callback for the outcome of an operation
+ *
+ * Called exactly once for each create, update and delete that was started, and when the PCF terminates an AppSessionContext.
+ * After a failed create, after a delete and after a termination the library releases @app_session when the callback returns.
+ *
+ * @param app_session The AppSessionContext the result is for.
+ * @param result What happened.
+ * @param user_data The user_data registered in the call to pcf_session_create_app_session_with_result().
+ */
+typedef void (*pcf_app_session_result_callback)(pcf_app_session_t *app_session, const pcf_app_session_result_t *result, void *user_data);
+
+/**
+ * Ownership: what is passed to the library stays the caller's
+ *
+ * The library copies the UE address and the media components that it is given, so the caller keeps them and releases
+ * them itself, whether the call succeeded or not, and can retry. Lists of media components are released with
+ * pcf_media_components_free() (create) and pcf_media_components_rm_free() (update).
+ */
+
+/**
+ * Release a list of `MediaComponent` entries (a map from the component number to the entry) that was built for
+ * pcf_session_create_app_session().
+ */
+PCF_SVC_CONSUMER_API void pcf_media_components_free(OpenAPI_list_t *media_components);
+
+/**
+ * Release a list of `MediaComponentRm` entries that was built for pcf_session_update_app_session().
+ */
+PCF_SVC_CONSUMER_API void pcf_media_components_rm_free(OpenAPI_list_t *media_components_rm);
+
+/**
  * Create a new AppSessionContext
  *
  * @param session The PCF connection session to create the new AppSessionContext on.
@@ -165,6 +218,19 @@ PCF_SVC_CONSUMER_API bool pcf_session_create_app_session(pcf_session_t *session,
                 OpenAPI_list_t *media_component,
                 pcf_app_session_notification_callback notify_callback, void *notify_user_data,
                 pcf_app_session_change_callback change_callback, void *change_user_data);
+
+/**
+ * Create a new AppSessionContext and be told the outcome of each operation on it
+ *
+ * Like pcf_session_create_app_session(), with a callback that says which operation finished, with the HTTP status and the
+ * ProblemDetails of an error answer. The caller can tell a refused create from a refused update from a deletion from an end
+ * of the AppSessionContext by the PCF.
+ */
+PCF_SVC_CONSUMER_API bool pcf_session_create_app_session_with_result(pcf_session_t *session,
+                const ue_network_identifier_t *ue_connection, int events,
+                OpenAPI_list_t *media_component,
+                pcf_app_session_notification_callback notify_callback, void *notify_user_data,
+                pcf_app_session_result_callback result_callback, void *result_user_data);
 
 /**
  * Update the MediaComponents for an AppSessionContext

@@ -7,6 +7,7 @@
  * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
  */
 
+#include <inttypes.h>
 #include "ogs-sbi.h"
 #include "ogs-app.h"
 #include "ogs-proto.h"
@@ -33,6 +34,10 @@ pcf_app_session_t *_pcf_app_session_new(pcf_session_t *pcf_session, const ue_net
     if (!sess) return NULL;
 
     sess->pcf_session = pcf_session;
+    do {
+        ogs_random(&sess->instance_id, sizeof(sess->instance_id));
+        sess->instance_id &= 0x7fffffffffffffffULL;
+    } while (sess->instance_id == 0 || _pcf_app_session_find_by_instance_id(sess->instance_id));
     sess->ue_network_identifier = __ue_network_identifier_clone(ue_connection);
 
     ogs_list_init(&sess->pcf_event_notifications);
@@ -63,6 +68,8 @@ void _pcf_app_session_free(pcf_app_session_t *app_session)
     }
 
     if (app_session->notif_url) ogs_free(app_session->notif_url);
+    if (app_session->problem_title) ogs_free(app_session->problem_title);
+    if (app_session->problem_detail) ogs_free(app_session->problem_detail);
     if (app_session->ue_network_identifier) __ue_network_identifier_free(app_session->ue_network_identifier);
     if (app_session->pcf_app_session_id) ogs_free(app_session->pcf_app_session_id);
     if (app_session->ipv4addr) ogs_free(app_session->ipv4addr);
@@ -78,8 +85,6 @@ void _pcf_app_session_free(pcf_app_session_t *app_session)
         OpenAPI_app_session_context_free(app_session->pcf_app_session_context_received);
     if (app_session->pcf_app_session_context_updates)
         OpenAPI_app_session_context_update_data_patch_free(app_session->pcf_app_session_context_updates);
-    if (app_session->pcf_app_session_context_updates_received)
-        OpenAPI_app_session_context_update_data_patch_free(app_session->pcf_app_session_context_updates_received);
 
     ogs_free(app_session);
 }
@@ -96,10 +101,10 @@ const char *_pcf_app_session_get_notif_url(pcf_app_session_t *app_session)
         if (!server) return NULL;
 
         header = ogs_calloc(1, sizeof(*header));
-        header->service.name = (char *)OGS_SBI_SERVICE_NAME_NPCF_POLICYAUTHORIZATION;
+        header->service.name = (char *)OpenAPI_service_name_ToString(OpenAPI_service_name_npcf_policyauthorization);
         header->api.version = (char *)OGS_SBI_API_V1;
         header->resource.component[0] = (char*)"app-session-instance";
-        header->resource.component[1] = ogs_msprintf("%p", app_session);
+        header->resource.component[1] = ogs_msprintf("%" PRIu64, app_session->instance_id);
 
         app_session->notif_url = ogs_sbi_server_uri(server, header);
 
@@ -153,9 +158,52 @@ bool _pcf_app_session_remove_event_notification(pcf_app_session_t *app_session, 
     return true;
 }
 
+void _pcf_app_session_set_answer(pcf_app_session_t *app_session, int http_status, const OpenAPI_problem_details_t *problem)
+{
+    if (!app_session) return;
+    app_session->last_status = http_status;
+    if (app_session->problem_title) { ogs_free(app_session->problem_title); app_session->problem_title = NULL; }
+    if (app_session->problem_detail) { ogs_free(app_session->problem_detail); app_session->problem_detail = NULL; }
+    if (problem) {
+        if (problem->title) app_session->problem_title = ogs_strdup(problem->title);
+        if (problem->detail) app_session->problem_detail = ogs_strdup(problem->detail);
+    }
+}
+
+/*
+ * Every outcome goes through here. A caller that registered a result callback is told what happened; the callback of the
+ * first interface keeps its meaning: the application session, or NULL when it failed or has been destroyed.
+ */
 bool _pcf_app_session_change_callback_call(pcf_app_session_t *app_session, bool delete_or_error)
 {
-    if (!app_session || !app_session->change.callback) return false;
+    if (!app_session) return false;
+
+    if (app_session->result.callback) {
+        pcf_app_session_result_t result;
+        pcf_app_session_operation_t op = app_session->operation;
+
+        if (op == PCF_APP_SESSION_OP_NONE) {
+            /* nothing was waiting: the application session is being released */
+            op = PCF_APP_SESSION_OP_DELETE;
+        }
+
+        memset(&result, 0, sizeof(result));
+        result.operation = op;
+        if (op == PCF_APP_SESSION_OP_DELETE || op == PCF_APP_SESSION_OP_TERMINATED)
+            result.success = app_session->last_status == 0 || (app_session->last_status >= 200 && app_session->last_status < 300);
+        else
+            result.success = !delete_or_error;
+        result.http_status = app_session->last_status;
+        result.problem_title = app_session->problem_title;
+        result.problem_detail = app_session->problem_detail;
+
+        /* the operation is over whatever its outcome */
+        app_session->operation = PCF_APP_SESSION_OP_NONE;
+        app_session->result.callback(app_session, &result, app_session->result.user_data);
+        return true;
+    }
+
+    if (!app_session->change.callback) return false;
 
     return app_session->change.callback(delete_or_error?NULL:app_session, app_session->change.user_data);
 }
@@ -195,6 +243,20 @@ bool _pcf_app_session_exists(pcf_app_session_t *app_session)
     }
 
     return false;
+}
+
+pcf_app_session_t *_pcf_app_session_find_by_instance_id(uint64_t instance_id)
+{
+    pcf_session_t *pcf_session;
+
+    ogs_list_for_each(&pcf_self()->pcf_sessions, pcf_session) {
+        pcf_app_session_t *app_node;
+        ogs_list_for_each(&pcf_session->pcf_app_sessions, app_node) {
+            if (app_node->instance_id == instance_id) return app_node;
+        }
+    }
+
+    return NULL;
 }
 
 /****************** Private functions *********************/

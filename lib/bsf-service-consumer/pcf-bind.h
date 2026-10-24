@@ -17,6 +17,7 @@ extern "C" {
 #endif
 
 bool _bsf_retrieve_pcf_binding_for_pdu_session(ogs_sockaddr_t *ue_address, bsf_retrieve_callback_f callback, void *user_data);
+bool _bsf_retrieve_pcf_binding_for_pdu_session_narrowed(ogs_sockaddr_t *ue_address, const bsf_pcf_binding_query_t *query, bsf_retrieve_callback_f callback, void *user_data);
 
 #ifdef __cplusplus
 }

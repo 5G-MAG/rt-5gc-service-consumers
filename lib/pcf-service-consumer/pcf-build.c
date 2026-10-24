@@ -14,7 +14,6 @@
 #include "pcf-build.h"
 #include "pcf-evsubsc.h"
 
-static void media_components_free(OpenAPI_list_t *MediaComponentList);
 static void events_free(OpenAPI_list_t *EventList);
 
 ogs_sbi_request_t *pcf_policyauthorization_request_create(
@@ -36,7 +35,15 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
     char *app_sess_context_text;
     char *asc_req_data_text;
 
-    ogs_assert(sess);
+    /* what the request needs has to exist before anything is built: the caller is told, the NF is not stopped */
+    if (!sess || !sess->pcf_session || !sess->pcf_session->pcf_addr) {
+        ogs_error("The PCF address of the application session is not known");
+        return NULL;
+    }
+    if (!_pcf_app_session_get_notif_url(sess)) {
+        ogs_error("No notification server can be created for the application session");
+        return NULL;
+    }
 
     OGS_ADDR(sess->pcf_session->pcf_addr, pcf_ipv4addr);
     pcf_port = OGS_PORT(sess->pcf_session->pcf_addr);
@@ -44,7 +51,7 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
     memset(&message, 0, sizeof(message));
     message.h.method = (char *)OGS_SBI_HTTP_METHOD_POST;
     message.h.service.name =
-        (char *)OGS_SBI_SERVICE_NAME_NPCF_POLICYAUTHORIZATION;
+        (char *)OpenAPI_service_name_ToString(OpenAPI_service_name_npcf_policyauthorization);
     message.h.api.version = (char *)OGS_SBI_API_V1;
     message.h.resource.component[0] =
         (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
@@ -60,7 +67,6 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
     memset(&AscReqData, 0, sizeof(AscReqData));
 
     AscReqData.notif_uri = ogs_strdup(_pcf_app_session_get_notif_url(sess));
-    ogs_assert(AscReqData.notif_uri);
 
     ogs_debug("\n PCF policy authorization create (Request header): \n Method: [%s] \n URI: [%s] \n Service Name: [%s] \n Resource Component: [%s]\n", message.h.method, message.h.uri, message.h.service.name, message.h.resource.component[0]); 
 
@@ -130,9 +136,7 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
     if (sNssai.sd)
         ogs_free(sNssai.sd);
 
-    if(AscReqData.med_components)    
-        media_components_free(media_component);    
-
+    /* the media components belong to the caller */
     return request;
 }
 
@@ -140,7 +144,6 @@ ogs_sbi_request_t *pcf_policyauthorization_request_update(pcf_app_session_t *ses
 {
     ogs_sbi_message_t message;
     ogs_sbi_request_t *request = NULL;
-    ogs_sbi_server_t *server = NULL;
     ogs_sbi_header_t header;
     char pcf_addr[OGS_ADDRSTRLEN];
     int pcf_port;
@@ -155,13 +158,17 @@ ogs_sbi_request_t *pcf_policyauthorization_request_update(pcf_app_session_t *ses
 
     if(!sess) return NULL;
     if(!media_component) return NULL;
+    if (!sess->pcf_session || !sess->pcf_session->pcf_addr || !sess->pcf_app_session_id) {
+        ogs_error("The application session has not been created in the PCF");
+        return NULL;
+    }
 
     OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);
     pcf_port = OGS_PORT(sess->pcf_session->pcf_addr);
 
     memset(&message, 0, sizeof(message));
     message.h.method = (char *)OGS_SBI_HTTP_METHOD_PATCH;
-    message.h.service.name = (char *)OGS_SBI_SERVICE_NAME_NPCF_POLICYAUTHORIZATION;
+    message.h.service.name = (char *)OpenAPI_service_name_ToString(OpenAPI_service_name_npcf_policyauthorization);
     message.h.api.version = (char *)OGS_SBI_API_V1;
     message.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
     message.h.resource.component[1] = sess->pcf_app_session_id;
@@ -176,11 +183,8 @@ ogs_sbi_request_t *pcf_policyauthorization_request_update(pcf_app_session_t *ses
     AppSessionContextUpdateDataPatch.asc_req_data = &AscUpdateData;
     memset(&AscUpdateData, 0, sizeof(AscUpdateData));
 
-    server = ogs_list_first(&ogs_sbi_self()->server_list);
-    ogs_assert(server);
-
     memset(&header, 0, sizeof(header));
-    header.service.name = (char *)OGS_SBI_SERVICE_NAME_NPCF_POLICYAUTHORIZATION;
+    header.service.name = (char *)OpenAPI_service_name_ToString(OpenAPI_service_name_npcf_policyauthorization);
     header.api.version = (char *)OGS_SBI_API_V1;
     header.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
 
@@ -211,11 +215,13 @@ ogs_sbi_request_t *pcf_policyauthorization_request_update(pcf_app_session_t *ses
     request = ogs_sbi_build_request(&message);
     ogs_expect(request);
 
+    /* TS 29.514 V19.8.0 clause 4.2.3.2: the body of the PATCH is a JSON Merge Patch and is signalled as such */
+    if (request)
+        ogs_sbi_header_set(request->http.headers, OGS_SBI_CONTENT_TYPE, OGS_SBI_CONTENT_MERGE_PATCH_TYPE);
+
     ogs_free(message.h.uri);
 
-    if(AscUpdateData.med_components)
-        media_components_free(media_component);
-
+    /* the media components belong to the caller */
     return request;
 }
 
@@ -223,7 +229,6 @@ ogs_sbi_request_t *pcf_policyauthorization_subscribe_request_event(pcf_app_sessi
 {
     ogs_sbi_message_t message;
     ogs_sbi_request_t *request = NULL;
-    ogs_sbi_server_t *server = NULL;
     ogs_sbi_header_t header;
     char pcf_addr[OGS_ADDRSTRLEN];
     int pcf_port;
@@ -231,8 +236,10 @@ ogs_sbi_request_t *pcf_policyauthorization_subscribe_request_event(pcf_app_sessi
     cJSON *app_sess_context;
     char *app_sess_context_text;
 
-    ogs_assert(sess);
-    ogs_assert(sess->pcf_app_session_id);
+    if (!sess || !sess->pcf_session || !sess->pcf_session->pcf_addr || !sess->pcf_app_session_id) {
+        ogs_error("The application session has not been created in the PCF");
+        return NULL;
+    }
 
     OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);
     pcf_port = OGS_PORT(sess->pcf_session->pcf_addr);
@@ -242,7 +249,7 @@ ogs_sbi_request_t *pcf_policyauthorization_subscribe_request_event(pcf_app_sessi
     memset(&message, 0, sizeof(message));
     message.h.method = (char *)OGS_SBI_HTTP_METHOD_PUT;
     message.h.service.name =
-        (char *)OGS_SBI_SERVICE_NAME_NPCF_POLICYAUTHORIZATION;
+        (char *)OpenAPI_service_name_ToString(OpenAPI_service_name_npcf_policyauthorization);
     message.h.api.version = (char *)OGS_SBI_API_V1;
     message.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
     message.h.resource.component[1] = (char *)sess->pcf_app_session_id;
@@ -253,11 +260,8 @@ ogs_sbi_request_t *pcf_policyauthorization_subscribe_request_event(pcf_app_sessi
 
     message.AppSessionContext = sess->pcf_app_session_context_requested;
 
-    server = ogs_list_first(&ogs_sbi_self()->server_list);
-    ogs_assert(server);
-
     memset(&header, 0, sizeof(header));
-    header.service.name = (char *)OGS_SBI_SERVICE_NAME_NPCF_POLICYAUTHORIZATION;
+    header.service.name = (char *)OpenAPI_service_name_ToString(OpenAPI_service_name_npcf_policyauthorization);
     header.api.version = (char *)OGS_SBI_API_V1;
     header.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
     header.resource.component[1] = (char *)sess->pcf_app_session_id;
@@ -287,7 +291,10 @@ ogs_sbi_request_t *pcf_policyauthorization_req_unsubscribe_event(pcf_app_session
     char pcf_addr[OGS_ADDRSTRLEN];
     int pcf_port;
 
-    ogs_assert(sess);
+    if (!sess || !sess->pcf_session || !sess->pcf_session->pcf_addr || !sess->pcf_app_session_id) {
+        ogs_error("The application session has not been created in the PCF");
+        return NULL;
+    }
 
     OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);
     pcf_port = OGS_PORT(sess->pcf_session->pcf_addr);
@@ -303,7 +310,6 @@ ogs_sbi_request_t *pcf_policyauthorization_req_subscribe_event(pcf_app_session_t
 {
 
     ogs_sbi_request_t *request = NULL;
-    ogs_sbi_server_t *server = NULL;
 
     OpenAPI_events_subsc_req_data_t *evt_subsc_req = NULL;
 
@@ -312,13 +318,21 @@ ogs_sbi_request_t *pcf_policyauthorization_req_subscribe_event(pcf_app_session_t
     cJSON *ev_subsc;
     char *data;
 
-    ogs_assert(sess);
+    if (!sess || !sess->pcf_session || !sess->pcf_session->pcf_addr || !sess->pcf_app_session_id) {
+        ogs_error("The application session has not been created in the PCF");
+        return NULL;
+    }
+    if (!sess->pcf_app_session_context_requested || !sess->pcf_app_session_context_requested->asc_req_data ||
+            !sess->pcf_app_session_context_requested->asc_req_data->ev_subsc) {
+        ogs_error("The application session has no event subscription to send");
+        return NULL;
+    }
 
     evt_subsc_req = OpenAPI_events_subsc_req_data_copy(evt_subsc_req, sess->pcf_app_session_context_requested->asc_req_data->ev_subsc);
-    ogs_assert(evt_subsc_req);
-
-    server = ogs_list_first(&ogs_sbi_self()->server_list);
-    ogs_assert(server);
+    if (!evt_subsc_req) {
+        ogs_error("The event subscription cannot be copied");
+        return NULL;
+    }
 
     OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);
     pcf_port = OGS_PORT(sess->pcf_session->pcf_addr);
@@ -353,7 +367,6 @@ ogs_sbi_request_t *pcf_policyauthorization_request_subscribe_event(pcf_app_sessi
 {
     ogs_sbi_message_t message;
     ogs_sbi_request_t *request = NULL;
-    ogs_sbi_server_t *server = NULL;
 
     OpenAPI_events_subsc_req_data_t *evSubsc;
     OpenAPI_list_t *subsc_events = NULL;
@@ -363,12 +376,16 @@ ogs_sbi_request_t *pcf_policyauthorization_request_subscribe_event(pcf_app_sessi
     cJSON *ev_subsc;
     char *data;
 
-    ogs_assert(sess);
+    if (!sess || !sess->pcf_session || !sess->pcf_session->pcf_addr || !sess->pcf_app_session_id) {
+        ogs_error("The application session has not been created in the PCF");
+        return NULL;
+    }
 
-    server = ogs_list_first(&ogs_sbi_self()->server_list);
-    ogs_assert(server);
-
-    evSubsc = OpenAPI_events_subsc_req_data_create(subsc_events, notif_uri, NULL, NULL, NULL, NULL, NULL, NULL, false, 0);
+    evSubsc = OpenAPI_events_subsc_req_data_create(
+            subsc_events, notif_uri,
+            NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+            NULL, NULL, NULL, NULL,
+            false, 0, false, 0);
 
 
     OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);
@@ -377,7 +394,7 @@ ogs_sbi_request_t *pcf_policyauthorization_request_subscribe_event(pcf_app_sessi
     memset(&message, 0, sizeof(message));
     message.h.method = (char *)OGS_SBI_HTTP_METHOD_PUT;
     message.h.service.name =
-        (char *)OGS_SBI_SERVICE_NAME_NPCF_POLICYAUTHORIZATION;
+        (char *)OpenAPI_service_name_ToString(OpenAPI_service_name_npcf_policyauthorization);
     message.h.api.version = (char *)OGS_SBI_API_V1;
     message.h.resource.component[0] =
         (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
@@ -423,76 +440,32 @@ static void events_free(OpenAPI_list_t *EventList){
 
 }
 
-static void media_components_free(OpenAPI_list_t *MediaComponentList){
+/*
+ * Release a list of media components (a map from the component number to the component). The components are released
+ * with the generated free functions of their own type: the update request carries the "rm" variant, whose layout
+ * differs from that of the create request.
+ */
+void _pcf_media_components_free(OpenAPI_list_t *MediaComponentList, bool is_rm)
+{
+    OpenAPI_lnode_t *node = NULL;
 
-    OpenAPI_map_t *MediaComponentMap = NULL;
-    OpenAPI_media_component_t *MediaComponent = NULL;
-
-    OpenAPI_list_t *SubComponentList = NULL;
-    OpenAPI_map_t *SubComponentMap = NULL;
-    OpenAPI_media_sub_component_t *SubComponent = NULL;
-
-    OpenAPI_list_t *fDescList = NULL;
-    OpenAPI_list_t *codecList = NULL;
-
-    OpenAPI_lnode_t *node = NULL, *node2 = NULL, *node3 = NULL;
+    if (!MediaComponentList) return;
 
     OpenAPI_list_for_each(MediaComponentList, node) {
-        MediaComponentMap = node->data;
-        if (MediaComponentMap) {
-            MediaComponent = MediaComponentMap->value;
-            if (MediaComponent) {
+        OpenAPI_map_t *MediaComponentMap = node->data;
 
-                if (MediaComponent->mar_bw_dl)
-                    ogs_free(MediaComponent->mar_bw_dl);
-                if (MediaComponent->mar_bw_ul)
-                    ogs_free(MediaComponent->mar_bw_ul);
-                if (MediaComponent->mir_bw_dl)
-                    ogs_free(MediaComponent->mir_bw_dl);
-                if (MediaComponent->mir_bw_ul)
-                    ogs_free(MediaComponent->mir_bw_ul);
-                if (MediaComponent->rr_bw)
-                    ogs_free(MediaComponent->rr_bw);
-                if (MediaComponent->rs_bw)
-                    ogs_free(MediaComponent->rs_bw);
-
-                codecList = MediaComponent->codecs;
-                OpenAPI_list_for_each(codecList, node2) {
-                    if (node2->data) ogs_free(node2->data);
-                }
-                OpenAPI_list_free(codecList);
-
-                SubComponentList = MediaComponent->med_sub_comps;
-                OpenAPI_list_for_each(SubComponentList, node2) {
-                    SubComponentMap = node2->data;
-                    if (SubComponentMap) {
-                        SubComponent = SubComponentMap->value;
-                        if (SubComponent) {
-
-                            fDescList = SubComponent->f_descs;
-                            OpenAPI_list_for_each(fDescList, node3) {
-                                if (node3->data) ogs_free(node3->data);
-                            }
-                            OpenAPI_list_free(fDescList);
-
-                            ogs_free(SubComponent);
-                        }
-                        if (SubComponentMap->key)
-                            ogs_free(SubComponentMap->key);
-                        ogs_free(SubComponentMap);
-                    }
-                }
-                OpenAPI_list_free(SubComponentList);
-
-                ogs_free(MediaComponent);
-            }
-            if (MediaComponentMap->key)
-                ogs_free(MediaComponentMap->key);
-            ogs_free(MediaComponentMap);
+        if (!MediaComponentMap) continue;
+        if (MediaComponentMap->value) {
+            if (is_rm)
+                OpenAPI_media_component_rm_free(MediaComponentMap->value);
+            else
+                OpenAPI_media_component_free(MediaComponentMap->value);
         }
+        if (MediaComponentMap->key)
+            ogs_free(MediaComponentMap->key);
+        ogs_free(MediaComponentMap);
     }
     OpenAPI_list_free(MediaComponentList);
-
 }
 
 ogs_sbi_request_t *pcf_policyauthorization_request_delete(pcf_app_session_t *sess)
@@ -502,12 +475,10 @@ ogs_sbi_request_t *pcf_policyauthorization_request_delete(pcf_app_session_t *ses
     char pcf_addr[OGS_ADDRSTRLEN];
     int pcf_port;
 
-    ogs_assert(sess);
-    ogs_assert(sess->pcf_app_session_id);
-
-    ogs_assert(sess->pcf_session);
-
-    ogs_assert(sess->pcf_session->pcf_addr);
+    if (!sess || !sess->pcf_session || !sess->pcf_session->pcf_addr || !sess->pcf_app_session_id) {
+        ogs_error("The application session has not been created in the PCF");
+        return NULL;
+    }
     
     OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);
     pcf_port = OGS_PORT(sess->pcf_session->pcf_addr);
@@ -515,7 +486,7 @@ ogs_sbi_request_t *pcf_policyauthorization_request_delete(pcf_app_session_t *ses
     memset(&message, 0, sizeof(message));
     message.h.method = (char *)OGS_SBI_HTTP_METHOD_POST;
     message.h.service.name =
-        (char *)OGS_SBI_SERVICE_NAME_NPCF_POLICYAUTHORIZATION;
+        (char *)OpenAPI_service_name_ToString(OpenAPI_service_name_npcf_policyauthorization);
     message.h.api.version = (char *)OGS_SBI_API_V1;
     message.h.resource.component[0] =
         (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;

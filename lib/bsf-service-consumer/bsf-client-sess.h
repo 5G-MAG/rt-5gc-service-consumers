@@ -28,6 +28,14 @@ typedef struct bsf_client_sess_s {
     char *ipv4addr;
     char *ipv6prefix;
 
+    /* narrowing keys of the query (TS 29.521 V19.7.0 table 5.3.2.3.2-1) */
+    char *dnn;
+    bool s_nssai_presence;
+    ogs_s_nssai_t s_nssai;
+    char *supi;
+    char *gpsi;
+    char *ip_domain;
+
     struct {
         bsf_retrieve_callback_f callback;
         void *user_data;
@@ -43,6 +51,7 @@ bool _bsf_client_sess_ue_address_set(bsf_client_sess_t *sess, const ogs_sockaddr
 bool _bsf_client_sess_ipv4addr_set_from_sockaddr(bsf_client_sess_t *sess, const ogs_sockaddr_t *addr);
 bool _bsf_client_sess_ipv6prefix_set_from_sockaddr(bsf_client_sess_t *sess, const ogs_sockaddr_t *addr);
 
+bool _bsf_client_sess_query_set(bsf_client_sess_t *sess, const bsf_pcf_binding_query_t *query);
 bool _bsf_client_sess_retrieve_callback_set(bsf_client_sess_t *sess, bsf_retrieve_callback_f cb, void *user_data);
 bool _bsf_client_sess_retrieve_callback_call(bsf_client_sess_t *sess, const OpenAPI_pcf_binding_t *binding);
 bool _bsf_client_sess_discover_and_send(bsf_client_sess_t *sess);

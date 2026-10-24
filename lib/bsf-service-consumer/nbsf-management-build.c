@@ -26,13 +26,21 @@ ogs_sbi_request_t *_nbsf_management_pcf_binding_build(bsf_client_sess_t *sess, v
 
     memset(&message, 0, sizeof(message));
     message.h.method = (char *)OGS_SBI_HTTP_METHOD_GET;
-    message.h.service.name = (char *)OGS_SBI_SERVICE_NAME_NBSF_MANAGEMENT;
+    message.h.service.name = (char *)OpenAPI_service_name_ToString(OpenAPI_service_name_nbsf_management);
     message.h.api.version = (char *)OGS_SBI_API_V1;
     message.h.resource.component[0] =
         (char *)OGS_SBI_RESOURCE_NAME_PCF_BINDINGS;
 
     message.param.ipv4addr = sess->ipv4addr;
     message.param.ipv6prefix = sess->ipv6prefix;
+    message.param.dnn = sess->dnn;
+    if (sess->s_nssai_presence) {
+        message.param.snssai_presence = true;
+        message.param.s_nssai = sess->s_nssai;
+    }
+    message.param.bsf_supi = sess->supi;
+    message.param.bsf_gpsi = sess->gpsi;
+    message.param.ip_domain = sess->ip_domain;
 
     request = ogs_sbi_build_request(&message);
     ogs_expect(request);
