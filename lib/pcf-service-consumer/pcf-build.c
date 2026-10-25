@@ -17,7 +17,7 @@
 static void events_free(OpenAPI_list_t *EventList);
 
 ogs_sbi_request_t *pcf_policyauthorization_request_create(
-        pcf_app_session_t *sess, OpenAPI_list_t *media_component, int events)
+        pcf_app_session_t *sess, OpenAPI_list_t *media_component, const pcf_app_session_options_t *options)
 {
     ogs_sbi_message_t message;
     ogs_sbi_request_t *request = NULL;
@@ -80,7 +80,53 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
     AscReqData.dnn = sess->dnn;
 
     memset(&evSubsc, 0, sizeof(evSubsc));
-    evSubsc.events = events_subsc_create(events);
+    evSubsc.events = events_subsc_create(options->events);
+    if (options->events_subscription) {
+        /* the details of the subscription are the caller's (borrowed); its events replace those of the same type in the list */
+        const OpenAPI_events_subsc_req_data_t *extra = options->events_subscription;
+        OpenAPI_lnode_t *node = NULL, *next = NULL, *node2 = NULL;
+
+        OpenAPI_list_for_each(extra->events, node) {
+            OpenAPI_af_event_subscription_t *copy = NULL, *given = node->data;
+
+            if (!given)
+                continue;
+            OpenAPI_list_for_each(evSubsc.events, node2) {
+                OpenAPI_af_event_subscription_t *held = node2->data;
+
+                if (held && held->event == given->event) {
+                    ogs_free(held);
+                    node2->data = NULL;
+                }
+            }
+            copy = ogs_calloc(1, sizeof(*copy));
+            ogs_assert(copy);
+            *copy = *given;
+            OpenAPI_list_add(evSubsc.events, copy);
+        }
+        /* the entries that were replaced are taken out of the list */
+        for (node = evSubsc.events->first; node; node = next) {
+            next = node->next;
+            if (!node->data)
+                OpenAPI_list_remove(evSubsc.events, node);
+        }
+        evSubsc.req_qos_mon_params = extra->req_qos_mon_params;
+        evSubsc.qos_mon = extra->qos_mon;
+        evSubsc.qos_mon_dat_rate = extra->qos_mon_dat_rate;
+        evSubsc.pdv_req_mon_params = extra->pdv_req_mon_params;
+        evSubsc.pdv_mon = extra->pdv_mon;
+        evSubsc.congest_mon = extra->congest_mon;
+        evSubsc.rtt_mon = extra->rtt_mon;
+        evSubsc.avl_bit_rate_mon = extra->avl_bit_rate_mon;
+        evSubsc.rtt_flow_ref = extra->rtt_flow_ref;
+        evSubsc.req_anis = extra->req_anis;
+        evSubsc.usg_thres = extra->usg_thres;
+        evSubsc.af_app_ids = extra->af_app_ids;
+        evSubsc.is_direct_notif_ind = extra->is_direct_notif_ind;
+        evSubsc.direct_notif_ind = extra->direct_notif_ind;
+        evSubsc.is_avrg_wndw = extra->is_avrg_wndw;
+        evSubsc.avrg_wndw = extra->avrg_wndw;
+    }
 
     evSubsc.notif_uri = ogs_strdup(_pcf_app_session_get_notif_url(sess));
     AscReqData.ev_subsc = &evSubsc;
@@ -92,7 +138,11 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
         AscReqData.slice_info = &sNssai;
     }
 
-    AscReqData.spon_status = OpenAPI_sponsoring_status_SPONSOR_DISABLED;
+    /* TS 29.514 V19.8.0 clause 4.2.2.5: the sponsor is given with the identity of the application service provider */
+    AscReqData.asp_id = (char *)options->asp_id;
+    AscReqData.spon_id = (char *)options->spon_id;
+    AscReqData.spon_status = (options->asp_id && options->spon_id && options->sponsoring_enabled) ?
+        OpenAPI_sponsoring_status_SPONSOR_ENABLED : OpenAPI_sponsoring_status_SPONSOR_DISABLED;
 
     AscReqData.supi = sess->supi;
     AscReqData.gpsi = sess->gpsi;

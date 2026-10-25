@@ -34,6 +34,8 @@ pcf_app_session_t *_pcf_app_session_new(pcf_session_t *pcf_session, const ue_net
     if (!sess) return NULL;
 
     sess->pcf_session = pcf_session;
+    /* TS 29.514 V19.8.0 clause 5.8: what the library offers; the PCF answers with the features that both support */
+    sess->policyauthorization_features = PCF_LIB_FEATURES;
     do {
         ogs_random(&sess->instance_id, sizeof(sess->instance_id));
         sess->instance_id &= 0x7fffffffffffffffULL;

@@ -34,6 +34,8 @@ libscpcf_sources = files('''
     pcf-handler.c
     npcf-process.h
     npcf-process.c
+    pcf-bdt.h
+    pcf-bdt.c
     context.h
     context.c
     utils.h

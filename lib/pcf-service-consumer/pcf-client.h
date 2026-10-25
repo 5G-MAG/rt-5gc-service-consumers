@@ -21,6 +21,13 @@
 extern "C" {
 #endif
 
+/*
+ * The optional features of the Npcf_PolicyAuthorization API that the library implements (TS 29.514 V19.8.0 table 5.8-1): 2 SponsoredConnectivity
+ * (the sponsor and the usage threshold of an application session context), 16 QoSMonitoring, 28 PatchCorrection (the update is a JSON Merge
+ * Patch), 63 L4S (l4sInd of a media component and the L4S_SUPP event).
+ */
+#define PCF_LIB_FEATURES (((uint64_t)1 << (2 - 1)) | ((uint64_t)1 << (16 - 1)) | ((uint64_t)1 << (28 - 1)) | ((uint64_t)1 << (63 - 1)))
+
 typedef struct pcf_event_notification_s {
     ogs_lnode_t   node;	
     pcf_app_session_notification_callback callback;

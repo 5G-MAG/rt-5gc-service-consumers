@@ -172,5 +172,40 @@ void pcf_test_bdt_func(abts_case *tc, void *data)
     ABTS_INT_EQUAL(tc, OGS_SBI_HTTP_STATUS_NOT_FOUND, last.http_status);
     ABTS_STR_EQUAL(tc, "BDT_POLICY_NOT_FOUND", last.cause);
 
+    /* the same through the NRF: the PCF is found by the service, and the later requests go to the PCF that answered */
+    request.asp_id = "consumer-test-nrf";
+    ABTS_TRUE(tc, call(pcf_discover_create_bdt_policy(&request, result_cb, NULL)));
+    ABTS_TRUE(tc, wait_result(&count));
+    ABTS_INT_EQUAL(tc, PCF_BDT_OP_CREATE, last.operation);
+    ABTS_TRUE(tc, last.success);
+    ABTS_INT_EQUAL(tc, OGS_SBI_HTTP_STATUS_CREATED, last.http_status);
+    policy = last.policy;
+    ABTS_PTR_NOTNULL(tc, policy);
+    if (policy) {
+        ogs_cpystrn(id, strrchr(pcf_bdt_policy_get_uri(policy), '/') + 1, sizeof(id));
+        ABTS_INT_EQUAL(tc, 2, pcf_bdt_policy_get_num_transfer_policies(policy));
+        ABTS_TRUE(tc, call(pcf_bdt_policy_select(policy, 1)));
+        ABTS_TRUE(tc, wait_result(&count));
+        ABTS_INT_EQUAL(tc, PCF_BDT_OP_SELECT, last.operation);
+        ABTS_TRUE(tc, last.success);
+        ABTS_INT_EQUAL(tc, 1, pcf_bdt_policy_get_selected_transfer_policy_id(policy));
+
+        ABTS_TRUE(tc, call(pcf_discover_get_bdt_policy(id, result_cb, NULL)));
+        ABTS_TRUE(tc, wait_result(&count));
+        ABTS_INT_EQUAL(tc, PCF_BDT_OP_GET, last.operation);
+        ABTS_TRUE(tc, last.success);
+        ABTS_INT_EQUAL(tc, 1, pcf_bdt_policy_get_selected_transfer_policy_id(last.policy));
+        pcf_bdt_policy_free(last.policy);
+        ogs_pollset_notify(ogs_app()->pollset);
+        ABTS_TRUE(tc, wait_result(&count));
+        ABTS_INT_EQUAL(tc, PCF_BDT_OP_DELETE, last.operation);
+        ABTS_TRUE(tc, last.success);
+        pcf_bdt_policy_free(policy);
+        ogs_pollset_notify(ogs_app()->pollset);
+        ABTS_TRUE(tc, wait_result(&count));
+        ABTS_INT_EQUAL(tc, PCF_BDT_OP_DELETE, last.operation);
+        ABTS_INT_EQUAL(tc, OGS_SBI_HTTP_STATUS_NOT_FOUND, last.http_status);
+    }
+
     pcf_session_free(session);
 }

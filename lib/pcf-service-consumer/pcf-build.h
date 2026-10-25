@@ -19,7 +19,7 @@ extern "C" {
 
 extern void _pcf_media_components_free(OpenAPI_list_t *MediaComponentList, bool is_rm);
 
-extern ogs_sbi_request_t *pcf_policyauthorization_request_create(pcf_app_session_t *sess, OpenAPI_list_t *media_component, int events);
+extern ogs_sbi_request_t *pcf_policyauthorization_request_create(pcf_app_session_t *sess, OpenAPI_list_t *media_component, const pcf_app_session_options_t *options);
 
 extern ogs_sbi_request_t *pcf_policyauthorization_request_update(pcf_app_session_t *sess, OpenAPI_list_t *media_component);
 

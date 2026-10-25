@@ -22,6 +22,7 @@
 #include "pcf-test-sm.h"
 #include "pcf-test-media.h"
 #include "pcf-test-event-subsc.h"
+#include "pcf-test-bdt.h"
 #include "pcf-test.h"
 
 
@@ -95,6 +96,7 @@ abts_suite *test_pcf(abts_suite *suite)
 {
     suite = ADD_SUITE(suite)
 
+    abts_run_test(suite, pcf_test_bdt_func, NULL);
     abts_run_test(suite, test1_func, NULL);
    
     return suite;
@@ -212,7 +214,11 @@ static void test1_func(abts_case *tc, void *data)
     ogs_ngap_message_t message;
     char ue_ipv4addr[OGS_ADDRSTRLEN];
     int i = 0;
-    pcf_app_session_t *af_pcf_app_session = NULL; /* the object of the library, set by the change callback */
+    pcf_app_session_t *af_pcf_app_session = NULL; /* the object of the library, set by the result callback */
+    pcf_app_session_options_t options;
+    OpenAPI_events_subsc_req_data_t subsc;
+    OpenAPI_qos_monitoring_information_t qos_mon;
+    OpenAPI_usage_threshold_t usg_thres;
     OpenAPI_events_subsc_req_data_t *evt_subsc_req;
     ogs_sbi_server_t *server = NULL;
     ogs_sbi_header_t header;
@@ -520,11 +526,49 @@ static void test1_func(abts_case *tc, void *data)
 
     ogs_msleep(100);
 
-    rv = pcf_session_create_app_session(pcf_session,
-                ue_connection, PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF,
+    /*
+     * Sponsored data connectivity (TS 29.514 V19.8.0 clause 4.2.2.5), usage monitoring (clause 4.2.2.5, usgThres) and QoS monitoring
+     * of the packet delay (clause 4.2.2.23) are asked for in the creation.
+     */
+    memset(&options, 0, sizeof(options));
+    options.events = PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF;
+    options.asp_id = "asp-1";
+    options.spon_id = "sponsor-1";
+    options.sponsoring_enabled = true;
+    memset(&subsc, 0, sizeof(subsc));
+    subsc.events = OpenAPI_list_create();
+    {
+        OpenAPI_af_event_subscription_t *event = ogs_calloc(1, sizeof(*event));
+
+        event->event = OpenAPI_npcf_af_event_QOS_MONITORING;
+        event->notif_method = OpenAPI_af_notif_method_EVENT_DETECTION;
+        event->is_wait_time = true;
+        event->wait_time = 1;
+        OpenAPI_list_add(subsc.events, event);
+        event = ogs_calloc(1, sizeof(*event));
+        event->event = OpenAPI_npcf_af_event_USAGE_REPORT;
+        OpenAPI_list_add(subsc.events, event);
+        event = ogs_calloc(1, sizeof(*event));
+        event->event = OpenAPI_npcf_af_event_L4S_SUPP;
+        OpenAPI_list_add(subsc.events, event);
+    }
+    subsc.req_qos_mon_params = OpenAPI_list_create();
+    OpenAPI_list_add(subsc.req_qos_mon_params, (void *)OpenAPI_requested_qos_monitoring_parameter_DOWNLINK);
+    memset(&qos_mon, 0, sizeof(qos_mon));
+    qos_mon.is_rep_thresh_dl = true;
+    qos_mon.rep_thresh_dl = 40;
+    subsc.qos_mon = &qos_mon;
+    memset(&usg_thres, 0, sizeof(usg_thres));
+    usg_thres.is_total_volume = true;
+    usg_thres.total_volume = 1000000;
+    subsc.usg_thres = &usg_thres;
+    options.events_subscription = &subsc;
+
+    rv = pcf_session_create_app_session_with_options(pcf_session,
+                ue_connection, &options,
                 media_component,
                 notification_handler_callback, NULL,
-                change_handler_callback, &af_pcf_app_session);
+                result_handler_callback, &af_pcf_app_session);
 
     ogs_pollset_notify(ogs_app()->pollset);
     ABTS_INT_EQUAL(tc, 1, rv);
@@ -535,6 +579,30 @@ static void test1_func(abts_case *tc, void *data)
     if (!af_pcf_app_session)
         goto cleanup;
     ogs_msleep(100);
+
+    /* the PCF holds what was asked for */
+    ABTS_PTR_NOTNULL(tc, af_pcf_app_session->pcf_app_session_context_received);
+    if (af_pcf_app_session->pcf_app_session_context_received && af_pcf_app_session->pcf_app_session_context_received->asc_req_data) {
+        OpenAPI_app_session_context_req_data_t *held = af_pcf_app_session->pcf_app_session_context_received->asc_req_data;
+
+        ABTS_STR_EQUAL(tc, "asp-1", held->asp_id ? held->asp_id : "");
+        ABTS_STR_EQUAL(tc, "sponsor-1", held->spon_id ? held->spon_id : "");
+        ABTS_INT_EQUAL(tc, OpenAPI_sponsoring_status_SPONSOR_ENABLED, held->spon_status);
+        /* the features that the library offers and the PCF supports: SponsoredConnectivity (2), QoSMonitoring (16), L4S (63) */
+        ABTS_TRUE(tc, held->supp_feat && ogs_uint64_from_string_hexadecimal(held->supp_feat) ==
+                (((uint64_t)1 << 1) | ((uint64_t)1 << 15) | ((uint64_t)1 << 62)));
+        ABTS_TRUE(tc, pcf_app_session_get_features(af_pcf_app_session) ==
+                (((uint64_t)1 << 1) | ((uint64_t)1 << 15) | ((uint64_t)1 << 62)));
+        ABTS_PTR_NOTNULL(tc, held->ev_subsc);
+        if (held->ev_subsc) {
+            ABTS_PTR_NOTNULL(tc, held->ev_subsc->usg_thres);
+            ABTS_PTR_NOTNULL(tc, held->ev_subsc->qos_mon);
+            /* the three of the details and QOS_NOTIF of the mask */
+            ABTS_INT_EQUAL(tc, 4, held->ev_subsc->events ? (int)held->ev_subsc->events->count : 0);
+            if (held->ev_subsc->usg_thres)
+                ABTS_INT_EQUAL(tc, 1000000, (int)held->ev_subsc->usg_thres->total_volume);
+        }
+    }
 
 
     events = tests_events_subsc_create(PCF_APP_SESSION_EVENT_TYPE_QOS_MONITORING, OpenAPI_af_notif_method_ONE_TIME);
@@ -599,6 +667,19 @@ cleanup:
 bool notification_handler_callback(pcf_app_session_t *app_session, const OpenAPI_events_notification_t *notifications, void *user_data){
     if (!notifications) return false;
     return true;
+}
+
+void result_handler_callback(pcf_app_session_t *app_session, const pcf_app_session_result_t *result, void *data){
+    pcf_app_session_t **held = (pcf_app_session_t **)data;
+
+    if (!held)
+        return;
+    /* the object is gone after its deletion, a termination and a creation that failed */
+    if (result->operation == PCF_APP_SESSION_OP_DELETE || result->operation == PCF_APP_SESSION_OP_TERMINATED ||
+            (result->operation == PCF_APP_SESSION_OP_CREATE && !result->success))
+        *held = NULL;
+    else
+        *held = app_session;
 }
 
 bool change_handler_callback(pcf_app_session_t *app_session, void *data){

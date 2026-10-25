@@ -97,6 +97,8 @@ int _npcf_af_event_to_event_mask(const OpenAPI_npcf_af_event_e event_type)
         return PCF_APP_SESSION_EVENT_TYPE_UP_PATH_CHG_FAILURE;
     case OpenAPI_npcf_af_event_USAGE_REPORT:
         return PCF_APP_SESSION_EVENT_TYPE_USAGE_REPORT;
+    case OpenAPI_npcf_af_event_L4S_SUPP:
+        return PCF_APP_SESSION_EVENT_TYPE_L4S_SUPP;
     default:
         break;
     }

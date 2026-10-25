@@ -22,6 +22,7 @@ extern void pcf_test_terminate(void);
 extern bool notification_handler_callback(pcf_app_session_t *app_session, const OpenAPI_events_notification_t *notifications, void *user_data);
 extern bool ev_notification_handler_callback(pcf_app_session_t *app_session, const OpenAPI_events_notification_t *notifications, void *user_data);
 extern bool change_handler_callback(pcf_app_session_t *app_session, void *user_data);
+extern void result_handler_callback(pcf_app_session_t *app_session, const pcf_app_session_result_t *result, void *user_data);
 
 extern abts_suite *test_pcf(abts_suite *suite);
 

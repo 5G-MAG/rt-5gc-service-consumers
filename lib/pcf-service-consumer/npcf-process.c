@@ -13,6 +13,7 @@ https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
 #include "pcf-client-sess.h"
 #include "pcf-client.h"
 #include "context.h"
+#include "pcf-bdt.h"
 #include "utils.h"
 
 #include "npcf-process.h"
@@ -220,10 +221,20 @@ bool _pcf_process_event(ogs_event_t *e)
                 return true;
             }
             break;
+        case OGS_EVENT_SBI_TIMER:
+            /* the wait of a transaction that looks for a PCF through the NRF has run out */
+            return _pcf_bdt_process_timer_event(e);
+
         case OGS_EVENT_SBI_CLIENT:
         {
             int rv;
-            pcf_app_session_t *sess = e->sbi.data;
+            pcf_app_session_t *sess = NULL;
+
+            /* the answer to a request about a BDT policy */
+            if (_pcf_bdt_process_client_event(e))
+                return true;
+
+            sess = e->sbi.data;
             ogs_sbi_response_t *response = e->sbi.response;
             ogs_sbi_message_t message;
 

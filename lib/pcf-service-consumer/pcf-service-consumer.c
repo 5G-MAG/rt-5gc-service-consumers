@@ -11,10 +11,9 @@ https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
 #include "pcf-service-consumer.h"
 #include "pcf-client-sess.h"
 #include "npcf-process.h"
+#include "pcf-bdt.h"
 #include "utils.h"
 
-
-static int client_notify_cb(int status, ogs_sbi_response_t *response, void *data);
 
 pcf_session_t *pcf_session_new(const ogs_sockaddr_t *pcf_address)
 {
@@ -43,6 +42,7 @@ pcf_session_t *pcf_session_new(const ogs_sockaddr_t *pcf_address)
 
 void pcf_service_consumer_final(void)
 {
+    _pcf_bdt_policies_free_all();
     pcf_context_final();
 }
 
@@ -50,6 +50,7 @@ void pcf_session_free(pcf_session_t *session)
 {
     if (!session) return;
     pcf_sess_remove_all(session);  //Free pcf_app_sessions
+    _pcf_bdt_policies_remove_all(session);
     ogs_list_remove(&pcf_self()->pcf_sessions, session);
     if(session->pcf_addr)
     	ogs_freeaddrinfo(session->pcf_addr);
@@ -59,7 +60,7 @@ void pcf_session_free(pcf_session_t *session)
 }
 
 static bool create_app_session(pcf_session_t *session,
-                const ue_network_identifier_t *ue_connection, int events,
+                const ue_network_identifier_t *ue_connection, const pcf_app_session_options_t *options,
                 OpenAPI_list_t *media_component,
                 pcf_app_session_notification_callback notify_callback, void *notify_user_data,
                 pcf_app_session_change_callback change_callback, void *change_user_data,
@@ -69,7 +70,9 @@ static bool create_app_session(pcf_session_t *session,
     ogs_sbi_request_t *request;
     bool rv;
 
-    sess = _pcf_app_session_new(session, ue_connection, events, notify_callback, notify_user_data, change_callback, change_user_data);
+    /* the notifications of the events of the subscription details go to the same callback */
+    sess = _pcf_app_session_new(session, ue_connection,
+                                options->events | events_subsc_req_data_to_events_mask(options->events_subscription), notify_callback, notify_user_data, change_callback, change_user_data);
     if(!sess)
         return false;
     sess->result.callback = result_callback;
@@ -80,7 +83,7 @@ static bool create_app_session(pcf_session_t *session,
 
     _pcf_client_sess_ipv6prefix_set_from_sockaddr(sess, (const ogs_sockaddr_t *)sess->ue_network_identifier->address);
 
-    request = pcf_policyauthorization_request_create(sess, media_component, events);
+    request = pcf_policyauthorization_request_create(sess, media_component, options);
     if (!request) {
         /* nothing was sent, so nobody is waiting for an answer: the object goes without calling the callback */
         ogs_error("The request to create the application session context cannot be built");
@@ -102,7 +105,11 @@ bool pcf_session_create_app_session(pcf_session_t *session,
                 pcf_app_session_notification_callback notify_callback, void *notify_user_data,
                 pcf_app_session_change_callback change_callback, void *change_user_data)
 {
-    return create_app_session(session, ue_connection, events, media_component, notify_callback, notify_user_data,
+    pcf_app_session_options_t options;
+
+    memset(&options, 0, sizeof(options));
+    options.events = events;
+    return create_app_session(session, ue_connection, &options, media_component, notify_callback, notify_user_data,
                               change_callback, change_user_data, NULL, NULL);
 }
 
@@ -112,8 +119,23 @@ bool pcf_session_create_app_session_with_result(pcf_session_t *session,
                 pcf_app_session_notification_callback notify_callback, void *notify_user_data,
                 pcf_app_session_result_callback result_callback, void *result_user_data)
 {
+    pcf_app_session_options_t options;
+
     if (!result_callback) return false;
-    return create_app_session(session, ue_connection, events, media_component, notify_callback, notify_user_data,
+    memset(&options, 0, sizeof(options));
+    options.events = events;
+    return create_app_session(session, ue_connection, &options, media_component, notify_callback, notify_user_data,
+                              NULL, NULL, result_callback, result_user_data);
+}
+
+bool pcf_session_create_app_session_with_options(pcf_session_t *session,
+                const ue_network_identifier_t *ue_connection, const pcf_app_session_options_t *options,
+                OpenAPI_list_t *media_component,
+                pcf_app_session_notification_callback notify_callback, void *notify_user_data,
+                pcf_app_session_result_callback result_callback, void *result_user_data)
+{
+    if (!result_callback || !options) return false;
+    return create_app_session(session, ue_connection, options, media_component, notify_callback, notify_user_data,
                               NULL, NULL, result_callback, result_user_data);
 }
 
@@ -152,6 +174,11 @@ bool pcf_session_update_app_session(pcf_app_session_t *app_sess, OpenAPI_list_t 
     return false;
 }
 
+
+uint64_t pcf_app_session_get_features(const pcf_app_session_t *sess)
+{
+    return (sess && sess->pcf_app_session_id) ? sess->policyauthorization_features : 0;
+}
 
 void pcf_app_session_free(pcf_app_session_t *sess)
 {   
@@ -206,6 +233,7 @@ bool pcf_app_session_subscribe_event(pcf_app_session_t *app_session,
             return false;
         }
 
+        app_session->operation = PCF_APP_SESSION_OP_EVENTS;
         rv =  ogs_sbi_client_send_request(app_session->pcf_session->client, client_notify_cb, request, app_session);
 
         if (rv == false){
@@ -234,6 +262,7 @@ bool pcf_app_session_unsubscribe_event(pcf_app_session_t *app_session,
         return false;
     }
 
+    app_session->operation = PCF_APP_SESSION_OP_EVENTS;
     rv =  ogs_sbi_client_send_request(app_session->pcf_session->client, client_notify_cb, request, app_session);
 
     if (rv == false){
@@ -252,7 +281,7 @@ bool pcf_session_process_event(ogs_event_t *e)
 
 /******************* Private functions ********************/
 
-static int client_notify_cb(int status, ogs_sbi_response_t *response, void *data)
+int client_notify_cb(int status, ogs_sbi_response_t *response, void *data)
 {
     int rv;
     ogs_event_t *event;

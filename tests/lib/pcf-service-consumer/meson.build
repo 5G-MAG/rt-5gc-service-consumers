@@ -24,6 +24,8 @@ test5gc_pcf_sources = files('''
     pcf-test.h
     pcf-test.c
     pcf-test-session-new.c
+    pcf-test-bdt.h
+    pcf-test-bdt.c
    
 '''.split())
 

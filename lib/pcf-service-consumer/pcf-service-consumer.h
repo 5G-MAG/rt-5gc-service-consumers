@@ -123,7 +123,8 @@ typedef enum pcf_app_session_event_type_e {
     PCF_APP_SESSION_EVENT_TYPE_SUCCESSFUL_RESOURCES_ALLOCATION = 0x20000,
     PCF_APP_SESSION_EVENT_TYPE_TSN_BRIDGE_INFO = 0x40000,
     PCF_APP_SESSION_EVENT_TYPE_USAGE_REPORT = 0x80000,
-    PCF_APP_SESSION_EVENT_TYPE_ALL = 0xFFFFF
+    PCF_APP_SESSION_EVENT_TYPE_L4S_SUPP = 0x100000,
+    PCF_APP_SESSION_EVENT_TYPE_ALL = 0x1FFFFF
 } pcf_app_session_event_type_t;
 
 /**
@@ -153,6 +154,7 @@ typedef enum pcf_app_session_operation_e {
     PCF_APP_SESSION_OP_NONE = 0,
     PCF_APP_SESSION_OP_CREATE,      /**< the AppSessionContext was (or was not) created in the PCF */
     PCF_APP_SESSION_OP_UPDATE,      /**< the PCF accepted (or refused) the update */
+    PCF_APP_SESSION_OP_EVENTS,      /**< the PCF accepted (or refused) the change of the event subscription */
     PCF_APP_SESSION_OP_DELETE,      /**< the AppSessionContext was deleted (the object is released after the callback) */
     PCF_APP_SESSION_OP_TERMINATED   /**< the PCF ended the AppSessionContext by itself (the object is released after the callback) */
 } pcf_app_session_operation_t;
@@ -233,12 +235,47 @@ PCF_SVC_CONSUMER_API bool pcf_session_create_app_session_with_result(pcf_session
                 pcf_app_session_result_callback result_callback, void *result_user_data);
 
 /**
+ * What an AppSessionContext asks for beyond its media components
+ *
+ * Everything is borrowed: the library copies what it needs and the caller keeps and releases its own objects.
+ */
+typedef struct pcf_app_session_options_s {
+    int events;                     /**< The ORed `pcf_app_session_event_type_t` to subscribe to. */
+    /**
+     * The details of the event subscription (TS 29.514 V19.8.0 table 5.6.2.5-1): the events with their notification method, the
+     * QoS monitoring information and parameters, the usage threshold. Its events are subscribed in addition to `events`, and replace
+     * the entry of the same event in it; the notification URI is set by the library. NULL for none.
+     */
+    const OpenAPI_events_subsc_req_data_t *events_subscription;
+    const char *asp_id;             /**< The identity of the application service provider (aspId), or NULL. */
+    const char *spon_id;            /**< The sponsor of the data connectivity (sponId), or NULL. */
+    bool sponsoring_enabled;        /**< With asp_id and spon_id: the sponsoring status is SPONSOR_ENABLED, else SPONSOR_DISABLED. */
+} pcf_app_session_options_t;
+
+/**
+ * Create a new AppSessionContext with the options of the application, and be told the outcome of each operation on it
+ *
+ * Like pcf_session_create_app_session_with_result(), with `options` instead of the event mask.
+ */
+PCF_SVC_CONSUMER_API bool pcf_session_create_app_session_with_options(pcf_session_t *session,
+                const ue_network_identifier_t *ue_connection, const pcf_app_session_options_t *options,
+                OpenAPI_list_t *media_component,
+                pcf_app_session_notification_callback notify_callback, void *notify_user_data,
+                pcf_app_session_result_callback result_callback, void *result_user_data);
+
+/**
  * Update the MediaComponents for an AppSessionContext
  *
  * @param sess The AppSessionContext to update the MediaComponents for.
  * @param media_component The map of MediaComponentRm entries for the update.
  */
 PCF_SVC_CONSUMER_API bool pcf_session_update_app_session(pcf_app_session_t *sess, OpenAPI_list_t *media_component_rm_map);
+
+/**
+ * The optional features of the Npcf_PolicyAuthorization API that the PCF and the library both support for this AppSessionContext
+ * (TS 29.514 V19.8.0 table 5.8-1; feature n is bit n-1), as negotiated when it was created. 0 before the PCF has answered.
+ */
+PCF_SVC_CONSUMER_API uint64_t pcf_app_session_get_features(const pcf_app_session_t *sess);
 
 /**
  * Release an AppSessionContext
@@ -294,6 +331,138 @@ PCF_SVC_CONSUMER_API bool pcf_app_session_subscribe_event(pcf_app_session_t *app
  */
 PCF_SVC_CONSUMER_API bool pcf_app_session_unsubscribe_event(pcf_app_session_t *app_session,
                 OpenAPI_events_subsc_req_data_t *evt_subsc_req);
+
+
+/**
+ * Service consumer representation of an Individual BDT policy of the PCF (TS 29.554 V19.2.1)
+ */
+typedef struct pcf_bdt_policy_s pcf_bdt_policy_t;
+
+/**
+ * The service requirements of a Background Data Transfer (the BdtReqData of TS 29.554 V19.2.1 table 5.6.2.3-1)
+ *
+ * The strings are RFC 3339 date-times (for example "2030-03-05T00:00:00Z"). A volume that is not given is set to a negative
+ * value; at least one of them has to be given (the UsageThreshold of TS 29.122).
+ */
+typedef struct pcf_bdt_request_s {
+    const char *asp_id;             /**< The identity of the application service provider. */
+    const char *start_time;         /**< The start of the desired time window. */
+    const char *stop_time;          /**< The end of the desired time window. */
+    int num_of_ues;                 /**< The expected number of UEs, at least 1. */
+    int64_t total_volume;           /**< The volume per UE in bytes, or negative. */
+    int64_t downlink_volume;        /**< The downlink volume per UE in bytes, or negative. */
+    int64_t uplink_volume;          /**< The uplink volume per UE in bytes, or negative. */
+    int64_t duration;               /**< The duration in seconds, or negative. */
+    const char *dnn;                /**< The DNN, or NULL. */
+    const ogs_s_nssai_t *s_nssai;   /**< The slice, or NULL. */
+    const char *inter_group_id;     /**< The internal group identifier of a group of UEs, or NULL. */
+} pcf_bdt_request_t;
+
+/**
+ * One transfer policy that the PCF offers (the TransferPolicy of TS 29.554 V19.2.1 table 5.6.2.5-1)
+ *
+ * The strings belong to the pcf_bdt_policy_t that it was read from and are valid as long as that is.
+ */
+typedef struct pcf_bdt_transfer_policy_s {
+    int trans_policy_id;
+    int rating_group;
+    const char *start_time;         /**< The start of the recommended time window. */
+    const char *stop_time;          /**< The end of the recommended time window. */
+    const char *max_bit_rate_dl;    /**< The maximum aggregated bit rate downlink, or NULL. */
+    const char *max_bit_rate_ul;    /**< The maximum aggregated bit rate uplink, or NULL. */
+} pcf_bdt_transfer_policy_t;
+
+/**
+ * The operation that a result reports
+ */
+typedef enum pcf_bdt_operation_e {
+    PCF_BDT_OP_NONE = 0,
+    PCF_BDT_OP_CREATE,      /**< the Individual BDT policy was (or was not) created in the PCF */
+    PCF_BDT_OP_GET,         /**< the Individual BDT policy was (or was not) read from the PCF */
+    PCF_BDT_OP_SELECT,      /**< the PCF accepted (or refused) the selection of a transfer policy */
+    PCF_BDT_OP_DELETE       /**< the Individual BDT policy was deleted (the object is released after the callback) */
+} pcf_bdt_operation_t;
+
+/**
+ * The outcome of one operation on an Individual BDT policy
+ */
+typedef struct pcf_bdt_result_s {
+    pcf_bdt_operation_t operation;
+    bool success;
+    int http_status;                /**< Status of the PCF's answer; 0 if there was none (no connection, timeout, answer not usable). */
+    const char *problem_title;      /**< Title of the ProblemDetails of an error answer, or NULL. Valid during the callback only. */
+    const char *problem_detail;     /**< Detail of the ProblemDetails of an error answer, or NULL. Valid during the callback only. */
+    const char *problem_cause;      /**< Cause of the ProblemDetails of an error answer, or NULL. Valid during the callback only. */
+    const char *existing_policy_id; /**< For a create that the PCF answered with 303 See Other: the bdtPolicyId of the existing resource. */
+} pcf_bdt_result_t;
+
+/**
+ * Callback for the outcome of an operation on an Individual BDT policy
+ *
+ * Called exactly once for each operation that was started. After a failed create, a failed get and a delete the library releases
+ * @policy when the callback returns.
+ */
+typedef void (*pcf_bdt_result_callback)(pcf_bdt_policy_t *policy, const pcf_bdt_result_t *result, void *user_data);
+
+/**
+ * Ask the PCF for the transfer policies of a Background Data Transfer (Npcf_BDTPolicyControl_Create)
+ *
+ * The request is copied. The library offers the PatchCorrection feature, so a transfer policy is selected in the form of
+ * PatchBdtPolicy.
+ *
+ * @return `false` if the request was not sent; the callback is not called then.
+ */
+PCF_SVC_CONSUMER_API bool pcf_session_create_bdt_policy(pcf_session_t *session, const pcf_bdt_request_t *request,
+                pcf_bdt_result_callback callback, void *user_data);
+
+/**
+ * Read an existing Individual BDT policy from the PCF
+ *
+ * @param bdt_policy_id The bdtPolicyId of the resource, as the last segment of its URI.
+ */
+PCF_SVC_CONSUMER_API bool pcf_session_get_bdt_policy(pcf_session_t *session, const char *bdt_policy_id,
+                pcf_bdt_result_callback callback, void *user_data);
+
+/**
+ * Like pcf_session_create_bdt_policy() and pcf_session_get_bdt_policy(), with the PCF found through the NRF (a BDT policy is not
+ * tied to a UE, so there is no BSF binding to find it by): the first request goes to a PCF that the NRF names for the service
+ * npcf-bdtpolicycontrol, and the later requests of the policy to the PCF that answered. If the NRF names none, or the PCF does not
+ * answer in time, the callback gets a result without a policy (policy NULL, no http_status).
+ */
+PCF_SVC_CONSUMER_API bool pcf_discover_create_bdt_policy(const pcf_bdt_request_t *request,
+                pcf_bdt_result_callback callback, void *user_data);
+PCF_SVC_CONSUMER_API bool pcf_discover_get_bdt_policy(const char *bdt_policy_id,
+                pcf_bdt_result_callback callback, void *user_data);
+
+/** The BDT Reference ID of the policy, or NULL if the PCF has not answered. */
+PCF_SVC_CONSUMER_API const char *pcf_bdt_policy_get_ref_id(const pcf_bdt_policy_t *policy);
+
+/** The URI of the Individual BDT policy resource, or NULL if the PCF has not answered. */
+PCF_SVC_CONSUMER_API const char *pcf_bdt_policy_get_uri(const pcf_bdt_policy_t *policy);
+
+/** The number of transfer policies that the PCF offers. */
+PCF_SVC_CONSUMER_API int pcf_bdt_policy_get_num_transfer_policies(const pcf_bdt_policy_t *policy);
+
+/** Transfer policy @index (from 0) of the policy; `false` if there is none. */
+PCF_SVC_CONSUMER_API bool pcf_bdt_policy_get_transfer_policy(const pcf_bdt_policy_t *policy, int index,
+                pcf_bdt_transfer_policy_t *transfer_policy);
+
+/** The transPolicyId of the selected transfer policy, or 0 if none is selected. */
+PCF_SVC_CONSUMER_API int pcf_bdt_policy_get_selected_transfer_policy_id(const pcf_bdt_policy_t *policy);
+
+/**
+ * Select one of the transfer policies that the PCF offered (Npcf_BDTPolicyControl_Update)
+ *
+ * @return `false` if the request was not sent or @trans_policy_id is not the identity of an offered transfer policy.
+ */
+PCF_SVC_CONSUMER_API bool pcf_bdt_policy_select(pcf_bdt_policy_t *policy, int trans_policy_id);
+
+/**
+ * Delete the Individual BDT policy (Npcf_BDTPolicyControl_Delete)
+ *
+ * The object is released when the callback of the result has returned. If the delete cannot be sent the object is released at once.
+ */
+PCF_SVC_CONSUMER_API void pcf_bdt_policy_free(pcf_bdt_policy_t *policy);
 
 #ifdef __cplusplus
 }
