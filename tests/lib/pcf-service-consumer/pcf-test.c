@@ -15,6 +15,7 @@
 
 /* Local library includes */
 #include "pcf-service-consumer.h"
+#include "pcf-client.h"
 
 /* Unit test includes */
 #include "pcf-test-context.h"
@@ -40,13 +41,26 @@ static void test1_func(abts_case *tc, void *data);
 
 int pcf_test_initialise(void)
 {
+    bool no_scp, no_nrf;
     int rv;
+
+    rv = ogs_app_parse_local_conf("af");
+    if (rv != OGS_OK) return rv;
 
     ogs_sbi_context_init(OpenAPI_nf_type_AF);
     pcf_test_context_init();
 
+    no_scp = ogs_global_conf()->parameter.no_scp;
+    no_nrf = ogs_global_conf()->parameter.no_nrf;
+
+    ogs_global_conf()->parameter.no_scp = false;
+    ogs_global_conf()->parameter.no_nrf = false;
+
     rv = ogs_sbi_context_parse_config("af", "nrf", "scp");
     if (rv != OGS_OK) return rv;
+
+    ogs_global_conf()->parameter.no_scp = no_scp;
+    ogs_global_conf()->parameter.no_nrf = no_nrf;
 
     rv = pcf_test_context_parse_config();
     if (rv != OGS_OK) return rv;
@@ -176,13 +190,15 @@ static bool check_npcf_policyauthortization_evt_subsc_result(pcf_app_session_t *
 
 static bool check_npcf_policyauthortization_delete_result(pcf_app_session_t *result)
 {
-    	
-    if (!result->pcf_app_session_id) 
-	    return true;
-    return false;
+    /* the object is released after its deletion, and the callback has told the test */
+    return result == NULL;
 }
 
 
+/*
+ * The library is used from the thread of the event loop; this test calls it from its own thread, so it wakes the loop after each call for
+ * the request to go out.
+ */
 static void test1_func(abts_case *tc, void *data)
 {    
     int rv;
@@ -196,13 +212,11 @@ static void test1_func(abts_case *tc, void *data)
     ogs_ngap_message_t message;
     char ue_ipv4addr[OGS_ADDRSTRLEN];
     int i = 0;
-    pcf_app_session_t *af_pcf_app_session;
+    pcf_app_session_t *af_pcf_app_session = NULL; /* the object of the library, set by the change callback */
     OpenAPI_events_subsc_req_data_t *evt_subsc_req;
     ogs_sbi_server_t *server = NULL;
     ogs_sbi_header_t header;
     char *notif_uri;
-
-    af_pcf_app_session = ogs_calloc(1, sizeof(pcf_app_session_t));
 
     uint8_t tmp[OGS_HUGE_LEN];
     char *_gtp_payload = "34ff0024"
@@ -251,7 +265,7 @@ static void test1_func(abts_case *tc, void *data)
     test_ue->opc_string = "e8ed289deba952e4283b54e88e6183ca";
 
     /* gNB connects to AMF */
-    ngap = testngap_client(AF_INET);
+    ngap = testngap_client(1, AF_INET);
     ABTS_PTR_NOTNULL(tc, ngap);
 
     /* gNB connects to UPF */
@@ -510,13 +524,16 @@ static void test1_func(abts_case *tc, void *data)
                 ue_connection, PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF,
                 media_component,
                 notification_handler_callback, NULL,
-                change_handler_callback, af_pcf_app_session);
+                change_handler_callback, &af_pcf_app_session);
 
+    ogs_pollset_notify(ogs_app()->pollset);
     ABTS_INT_EQUAL(tc, 1, rv);
-   		
-    ogs_msleep(10000);
+
+    ogs_msleep(2000);
 
     ABTS_TRUE(tc, check_npcf_policyauthortization_af_session_create_result(af_pcf_app_session));
+    if (!af_pcf_app_session)
+        goto cleanup;
     ogs_msleep(100);
 
 
@@ -526,44 +543,47 @@ static void test1_func(abts_case *tc, void *data)
     ogs_assert(server);
 
     memset(&header, 0, sizeof(header));
-    header.service.name = (char *)OGS_SBI_SERVICE_NAME_NPCF_POLICYAUTHORIZATION;
+    header.service.name = (char *)OpenAPI_service_name_ToString(OpenAPI_service_name_npcf_policyauthorization);
     header.api.version = (char *)OGS_SBI_API_V1;
     header.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
     header.resource.component[1] = (char *)af_pcf_app_session->pcf_app_session_id;
     notif_uri = ogs_sbi_server_uri(server, &header);
 
-    evt_subsc_req = OpenAPI_events_subsc_req_data_create(events, notif_uri, NULL, NULL, NULL, NULL, NULL, NULL, true, 0);
+    evt_subsc_req = OpenAPI_events_subsc_req_data_create(events, notif_uri, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, true, 0, false, 0);
 
     pcf_app_session_subscribe_event(af_pcf_app_session, evt_subsc_req, notification_handler_callback, NULL);
-    
-    ogs_msleep(10000);
+    ogs_pollset_notify(ogs_app()->pollset);
+
+    ogs_msleep(2000);
 
     ABTS_TRUE(tc, check_npcf_policyauthortization_evt_subsc_result(af_pcf_app_session));
 
-    media_component = media_component_create(&af_param);
+    media_component = media_component_rm_create(&af_param);
     ogs_assert(media_component);
-    af_pcf_app_session->pcf_app_session_context_updates = NULL;
 
     pcf_session_update_app_session(af_pcf_app_session, media_component);
+    ogs_pollset_notify(ogs_app()->pollset);
 
-    ogs_msleep(10000);
+    ogs_msleep(2000);
 
     ABTS_TRUE(tc, check_npcf_policyauthortization_af_session_update_result(af_pcf_app_session));
 
     pcf_app_session_unsubscribe_event(af_pcf_app_session, evt_subsc_req);
-    
-    ogs_msleep(10000);
-    
+    ogs_pollset_notify(ogs_app()->pollset);
+
+    ogs_msleep(2000);
+
     pcf_app_session_free(af_pcf_app_session);
-    ogs_msleep(10000);
+    ogs_pollset_notify(ogs_app()->pollset);
+    ogs_msleep(2000);
 
     ABTS_TRUE(tc, check_npcf_policyauthortization_delete_result(af_pcf_app_session));
 
     if(evt_subsc_req) OpenAPI_events_subsc_req_data_free(evt_subsc_req);
 
+cleanup:
     pcf_session_free(pcf_session);
     ogs_msleep(100);
-    ogs_free(af_pcf_app_session);
 
 
     /* gNB disonncect from UPF */
@@ -582,19 +602,12 @@ bool notification_handler_callback(pcf_app_session_t *app_session, const OpenAPI
 }
 
 bool change_handler_callback(pcf_app_session_t *app_session, void *data){
+    pcf_app_session_t **result = (pcf_app_session_t **)data;
+
     ogs_debug("change_handler_callback(app_session=%p, data=%p)", app_session, data);
-    ogs_assert(app_session);
-    if(app_session){
-	pcf_app_session_t *result;
-        result	= (pcf_app_session_t *)data;
-	memcpy(result, app_session, sizeof(pcf_app_session_t));
-    }
-    if(!app_session || !data) {
-	    return false;
-    }
+    if (!result)
+        return false;
+    /* NULL: the AppSessionContext was destroyed, or could not be created */
+    *result = app_session;
     return true;
 }
-
-
-
-

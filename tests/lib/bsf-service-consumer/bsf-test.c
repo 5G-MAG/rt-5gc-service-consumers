@@ -499,6 +499,29 @@ static void test1_func(abts_case *tc, void *data)
     ABTS_TRUE(tc, check_pcf_address_result(&pcf_bind_result, bsf_sess));
     if (pcf_bind_result.pcf_address) ogs_free(pcf_bind_result.pcf_address);
 
+    /* TS 29.521 V19.7.0 table 5.3.2.3.2-1: the narrowing keys select the binding of the session */
+    {
+        bsf_pcf_binding_query_t query;
+        pcf_binding_result_t narrowed = {NULL};
+
+        memset(&query, 0, sizeof(query));
+        query.dnn = bsf_sess->dnn;
+        query.supi = bsf_sess->supi;
+        rv = bsf_retrieve_pcf_binding_for_pdu_session_narrowed(ue_address, &query, bsf_retrieve_pcf_binding_for_ue, &narrowed);
+        ABTS_INT_EQUAL(tc, 1, rv);
+        ogs_msleep(1000);
+        ABTS_TRUE(tc, check_pcf_address_result(&narrowed, bsf_sess));
+        if (narrowed.pcf_address) ogs_free(narrowed.pcf_address);
+
+        /* a DNN of another binding: the BSF answers 204 and no binding is handed to the callback */
+        memset(&narrowed, 0, sizeof(narrowed));
+        query.dnn = "no-such-dnn";
+        rv = bsf_retrieve_pcf_binding_for_pdu_session_narrowed(ue_address, &query, bsf_retrieve_pcf_binding_for_ue, &narrowed);
+        ABTS_INT_EQUAL(tc, 1, rv);
+        ogs_msleep(1000);
+        ABTS_TRUE(tc, narrowed.pcf_address == NULL);
+    }
+
     ogs_msleep(100);
 
     //ogs_msleep(900);

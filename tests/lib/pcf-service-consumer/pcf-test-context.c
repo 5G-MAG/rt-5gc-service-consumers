@@ -276,9 +276,9 @@ static ogs_sbi_client_t *find_client_by_fqdn(
         return NULL;
     }
 
-    client = ogs_sbi_client_find(scheme, addr);
+    client = ogs_sbi_client_find(scheme, NULL, 0, addr, NULL);
     if (!client) {
-        client = ogs_sbi_client_add(scheme, addr);
+        client = ogs_sbi_client_add(scheme, NULL, 0, addr, NULL);
         ogs_assert(client);
     }
 
@@ -295,8 +295,8 @@ void pcf_test_sess_associate_pcf_client(pcf_test_sess_t *sess)
 
     ogs_assert(sess);
 
-    scheme = ogs_app()->sbi.client.no_tls == false ?
-                OpenAPI_uri_scheme_https : OpenAPI_uri_scheme_http;
+    scheme = ogs_sbi_self()->tls.client.scheme;
+    ogs_assert(scheme);
 
     if (sess->pcf.fqdn && strlen(sess->pcf.fqdn))
         client = find_client_by_fqdn(scheme, sess->pcf.fqdn);
@@ -310,9 +310,12 @@ void pcf_test_sess_associate_pcf_client(pcf_test_sess_t *sess)
         }
 
         if (addr) {
-            client = ogs_sbi_client_find(scheme, addr);
+            ogs_sockaddr_t *addr4 = addr->ogs_sa_family == AF_INET ? addr : NULL;
+            ogs_sockaddr_t *addr6 = addr->ogs_sa_family == AF_INET6 ? addr : NULL;
+
+            client = ogs_sbi_client_find(scheme, NULL, 0, addr4, addr6);
             if (!client) {
-                client = ogs_sbi_client_add(scheme, addr);
+                client = ogs_sbi_client_add(scheme, NULL, 0, addr4, addr6);
                 ogs_assert(client);
             }
         }

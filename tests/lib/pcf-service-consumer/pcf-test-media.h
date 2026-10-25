@@ -11,12 +11,15 @@
 #define __TESTS_PCF_TEST_MEDIA_H
 
 #include "pcf-service-consumer.h"
+#include "af/npcf-build.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-OpenAPI_list_t *media_component_create(pcf_npcf_policyauthorization_param_t *af_param);
+OpenAPI_list_t *media_component_create(af_npcf_policyauthorization_param_t *af_param);
+/* The MediaComponentRm entries of an update (pcf_session_update_app_session()) */
+OpenAPI_list_t *media_component_rm_create(af_npcf_policyauthorization_param_t *af_param);
 
 #ifdef __cplusplus
 }

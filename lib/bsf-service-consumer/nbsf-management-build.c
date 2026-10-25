@@ -31,8 +31,12 @@ ogs_sbi_request_t *_nbsf_management_pcf_binding_build(bsf_client_sess_t *sess, v
     message.h.resource.component[0] =
         (char *)OGS_SBI_RESOURCE_NAME_PCF_BINDINGS;
 
-    message.param.ipv4addr = sess->ipv4addr;
-    message.param.ipv6prefix = sess->ipv6prefix;
+    /* TS 29.521 V19.7.0 table 5.3.2.3.2-1 note 1: one and only one of ipv4Addr, ipv6Prefix and macAddr48 is present */
+    if (sess->ipv4addr) {
+        message.param.ipv4addr = sess->ipv4addr;
+    } else {
+        message.param.ipv6prefix = sess->ipv6prefix;
+    }
     message.param.dnn = sess->dnn;
     if (sess->s_nssai_presence) {
         message.param.snssai_presence = true;

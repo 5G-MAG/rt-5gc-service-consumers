@@ -26,7 +26,6 @@ const struct testlist {
 static void terminate(void)
 {
     ogs_msleep(50);
-    pcf_terminate();
     test_child_terminate();
     af_sbi_close();
     pcf_test_terminate();
@@ -46,9 +45,6 @@ static void initialize(const char *const argv[])
     ogs_assert(rv == OGS_OK);
 
     rv = pcf_test_initialise();
-    ogs_assert(rv == OGS_OK);
-
-    rv = pcf_initialize();
     ogs_assert(rv == OGS_OK);
 
     rv = af_sbi_open();

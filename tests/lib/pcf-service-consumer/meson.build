@@ -33,8 +33,11 @@ test5gc_pcf_exe = executable('pcf-service-consumer',
     include_directories : srcinc,
     dependencies : [libtest5gc_dep, libscpcf_dep])
 
+# the test AF needs an af: section, which the configuration of the vonr test of Open5GS has
 test('pcf-service-consumer',
     test5gc_pcf_exe,
+    args : ['-c', meson.project_build_root() / 'subprojects' / 'open5gs' / 'configs' / 'vonr.yaml'],
+    timeout : 120,
     is_parallel : false,
     suite: 'app')
 

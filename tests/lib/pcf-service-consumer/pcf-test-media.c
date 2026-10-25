@@ -9,7 +9,7 @@ https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
 
 #include "pcf-test-media.h"
 
-OpenAPI_list_t *media_component_create(pcf_npcf_policyauthorization_param_t *pcf_param)
+OpenAPI_list_t *media_component_create(af_npcf_policyauthorization_param_t *pcf_param)
 {
     OpenAPI_list_t *MediaComponentList = NULL;
     OpenAPI_map_t *MediaComponentMap = NULL;
@@ -174,4 +174,34 @@ OpenAPI_list_t *media_component_create(pcf_npcf_policyauthorization_param_t *pcf
 
     return MediaComponentList;
 
+}
+OpenAPI_list_t *media_component_rm_create(af_npcf_policyauthorization_param_t *pcf_param)
+{
+    OpenAPI_list_t *MediaComponentList = NULL;
+    OpenAPI_map_t *MediaComponentMap = NULL;
+    OpenAPI_media_component_rm_t *MediaComponent = NULL;
+
+    ogs_assert(pcf_param);
+    ogs_assert(pcf_param->med_type);
+
+    MediaComponentList = OpenAPI_list_create();
+    ogs_assert(MediaComponentList);
+
+    /* The update names media component 0 of the application session and gives it a bit rate */
+    MediaComponent = ogs_calloc(1, sizeof(*MediaComponent));
+    ogs_assert(MediaComponent);
+
+    MediaComponent->med_comp_n = 0;
+    MediaComponent->f_status = OpenAPI_flow_status_ENABLED;
+    MediaComponent->med_type = pcf_param->med_type;
+    MediaComponent->mar_bw_dl = ogs_sbi_bitrate_to_string(128000, OGS_SBI_BITRATE_BPS);
+    MediaComponent->mar_bw_ul = ogs_sbi_bitrate_to_string(128000, OGS_SBI_BITRATE_BPS);
+
+    MediaComponentMap = OpenAPI_map_create(ogs_msprintf("%d", MediaComponent->med_comp_n), MediaComponent);
+    ogs_assert(MediaComponentMap);
+    ogs_assert(MediaComponentMap->key);
+
+    OpenAPI_list_add(MediaComponentList, MediaComponentMap);
+
+    return MediaComponentList;
 }
