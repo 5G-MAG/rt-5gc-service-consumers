@@ -180,6 +180,11 @@ uint64_t pcf_app_session_get_features(const pcf_app_session_t *sess)
     return (sess && sess->pcf_app_session_id) ? sess->policyauthorization_features : 0;
 }
 
+uint64_t pcf_app_session_get_features_hi(const pcf_app_session_t *sess)
+{
+    return (sess && sess->pcf_app_session_id) ? sess->policyauthorization_features_hi : 0;
+}
+
 void pcf_app_session_free(pcf_app_session_t *sess)
 {   
     ogs_sbi_request_t *request;

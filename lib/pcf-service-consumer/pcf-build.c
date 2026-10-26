@@ -71,7 +71,7 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
     ogs_debug("\n PCF policy authorization create (Request header): \n Method: [%s] \n URI: [%s] \n Service Name: [%s] \n Resource Component: [%s]\n", message.h.method, message.h.uri, message.h.service.name, message.h.resource.component[0]); 
 
     AscReqData.supp_feat =
-        ogs_uint64_to_string(sess->policyauthorization_features);
+        ogs_sbi_features_to_string(sess->policyauthorization_features, sess->policyauthorization_features_hi);
     ogs_assert(AscReqData.supp_feat);
 
     AscReqData.ue_ipv4 = sess->ipv4addr;

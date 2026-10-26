@@ -588,11 +588,22 @@ static void test1_func(abts_case *tc, void *data)
         ABTS_STR_EQUAL(tc, "asp-1", held->asp_id ? held->asp_id : "");
         ABTS_STR_EQUAL(tc, "sponsor-1", held->spon_id ? held->spon_id : "");
         ABTS_INT_EQUAL(tc, OpenAPI_sponsoring_status_SPONSOR_ENABLED, held->spon_status);
-        /* the features that the library offers and the PCF supports: SponsoredConnectivity (2), QoSMonitoring (16), L4S (63) */
-        ABTS_TRUE(tc, held->supp_feat && ogs_uint64_from_string_hexadecimal(held->supp_feat) ==
-                (((uint64_t)1 << 1) | ((uint64_t)1 << 15) | ((uint64_t)1 << 62)));
-        ABTS_TRUE(tc, pcf_app_session_get_features(af_pcf_app_session) ==
-                (((uint64_t)1 << 1) | ((uint64_t)1 << 15) | ((uint64_t)1 << 62)));
+        /*
+         * the features that the library offers and the PCF supports: SponsoredConnectivity (2), QoSMonitoring (16), AuthorizationWithRequiredQoS
+         * (17), PDUSetHandling (59), L4S (63), and above number 64 MpxMedia (68) and TrafficCharChange (69)
+         */
+        {
+            uint64_t lo = 0, hi = 0;
+            const uint64_t want_lo = ((uint64_t)1 << 1) | ((uint64_t)1 << 15) | ((uint64_t)1 << 16) | ((uint64_t)1 << 58) | ((uint64_t)1 << 62);
+            const uint64_t want_hi = ((uint64_t)1 << 3) | ((uint64_t)1 << 4);
+
+            ABTS_PTR_NOTNULL(tc, held->supp_feat);
+            if (held->supp_feat)
+                ogs_sbi_features_from_string(held->supp_feat, &lo, &hi);
+            ABTS_TRUE(tc, lo == want_lo && hi == want_hi);
+            ABTS_TRUE(tc, pcf_app_session_get_features(af_pcf_app_session) == want_lo);
+            ABTS_TRUE(tc, pcf_app_session_get_features_hi(af_pcf_app_session) == want_hi);
+        }
         ABTS_PTR_NOTNULL(tc, held->ev_subsc);
         if (held->ev_subsc) {
             ABTS_PTR_NOTNULL(tc, held->ev_subsc->usg_thres);

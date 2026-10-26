@@ -276,6 +276,8 @@ PCF_SVC_CONSUMER_API bool pcf_session_update_app_session(pcf_app_session_t *sess
  * (TS 29.514 V19.8.0 table 5.8-1; feature n is bit n-1), as negotiated when it was created. 0 before the PCF has answered.
  */
 PCF_SVC_CONSUMER_API uint64_t pcf_app_session_get_features(const pcf_app_session_t *sess);
+/* The negotiated features above number 64 (bit 0 is feature 65) */
+PCF_SVC_CONSUMER_API uint64_t pcf_app_session_get_features_hi(const pcf_app_session_t *sess);
 
 /**
  * Release an AppSessionContext

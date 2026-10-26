@@ -161,7 +161,7 @@ void pcf_policyauthorization_create(
     cJSON *app_sess_context;
     char *app_sess_context_text;
 
-    uint64_t supported_features = 0;
+    uint64_t supported_features = 0, supported_features_hi = 0;
     bool ok = false;
 
     if (!recvmsg->http.location) {
@@ -220,8 +220,9 @@ void pcf_policyauthorization_create(
     }
 
    
-    supported_features = ogs_uint64_from_string_hexadecimal(AscReqData->supp_feat);
+    ogs_sbi_features_from_string(AscReqData->supp_feat, &supported_features, &supported_features_hi);
     sess->policyauthorization_features &= supported_features;
+    sess->policyauthorization_features_hi &= supported_features_hi;
     sess->pcf_app_session_id = ogs_strdup(message.h.resource.component[1]);
 
     app_sess_context = OpenAPI_app_session_context_convertToJSON(AppSessionContext);

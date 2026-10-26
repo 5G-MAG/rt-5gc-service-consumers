@@ -19,8 +19,8 @@ static void bsf_client_init_config_test(abts_case *tc, void *data)
     int rv;
     rv = ogs_sbi_context_parse_config(NULL, "nrf", "scp");
     ABTS_INT_EQUAL(tc, OGS_OK, rv);
-    rv = bsf_parse_config("bsf", NULL);
-    ABTS_INT_EQUAL(tc, OGS_OK, rv);
+    /* the library reads the section of the application that uses it (af); it answers true when the section is usable */
+    ABTS_TRUE(tc, bsf_parse_config("af", NULL));
 }
 
 abts_suite *test_bsf_init_config(abts_suite *suite)
