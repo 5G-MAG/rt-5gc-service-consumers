@@ -1,4 +1,6 @@
 [wrap-git]
 directory = open5gs
 url = https://github.com/5G-MAG/open5gs.git
-revision = feature/mbs-compliance-fixes
+revision = 5mbs
+# Pinned to 5mbs. The MBS compliance work is on feature/mbs-compliance-fixes until it is merged into
+# 5mbs. Until then, build with revision = feature/mbs-compliance-fixes.

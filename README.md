@@ -132,6 +132,18 @@ cd ~
 git clone --recurse-submodules https://github.com/5G-MAG/rt-5gc-service-consumers.git
 ```
 
+### Testing other branches
+
+The wrap files in `subprojects/` pin the repositories this branch is built against, and they pin their
+`main` branches (`5mbs` for `open5gs`). Work that has not yet been merged into those branches is not in
+the pins, so a clean build against them as committed may not compile. To test other branches, adapt
+the pinned repositories: edit the `url` and `revision` lines of the matching `.wrap` file in
+`subprojects/` before running `meson setup`. For example, set
+`revision = feature/mbs-compliance-fixes` in `subprojects/open5gs.wrap`.
+
+If a `subprojects/<name>` directory already exists as a checkout, Meson uses it and ignores the wrap
+file, so check out the branch there instead.
+
 ## Building
 
 The build needs a working Internet connection, as project dependencies are downloaded during the
