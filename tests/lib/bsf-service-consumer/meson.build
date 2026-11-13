@@ -35,7 +35,7 @@ test5gc_bsf_exe = executable('bsf-service-consumer',
 # the test AF needs an af: section, which the configuration of the vonr test of Open5GS has
 test('bsf-service-consumer',
     test5gc_bsf_exe,
-    args : ['-c', meson.project_build_root() / 'subprojects' / 'open5gs' / 'configs' / 'vonr.yaml'],
+    args : ['-c', meson.global_build_root() / 'subprojects' / 'open5gs' / 'configs' / 'vonr.yaml'],
     timeout : 120,
     is_parallel : false,
     suite: 'app')
