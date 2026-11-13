@@ -554,7 +554,11 @@ static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *se
         mbs_fsa_ids,          /* mbs_fsa_id_list */
         mbs_security_ctx,     /* mbs_security_context */
         have_contact_pcf_ind, /* is_contact_pcf_ind */
-        contact_pcf_ind       /* contact_pcf_ind */
+        contact_pcf_ind,      /* contact_pcf_ind */
+        NULL,                 /* nr_red_cap_ue_info */
+        false,                /* is_area_session_policy_id */
+        0,                    /* area_session_policy_id */
+        NULL                  /* associated_session_id */
     );
     if (!ext_mbs_session) {
         ogs_error("Failed to allocate ExtMbsSession");
