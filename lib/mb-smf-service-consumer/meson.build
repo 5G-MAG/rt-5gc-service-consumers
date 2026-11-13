@@ -1,0 +1,161 @@
+# License: 5G-MAG Public License (v1.0)
+# Copyright: (C) 2025 British Broadcasting Corporation
+# Author(s): David Waring <david.waring2@bbc.co.uk>
+#
+# For full license terms please see the LICENSE file distributed with this
+# program. If this file is missing then the license can be retrieved from
+# https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
+
+libapp_dep = open5gs_project.get_variable('libapp_dep')
+libcore_dep = open5gs_project.get_variable('libcore_dep')
+libcrypt_dep = open5gs_project.get_variable('libcrypt_dep')
+libsbi_dep = open5gs_project.get_variable('libsbi_dep')
+libinc = open5gs_project.get_variable('libinc')
+libsbi_openapi_inc = open5gs_project.get_variable('libsbi_openapi_inc')
+
+libscmbsmf_version_major = 1
+libscmbsmf_version_minor = 0
+libscmbsmf_version_micro = 0
+
+libscmbsmf_version = '@0@.@1@.@2@'.format(libscmbsmf_version_major,libscmbsmf_version_minor,libscmbsmf_version_micro)
+libscmbsmf_title = 'MB-SMF service consumer library'
+libscmbsmf_description = 'Library that provides a C language API for communicating, as a client, with the MB-SMF using the Nmbsmf_Tmgi and Nmbsmf_MBSSession APIs via reference point Nmb1.'
+
+libscmbsmf_sources = files('''
+    mb-smf-service-consumer.c
+    mb-smf-service-consumer.h
+    arp.c
+    arp.h
+    associated-session-id.c
+    associated-session-id.h
+    civic-address.c
+    civic-address.h
+    context.c
+    context.h
+    ext-mbs-service-area.c
+    ext-mbs-service-area.h
+    flow-description.c
+    flow-description.h
+    geographic-area.c
+    geographic-area.h
+    geographic-coordinate.c
+    geographic-coordinate.h
+    json-patch.c
+    json-patch.h
+    log.c
+    log.h
+    macros.h
+    mbs-fsa-id.c
+    mbs-fsa-id.h
+    mbs-media-comp.c
+    mbs-media-comp.h
+    mbs-media-info.c
+    mbs-media-info.h
+    mbs-qos-req.c
+    mbs-qos-req.h
+    mbs-service-area.c
+    mbs-service-area.h
+    mbs-service-info.c
+    mbs-service-info.h
+    mbs-session.c
+    mbs-session.h
+    mbs-status-subscription.c
+    mbs-status-subscription.h
+    ncgi.c
+    ncgi.h
+    ncgi-tai.c
+    ncgi-tai.h
+    nmbsmf-mbs-session-build.c
+    nmbsmf-mbs-session-build.h
+    nmbsmf-mbs-session-handle.c
+    nmbsmf-mbs-session-handle.h
+    nmbsmf-tmgi-build.c
+    nmbsmf-tmgi-build.h
+    nmbsmf-tmgi-handle.c
+    nmbsmf-tmgi-handle.h
+    nnrf-disc-handle.c
+    nnrf-disc-handle.h
+    priv_arp.h
+    priv_associated-session-id.h
+    priv_civic-address.h
+    priv_ext-mbs-service-area.h
+    priv_flow-description.h
+    priv_geographic-area.h
+    priv_geographic-coordinate.h
+    priv_mbs-fsa-id.h
+    priv_mbs-media-comp.h
+    priv_mbs-media-info.h
+    priv_mbs-qos-req.h
+    priv_mbs-service-area.h
+    priv_mbs-service-info.h
+    priv_mbs-session.h
+    priv_mbs-status-subscription.h
+    priv_ncgi.h
+    priv_ncgi-tai.h
+    priv_ssm-addr.h
+    priv_tai.h
+    priv_tmgi.h
+    ref_count_sbi_object.h
+    ssm-addr.c
+    ssm-addr.h
+    tai.c
+    tai.h
+    tmgi.c
+    tmgi.h
+    utils.c
+    utils.h
+
+    openapi_status_notify_req_data.c
+    openapi_status_subscribe_req_data.c
+    openapi_status_subscribe_rsp_data.c
+'''.split())
+
+libscmbsmf_public_hdrs = files('''
+    macros.h
+    arp.h
+    associated-session-id.h
+    civic-address.h
+    ext-mbs-service-area.h
+    flow-description.h
+    geographic-area.h
+    geographic-coordinate.h
+    mbs-fsa-id.h
+    mbs-media-comp.h
+    mbs-media-info.h
+    mbs-qos-req.h
+    mb-smf-service-consumer.h
+    mbs-service-area.h
+    mbs-service-info.h
+    mbs-session.h
+    mbs-status-subscription.h
+    ncgi.h
+    ncgi-tai.h
+    ssm-addr.h
+    tai.h
+    tmgi.h
+'''.split())
+
+libscmbsmf_inc = include_directories('.')
+
+libscmbsmf = library('scmbsmf',
+    sources : libscmbsmf_sources,
+    c_args : '-DBUILD_MB_SMF_CLIENT_LIB',
+    include_directories : [libscmbsmf_inc, libinc],
+    gnu_symbol_visibility : 'hidden',
+    dependencies : [libapp_dep,
+                    libcore_dep,
+                    libcrypt_dep,
+		    libsbi_dep],
+    version : libscmbsmf_version,
+    soversion : libscmbsmf_version_major.to_string(),
+    install : true)
+
+libscmbsmf_dep = declare_dependency(
+    link_with : libscmbsmf,
+    include_directories : [libscmbsmf_inc, libinc],
+    dependencies : [libapp_dep,
+                    libcore_dep,
+                    libcrypt_dep,
+		    libsbi_dep]
+    )
+
