@@ -649,6 +649,59 @@ static bool test_create_sess(unit_test_ctx *ctx)
     return true;
 }
 
+/* The Associated Session Id (TS 29.571 AssociatedSessionId: an Ssm or a string) of a session reaches the Nmbsmf Create request */
+static bool __associated_id_in_create(const char *string, bool ssm, cJSON **out_assoc)
+{
+    _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
+    session->session.associated_session_id = _associated_session_id_new();
+    if (string) {
+        session->session.associated_session_id->string = ogs_strdup(string);
+    } else if (ssm) {
+        session->session.associated_session_id->ssm.family = AF_INET;
+        inet_pton(AF_INET, "10.1.2.3", &session->session.associated_session_id->ssm.source.ipv4);
+        inet_pton(AF_INET, "232.9.8.7", &session->session.associated_session_id->ssm.dest_mc.ipv4);
+    }
+    ogs_sbi_request_t *req = _nmbsmf_mbs_session_build_create((void*)session, NULL);
+    UT_PTR_NOT_NULL(req);
+    cJSON *json = cJSON_Parse(req->http.content);
+    UT_PTR_NOT_NULL(json);
+    cJSON *mbs_session = cJSON_GetObjectItemCaseSensitive(json, "mbsSession");
+    UT_PTR_NOT_NULL(mbs_session);
+    cJSON *assoc = cJSON_GetObjectItemCaseSensitive(mbs_session, "associatedSessionId");
+    *out_assoc = assoc ? cJSON_Duplicate(assoc, 1) : NULL;
+    cJSON_Delete(json);
+    _mbs_session_free(session);
+    ogs_sbi_request_free(req);
+    return true;
+}
+
+static bool test_create_sess_associated_session_id(unit_test_ctx *ctx)
+{
+    cJSON *assoc = NULL;
+
+    UT_BOOL_TRUE(__associated_id_in_create("mocn-session-7", false, &assoc));
+    UT_PTR_NOT_NULL(assoc);
+    UT_BOOL_TRUE(cJSON_IsString(assoc));
+    UT_STR_EQUAL(assoc->valuestring, "mocn-session-7");
+    cJSON_Delete(assoc);
+
+    UT_BOOL_TRUE(__associated_id_in_create(NULL, true, &assoc));
+    UT_PTR_NOT_NULL(assoc);
+    UT_BOOL_TRUE(cJSON_IsObject(assoc));
+    cJSON *src = cJSON_GetObjectItemCaseSensitive(assoc, "sourceIpAddr");
+    cJSON *dst = cJSON_GetObjectItemCaseSensitive(assoc, "destIpAddr");
+    UT_PTR_NOT_NULL(src);
+    UT_PTR_NOT_NULL(dst);
+    UT_STR_EQUAL(cJSON_GetObjectItemCaseSensitive(src, "ipv4Addr")->valuestring, "10.1.2.3");
+    UT_STR_EQUAL(cJSON_GetObjectItemCaseSensitive(dst, "ipv4Addr")->valuestring, "232.9.8.7");
+    cJSON_Delete(assoc);
+
+    /* none set: none sent */
+    UT_BOOL_TRUE(__associated_id_in_create(NULL, false, &assoc));
+    UT_PTR_NULL(assoc);
+    return true;
+}
+
 static bool test_create_sess_with_subsc(unit_test_ctx *ctx)
 {
     _priv_mbs_session_t *session = (_priv_mbs_session_t*)ogs_calloc(1, sizeof(*session));
@@ -1457,6 +1510,11 @@ static const unit_test_t test_create_sess_desc = {
     .fn = test_create_sess
 };
 
+static const unit_test_t test_create_sess_associated_session_id_desc = {
+    .name = "nmbsmf-mbs-session: the Associated Session Id of a session is sent in the Create request",
+    .fn = test_create_sess_associated_session_id
+};
+
 static const unit_test_t test_create_sess_with_subsc_desc = {
     .name = "nmbsmf-mbssession: create session with subscription builder",
     .fn = test_create_sess_with_subsc
@@ -1500,6 +1558,7 @@ static void _init_fn()
     register_unit_test(&test_delete_tmgi_desc);
 
     register_unit_test(&test_create_sess_desc);
+    register_unit_test(&test_create_sess_associated_session_id_desc);
     register_unit_test(&test_create_sess_with_subsc_desc);
     register_unit_test(&test_create_sess_all_fields_desc);
     register_unit_test(&test_update_sess_desc);

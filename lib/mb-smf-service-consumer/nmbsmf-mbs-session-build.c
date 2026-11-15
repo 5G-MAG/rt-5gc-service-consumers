@@ -22,6 +22,7 @@
 #include "priv_ncgi.h"
 #include "priv_tai.h"
 #include "priv_ssm-addr.h"
+#include "priv_associated-session-id.h"
 #include "priv_mbs-session.h"
 #include "priv_civic-address.h"
 #include "priv_ext-mbs-service-area.h"
@@ -442,6 +443,7 @@ static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *se
 
     OpenAPI_ssm_t *ssm = NULL;
     OpenAPI_mbs_session_id_t *mbs_session_id = __make_mbs_session_id(session, &ssm);
+    OpenAPI_associated_session_id_t *associated_session_id = _associated_session_id_to_openapi(session->session.associated_session_id);
     bool have_tmgi_req = session->session.tmgi_req;
     bool have_locn_dependent = session->session.location_dependent;
     bool have_tun_req = session->session.tunnel_req;
@@ -557,7 +559,7 @@ static OpenAPI_ext_mbs_session_t *__make_ext_mbs_session(_priv_mbs_session_t *se
         have_any_ue_ind,      /* is_any_ue_ind */
         any_ue_ind,           /* any_ue_ind */
         mbs_fsa_ids,          /* mbs_fsa_id_list */
-        NULL,                 /* associated_session_id */
+        associated_session_id, /* associated_session_id */
         OpenAPI_nr_red_cap_ue_info_NULL, /* nr_red_cap_ue_info */
         mbs_security_ctx,     /* mbs_security_context */
         have_contact_pcf_ind, /* is_contact_pcf_ind */

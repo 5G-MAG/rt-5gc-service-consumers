@@ -23,6 +23,8 @@ void _associated_session_id_free(mb_smf_sc_associated_session_id_t *associated_s
 void _associated_session_id_clear(mb_smf_sc_associated_session_id_t *associated_session_id);
 void _associated_session_id_copy(mb_smf_sc_associated_session_id_t **dst, const mb_smf_sc_associated_session_id_t *src);
 bool _associated_session_id_equal(const mb_smf_sc_associated_session_id_t *a, const mb_smf_sc_associated_session_id_t *b);
+/* The TS 29.571 AssociatedSessionId (an Ssm or a string) for a Nmbsmf request, or NULL when none is set */
+struct OpenAPI_associated_session_id_s *_associated_session_id_to_openapi(const mb_smf_sc_associated_session_id_t *associated_session_id);
 
 #ifdef __cplusplus
 }

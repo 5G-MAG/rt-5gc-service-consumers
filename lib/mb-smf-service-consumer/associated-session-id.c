@@ -8,6 +8,7 @@
  * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
  */
 #include "ogs-core.h"
+#include "ogs-sbi.h"
 
 #include "macros.h"
 #include "ssm-addr.h"
@@ -85,6 +86,23 @@ bool _associated_session_id_equal(const mb_smf_sc_associated_session_id_t *a, co
     if (!_ssm_addr_equal(&a->ssm, &b->ssm)) return false;
 
     return true;
+}
+
+struct OpenAPI_associated_session_id_s *_associated_session_id_to_openapi(const mb_smf_sc_associated_session_id_t *associated_session_id)
+{
+    if (!associated_session_id) return NULL;
+
+    if (associated_session_id->string) {
+        return OpenAPI_associated_session_id_create(NULL, ogs_strdup(associated_session_id->string));
+    }
+
+    if (associated_session_id->ssm.family == AF_INET || associated_session_id->ssm.family == AF_INET6) {
+        OpenAPI_ssm_t *ssm = _ssm_addr_to_openapi(&associated_session_id->ssm);
+        if (!ssm) return NULL;
+        return OpenAPI_associated_session_id_create(ssm, NULL);
+    }
+
+    return NULL;
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:
