@@ -66,8 +66,8 @@ int _nmbsmf_tmgi_allocated(ogs_sbi_xact_t *xact, ogs_sbi_message_t *message)
                 continue;
             }
             _tmgi_set_mbs_service_id(tmgi, api_tmgi->mbs_service_id);
-            _tmgi_set_plmn(tmgi, (uint16_t)ogs_uint64_from_string_hexadecimal((char *)api_tmgi->plmn_id->mcc),
-                                 (uint16_t)ogs_uint64_from_string_hexadecimal((char *)api_tmgi->plmn_id->mnc));
+            _tmgi_set_plmn(tmgi, (uint16_t)ogs_uint64_from_string_decimal((char *)api_tmgi->plmn_id->mcc),
+                                 (uint16_t)ogs_uint64_from_string_decimal((char *)api_tmgi->plmn_id->mnc));
             _tmgi_set_expiry_time(tmgi, expiry_time);
             if (tmgi->callback) {
                 tmgi->callback(_priv_tmgi_to_public(tmgi), OGS_OK, NULL, tmgi->callback_data);

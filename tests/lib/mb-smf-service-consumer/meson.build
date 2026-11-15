@@ -46,6 +46,7 @@ nmbsmf_builders_src = files('''
     lib-nmbsmf-mbs-session-build.c
     lib-nmbsmf-mbs-session-handle.c
     lib-nmbsmf-tmgi-build.c
+    lib-nmbsmf-tmgi-handle.c
     lib-ssm-addr.c
     lib-tai.c
     lib-tmgi.c
