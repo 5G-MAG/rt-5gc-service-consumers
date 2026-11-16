@@ -26,6 +26,7 @@ nmbsmf_builders_src = files('''
     nmbsmf-builders.c
     nmbsmf-parsers.c
     ncgi-tai-cells.c
+    geographic-area-shapes.c
 
     lib-arp.c
     lib-associated-session-id.c

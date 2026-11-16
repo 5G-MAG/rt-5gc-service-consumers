@@ -140,6 +140,71 @@ struct mb_smf_sc_geographic_area_s {
  */
 MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_point_new(double longitude, double latitude);
 
+/** Create a point with uncertainty circle Geographic Area
+ * @memberof mb_smf_sc_geographic_area_s
+ * @static
+ * @public
+ *
+ * @param longitude The longitude for the point.
+ * @param latitude The latitude for the point.
+ * @param uncertainty The radius of the uncertainty circle (0 or more).
+ *
+ * @return A new Point with uncertainty circle Geographic Area.
+ */
+MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_point_uncertainty_circle_new(double longitude, double latitude, float uncertainty);
+
+/** Create a point with uncertainty ellipse Geographic Area
+ * @memberof mb_smf_sc_geographic_area_s
+ * @static
+ * @public
+ *
+ * @param orientation_major Degrees, 0 to 180.
+ * @param confidence Percent, 0 to 100.
+ *
+ * @return A new Point with uncertainty ellipse Geographic Area.
+ */
+MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_point_uncertainty_ellipse_new(double longitude, double latitude, float semi_major, float semi_minor, uint8_t orientation_major, uint8_t confidence);
+
+/** Create an empty polygon Geographic Area; add its 3 to 15 points with mb_smf_sc_ga_polygon_add_point()
+ * @memberof mb_smf_sc_geographic_area_s
+ * @static
+ * @public
+ */
+MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_polygon_new();
+
+/** Add a point to a polygon Geographic Area
+ * @memberof mb_smf_sc_geographic_area_s
+ * @public
+ *
+ * @return true if the area is a polygon and the point was added.
+ */
+MB_SMF_CLIENT_API bool mb_smf_sc_ga_polygon_add_point(mb_smf_sc_geographic_area_t *area, double longitude, double latitude);
+
+/** Create a point with altitude Geographic Area
+ * @memberof mb_smf_sc_geographic_area_s
+ * @static
+ * @public
+ *
+ * @param altitude Metres, -32767 to 32767.
+ */
+MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_point_altitude_new(double longitude, double latitude, double altitude);
+
+/** Create a point with altitude and uncertainty ellipsoid Geographic Area
+ * @memberof mb_smf_sc_geographic_area_s
+ * @static
+ * @public
+ *
+ * @param v_confidence NULL, or the vertical confidence in percent (0 to 100).
+ */
+MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_point_altitude_uncertainty_new(double longitude, double latitude, double altitude, float semi_major, float semi_minor, uint8_t orientation_major, float uncertainty_altitude, uint8_t confidence, const uint8_t *v_confidence);
+
+/** Create an ellipsoid arc Geographic Area
+ * @memberof mb_smf_sc_geographic_area_s
+ * @static
+ * @public
+ */
+MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_ellipsoid_arc_new(double longitude, double latitude, uint32_t inner_radius, float uncertainty_radius, uint16_t offset_angle, uint16_t included_angle, uint8_t confidence);
+
 /** Destroy a Geographic Area
  * @memberof mb_smf_sc_geographic_area_s
  * @public

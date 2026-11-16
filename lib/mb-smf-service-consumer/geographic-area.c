@@ -29,6 +29,91 @@ MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_point_new(double lon
     return ret;
 }
 
+MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_point_uncertainty_circle_new(double longitude, double latitude, float uncertainty)
+{
+    mb_smf_sc_geographic_area_t *ret = _geographic_area_new();
+    ret->shape = GEOGRAPHIC_AREA_SHAPE_POINT_UNCERTAINTY_CIRCLE;
+    _geographic_coordinate_set(&ret->point_uncertainty_circle.point, longitude, latitude);
+    ret->point_uncertainty_circle.uncertainty = uncertainty;
+
+    return ret;
+}
+
+MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_point_uncertainty_ellipse_new(double longitude, double latitude, float semi_major, float semi_minor, uint8_t orientation_major, uint8_t confidence)
+{
+    mb_smf_sc_geographic_area_t *ret = _geographic_area_new();
+    ret->shape = GEOGRAPHIC_AREA_SHAPE_POINT_UNCERTAINTY_ELLIPSE;
+    _geographic_coordinate_set(&ret->point_uncertainty_ellipse.point, longitude, latitude);
+    ret->point_uncertainty_ellipse.semi_major = semi_major;
+    ret->point_uncertainty_ellipse.semi_minor = semi_minor;
+    ret->point_uncertainty_ellipse.orientation_major = orientation_major;
+    ret->point_uncertainty_ellipse.confidence = confidence;
+
+    return ret;
+}
+
+MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_polygon_new()
+{
+    mb_smf_sc_geographic_area_t *ret = _geographic_area_new();
+    ret->shape = GEOGRAPHIC_AREA_SHAPE_POLYGON;
+    ogs_list_init(&ret->polygon.points);
+
+    return ret;
+}
+
+MB_SMF_CLIENT_API bool mb_smf_sc_ga_polygon_add_point(mb_smf_sc_geographic_area_t *area, double longitude, double latitude)
+{
+    if (!area || area->shape != GEOGRAPHIC_AREA_SHAPE_POLYGON) return false;
+    mb_smf_sc_geographic_coordinate_t *coord = _geographic_coordinate_new();
+    _geographic_coordinate_set(coord, longitude, latitude);
+    ogs_list_add(&area->polygon.points, coord);
+
+    return true;
+}
+
+MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_point_altitude_new(double longitude, double latitude, double altitude)
+{
+    mb_smf_sc_geographic_area_t *ret = _geographic_area_new();
+    ret->shape = GEOGRAPHIC_AREA_SHAPE_POINT_ALTITUDE;
+    _geographic_coordinate_set(&ret->point_altitude.point, longitude, latitude);
+    ret->point_altitude.altitude = altitude;
+
+    return ret;
+}
+
+MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_point_altitude_uncertainty_new(double longitude, double latitude, double altitude, float semi_major, float semi_minor, uint8_t orientation_major, float uncertainty_altitude, uint8_t confidence, const uint8_t *v_confidence)
+{
+    mb_smf_sc_geographic_area_t *ret = _geographic_area_new();
+    ret->shape = GEOGRAPHIC_AREA_SHAPE_POINT_ALTITUDE_UNCERTAINTY;
+    _geographic_coordinate_set(&ret->point_altitude_uncertainty.point, longitude, latitude);
+    ret->point_altitude_uncertainty.altitude = altitude;
+    ret->point_altitude_uncertainty.semi_major = semi_major;
+    ret->point_altitude_uncertainty.semi_minor = semi_minor;
+    ret->point_altitude_uncertainty.orientation_major = orientation_major;
+    ret->point_altitude_uncertainty.uncertainty_altitude = uncertainty_altitude;
+    ret->point_altitude_uncertainty.confidence = confidence;
+    if (v_confidence) {
+        ret->point_altitude_uncertainty.v_confidence = (uint8_t*)ogs_malloc(sizeof(uint8_t));
+        *ret->point_altitude_uncertainty.v_confidence = *v_confidence;
+    }
+
+    return ret;
+}
+
+MB_SMF_CLIENT_API mb_smf_sc_geographic_area_t *mb_smf_sc_ga_ellipsoid_arc_new(double longitude, double latitude, uint32_t inner_radius, float uncertainty_radius, uint16_t offset_angle, uint16_t included_angle, uint8_t confidence)
+{
+    mb_smf_sc_geographic_area_t *ret = _geographic_area_new();
+    ret->shape = GEOGRAPHIC_AREA_SHAPE_ELLIPSOID_ARC;
+    _geographic_coordinate_set(&ret->ellipsoid_arc.point, longitude, latitude);
+    ret->ellipsoid_arc.inner_radius = inner_radius;
+    ret->ellipsoid_arc.uncertainty_radius = uncertainty_radius;
+    ret->ellipsoid_arc.offset_angle = offset_angle;
+    ret->ellipsoid_arc.included_angle = included_angle;
+    ret->ellipsoid_arc.confidence = confidence;
+
+    return ret;
+}
+
 MB_SMF_CLIENT_API void mb_smf_sc_geographic_area_delete(mb_smf_sc_geographic_area_t *area)
 {
     _geographic_area_free(area);
@@ -221,9 +306,14 @@ void _geographic_area_clear(mb_smf_sc_geographic_area_t *geog_area)
     case GEOGRAPHIC_AREA_SHAPE_ELLIPSOID_ARC:
         /* nothing to free */
         break;
-    case GEOGRAPHIC_AREA_SHAPE_POLYGON:
-        /* TODO: loop through polygon and free coords */
+    case GEOGRAPHIC_AREA_SHAPE_POLYGON: {
+        mb_smf_sc_geographic_coordinate_t *next, *coord;
+        ogs_list_for_each_safe(&geog_area->polygon.points, next, coord) {
+            ogs_list_remove(&geog_area->polygon.points, coord);
+            _geographic_coordinate_free(coord);
+        }
         break;
+    }
     case GEOGRAPHIC_AREA_SHAPE_POINT_ALTITUDE_UNCERTAINTY:
         if (geog_area->point_altitude_uncertainty.v_confidence) {
             ogs_free(geog_area->point_altitude_uncertainty.v_confidence);
@@ -304,10 +394,16 @@ void _geographic_area_copy(mb_smf_sc_geographic_area_t **dst, const mb_smf_sc_ge
     case GEOGRAPHIC_AREA_SHAPE_ELLIPSOID_ARC:
         /* no pointers or special types, just copy memory, nothing more to do */
         break;
-    case GEOGRAPHIC_AREA_SHAPE_POLYGON:
+    case GEOGRAPHIC_AREA_SHAPE_POLYGON: {
+        const mb_smf_sc_geographic_coordinate_t *src_coord;
         ogs_list_init(&(*dst)->polygon.points);
-        /* TODO: loop through polygon and copy coords */
+        ogs_list_for_each(&src->polygon.points, src_coord) {
+            mb_smf_sc_geographic_coordinate_t *coord = _geographic_coordinate_new();
+            _geographic_coordinate_set(coord, src_coord->longitude, src_coord->latitude);
+            ogs_list_add(&(*dst)->polygon.points, coord);
+        }
         break;
+    }
     case GEOGRAPHIC_AREA_SHAPE_POINT_ALTITUDE_UNCERTAINTY:
         if (src->point_altitude_uncertainty.v_confidence) {
             (*dst)->point_altitude_uncertainty.v_confidence = (uint8_t*)ogs_malloc(sizeof(uint8_t));
@@ -363,9 +459,15 @@ bool _geographic_area_equal(const mb_smf_sc_geographic_area_t *a, const mb_smf_s
     if (a == b) return true;
     if (!a || !b) return false;
 
-    /* TODO: compare geographic areas */
+    /* Two areas are equal when they are written as the same JSON; this compares exactly the members
+       that are meaningful for the shape. */
+    cJSON *json_a = _geographic_area_to_json(a);
+    cJSON *json_b = _geographic_area_to_json(b);
+    bool equal = json_a && json_b && cJSON_Compare(json_a, json_b, 1);
+    if (json_a) cJSON_Delete(json_a);
+    if (json_b) cJSON_Delete(json_b);
 
-    return false;
+    return equal;
 }
 
 ogs_list_t *_geographic_area_patch_list(const mb_smf_sc_geographic_area_t *a, const mb_smf_sc_geographic_area_t *b)
@@ -392,7 +494,12 @@ ogs_list_t *_geographic_area_patch_list(const mb_smf_sc_geographic_area_t *a, co
                 patches = _json_patches_append_list(patches, _ga_point_patch_list(a, b), NULL);
                 break;
             default:
-                ogs_warn("Update patch list function not implemented for geographic area type %i", a->shape);
+                /* the other shapes are replaced as a whole when any member differs */
+                if (!_geographic_area_equal(a, b)) {
+                    _json_patch_t *patch = _json_patch_new(OpenAPI_patch_operation_replace, "/", _geographic_area_to_json(b));
+                    patches = (typeof(patches))ogs_calloc(1, sizeof(*patches));
+                    ogs_list_add(patches, patch);
+                }
                 break;
             }
         }
@@ -401,37 +508,104 @@ ogs_list_t *_geographic_area_patch_list(const mb_smf_sc_geographic_area_t *a, co
     return patches;
 }
 
+static OpenAPI_geographical_coordinates_t *__coordinate_to_openapi(const mb_smf_sc_geographic_coordinate_t *coord)
+{
+    return OpenAPI_geographical_coordinates_create(coord->longitude, coord->latitude);
+}
+
 OpenAPI_geographic_area_t *_geographic_area_to_openapi(const mb_smf_sc_geographic_area_t *geog_area)
 {
     if (!geog_area) return NULL;
 
-    /* There is a problem with the Open5GS OpenAPI_geographic_area_t in that it does not handle the shape enumeration properly */
+    /* OpenAPI_geographic_area_t holds the attributes of every shape; the members that the shape does not use
+       stay zero or NULL, and OpenAPI_geographic_area_convertToJSON() writes only those it does use. */
+    OpenAPI_supported_gad_shapes_e shape = OpenAPI_supported_gad_shapes_NULL;
+    OpenAPI_geographical_coordinates_t *point = NULL;
+    float uncertainty = 0;
+    OpenAPI_uncertainty_ellipse_t *uncertainty_ellipse = NULL;
+    int confidence = 0;
+    OpenAPI_list_t *point_list = NULL;
+    double altitude = 0;
+    float uncertainty_altitude = 0;
+    bool is_v_confidence = false;
+    int v_confidence = 0;
+    int inner_radius = 0;
+    float uncertainty_radius = 0;
+    int offset_angle = 0;
+    int included_angle = 0;
 
-    return NULL;
+    switch (geog_area->shape) {
+    case GEOGRAPHIC_AREA_SHAPE_POINT:
+        shape = OpenAPI_supported_gad_shapes_POINT;
+        point = __coordinate_to_openapi(&geog_area->point);
+        break;
+    case GEOGRAPHIC_AREA_SHAPE_POINT_UNCERTAINTY_CIRCLE:
+        shape = OpenAPI_supported_gad_shapes_POINT_UNCERTAINTY_CIRCLE;
+        point = __coordinate_to_openapi(&geog_area->point_uncertainty_circle.point);
+        uncertainty = geog_area->point_uncertainty_circle.uncertainty;
+        break;
+    case GEOGRAPHIC_AREA_SHAPE_POINT_UNCERTAINTY_ELLIPSE:
+        shape = OpenAPI_supported_gad_shapes_POINT_UNCERTAINTY_ELLIPSE;
+        point = __coordinate_to_openapi(&geog_area->point_uncertainty_ellipse.point);
+        uncertainty_ellipse = OpenAPI_uncertainty_ellipse_create(geog_area->point_uncertainty_ellipse.semi_major,
+                geog_area->point_uncertainty_ellipse.semi_minor, geog_area->point_uncertainty_ellipse.orientation_major);
+        confidence = geog_area->point_uncertainty_ellipse.confidence;
+        break;
+    case GEOGRAPHIC_AREA_SHAPE_POLYGON: {
+        const mb_smf_sc_geographic_coordinate_t *coord;
+        shape = OpenAPI_supported_gad_shapes_POLYGON;
+        point_list = OpenAPI_list_create();
+        ogs_list_for_each(&geog_area->polygon.points, coord) {
+            OpenAPI_list_add(point_list, __coordinate_to_openapi(coord));
+        }
+        break;
+    }
+    case GEOGRAPHIC_AREA_SHAPE_POINT_ALTITUDE:
+        shape = OpenAPI_supported_gad_shapes_POINT_ALTITUDE;
+        point = __coordinate_to_openapi(&geog_area->point_altitude.point);
+        altitude = geog_area->point_altitude.altitude;
+        break;
+    case GEOGRAPHIC_AREA_SHAPE_POINT_ALTITUDE_UNCERTAINTY:
+        shape = OpenAPI_supported_gad_shapes_POINT_ALTITUDE_UNCERTAINTY;
+        point = __coordinate_to_openapi(&geog_area->point_altitude_uncertainty.point);
+        altitude = geog_area->point_altitude_uncertainty.altitude;
+        uncertainty_ellipse = OpenAPI_uncertainty_ellipse_create(geog_area->point_altitude_uncertainty.semi_major,
+                geog_area->point_altitude_uncertainty.semi_minor, geog_area->point_altitude_uncertainty.orientation_major);
+        uncertainty_altitude = geog_area->point_altitude_uncertainty.uncertainty_altitude;
+        confidence = geog_area->point_altitude_uncertainty.confidence;
+        if (geog_area->point_altitude_uncertainty.v_confidence) {
+            is_v_confidence = true;
+            v_confidence = *geog_area->point_altitude_uncertainty.v_confidence;
+        }
+        break;
+    case GEOGRAPHIC_AREA_SHAPE_ELLIPSOID_ARC:
+        shape = OpenAPI_supported_gad_shapes_ELLIPSOID_ARC;
+        point = __coordinate_to_openapi(&geog_area->ellipsoid_arc.point);
+        inner_radius = geog_area->ellipsoid_arc.inner_radius;
+        uncertainty_radius = geog_area->ellipsoid_arc.uncertainty_radius;
+        offset_angle = geog_area->ellipsoid_arc.offset_angle;
+        included_angle = geog_area->ellipsoid_arc.included_angle;
+        confidence = geog_area->ellipsoid_arc.confidence;
+        break;
+    default:
+        ogs_warn("Attempt to create OpenAPI model not implemented for geographic area type %i", geog_area->shape);
+        return NULL;
+    }
+
+    return OpenAPI_geographic_area_create(shape, point, uncertainty, uncertainty_ellipse, confidence, point_list,
+            altitude, uncertainty_altitude, is_v_confidence, v_confidence, inner_radius, uncertainty_radius,
+            offset_angle, included_angle);
 }
 
 cJSON *_geographic_area_to_json(const mb_smf_sc_geographic_area_t *geog_area)
 {
     if (!geog_area) return NULL;
-#if 0
-    /* If OpenAPI_geographic_area_t worked properly */
+
     OpenAPI_geographic_area_t *api_geog_area = _geographic_area_to_openapi(geog_area);
     if (!api_geog_area) return NULL;
     cJSON *json = OpenAPI_geographic_area_convertToJSON(api_geog_area);
     OpenAPI_geographic_area_free(api_geog_area);
-#else
-    /* because OpenAPI_geographic_area_t does not work properly, construct the JSON directly */
-    cJSON *json = cJSON_CreateObject();
-    switch (geog_area->shape) {
-    case GEOGRAPHIC_AREA_SHAPE_POINT:
-        cJSON_AddItemToObject(json, "shape", cJSON_CreateString("POINT"));
-        cJSON_AddItemToObject(json, "point", _geographic_coordinate_to_json(&geog_area->point));
-        break;
-    default:
-        ogs_warn("Attempt to create JSON not implemented for geographic area type %i", geog_area->shape);
-        break;
-    }
-#endif
+
     return json;
 }
 
