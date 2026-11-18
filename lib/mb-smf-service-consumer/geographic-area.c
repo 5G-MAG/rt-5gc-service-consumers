@@ -236,7 +236,7 @@ ogs_list_t *_geographic_areas_patch_list(const ogs_list_t *a, const ogs_list_t *
                     patch = _json_patch_new(OpenAPI_patch_operation__remove, path, NULL);
                     ogs_free(path);
                     idx--;
-                } else {
+                } else if (!_geographic_area_equal(a_geog_area, b_geog_area)) {
                     char *path = ogs_msprintf("/%i", idx);
                     patch = _json_patch_new(OpenAPI_patch_operation_replace, path, _geographic_area_to_json(b_geog_area));
                     ogs_free(path);

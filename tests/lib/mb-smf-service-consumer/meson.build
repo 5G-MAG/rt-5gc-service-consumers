@@ -28,6 +28,7 @@ nmbsmf_builders_src = files('''
     ncgi-tai-cells.c
     geographic-area-shapes.c
     intended-service-areas.c
+    ext-service-area-patches.c
 
     lib-arp.c
     lib-associated-session-id.c
