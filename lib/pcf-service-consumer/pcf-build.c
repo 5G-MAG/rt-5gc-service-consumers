@@ -217,6 +217,8 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
         AscReqData.spon_status = options->sponsoring_enabled ?
             OpenAPI_sponsoring_status_SPONSOR_ENABLED : OpenAPI_sponsoring_status_SPONSOR_DISABLED;
 
+    /* the IP domain is the one thing of the UE network identifier that goes with the address (see the note at ue_network_identifier_t) */
+    AscReqData.ip_domain = sess->ip_domain;
     AscReqData.supi = sess->supi;
     AscReqData.gpsi = sess->gpsi;
 

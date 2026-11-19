@@ -63,6 +63,7 @@ typedef struct pcf_app_session_s {
 
     ogs_s_nssai_t s_nssai;
     char *dnn;
+    char *ip_domain;            /* the IP domain of the UE address, sent when it is given */
 
     pcf_session_t *pcf_session;
     ue_network_identifier_t *ue_network_identifier;

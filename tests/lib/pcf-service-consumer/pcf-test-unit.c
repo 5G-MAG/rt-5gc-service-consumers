@@ -59,6 +59,7 @@ static void update_without_patch_correction_func(abts_case *tc, void *data);
 static void ue_identifier_func(abts_case *tc, void *data);
 static void bdt_select_func(abts_case *tc, void *data);
 static void server_requests_func(abts_case *tc, void *data);
+static void notif_url_ipv6_func(abts_case *tc, void *data);
 
 int pcf_unit_initialise(void)
 {
@@ -118,6 +119,7 @@ abts_suite *test_pcf_unit(abts_suite *suite)
     abts_run_test(suite, ue_identifier_func, NULL);
     abts_run_test(suite, bdt_select_func, NULL);
     abts_run_test(suite, server_requests_func, NULL);
+    abts_run_test(suite, notif_url_ipv6_func, NULL);
 
     return suite;
 }
@@ -1294,8 +1296,9 @@ static void update_without_patch_correction_func(abts_case *tc, void *data)
 }
 
 /*
- * Implementation choice, text silent, see CONSUMERS audit O6: the SUPI, GPSI, DNN and IP domain that the application gives are kept and not sent; the
- * UE address binds the application session (TS 29.514 V19.8.0 table 5.6.2.3-1 notes 2 and 7: the PCF matches all it is given, with the DNN as given).
+ * Implementation choice, text silent, see CONSUMERS audit O6: the SUPI, GPSI and DNN that the application gives are kept and not sent; the UE address
+ * binds the application session (TS 29.514 V19.8.0 table 5.6.2.3-1 notes 2 and 7: the PCF matches all it is given, with the DNN as given). The IP
+ * domain is sent (TS 29.512 V19.7.0 clause 4.2.2.2 note 10).
  */
 static void ue_identifier_func(abts_case *tc, void *data)
 {
@@ -1327,7 +1330,8 @@ static void ue_identifier_func(abts_case *tc, void *data)
         ABTS_TRUE(tc, cJSON_GetObjectItemCaseSensitive(req_data, "supi") == NULL);
         ABTS_TRUE(tc, cJSON_GetObjectItemCaseSensitive(req_data, "gpsi") == NULL);
         ABTS_TRUE(tc, cJSON_GetObjectItemCaseSensitive(req_data, "dnn") == NULL);
-        ABTS_TRUE(tc, cJSON_GetObjectItemCaseSensitive(req_data, "ipDomain") == NULL);
+        /* the IP domain assists the session binding of an address that is not unique (TS 29.512 V19.7.0 clause 4.2.2.2 note 10) */
+        ABTS_STR_EQUAL(tc, "domain-1", string_of(req_data, "ipDomain") ? string_of(req_data, "ipDomain") : "(none)");
     }
     if (json) cJSON_Delete(json);
     if (request) ogs_sbi_request_free(request);
@@ -1569,6 +1573,39 @@ static void server_requests_func(abts_case *tc, void *data)
         }
         ABTS_TRUE(tc, released);
     }
+}
+
+/*
+ * TS 29.501 V19.5.0 clause 4.4.3: the callback URI is an absolute URI with an authority, "host is either an FQDN or an IP address"; an IPv6 address is
+ * written in brackets (RFC 3986 clause 3.2.2). The notification server of a PCF session with an IPv6 address listens on the address that reaches it.
+ */
+static void notif_url_ipv6_func(abts_case *tc, void *data)
+{
+    ue_network_identifier_t ue;
+    ogs_sockaddr_t *address = NULL;
+    pcf_session_t *session6;
+    pcf_app_session_t *sess;
+    const char *url;
+
+    ogs_assert(OGS_OK == ogs_getaddrinfo(&address, AF_UNSPEC, "::1", 7777, 0));
+    session6 = pcf_session_new(address);
+    ogs_freeaddrinfo(address);
+    ABTS_PTR_NOTNULL(tc, session6);
+    if (!session6) return;
+    ogs_assert(OGS_OK == ogs_getaddrinfo(&address, AF_UNSPEC, "2001:db8:cafe::2", 0, 0));
+    memset(&ue, 0, sizeof(ue));
+    ue.address = address;
+    sess = _pcf_app_session_new(session6, &ue, PCF_APP_SESSION_EVENT_TYPE_NONE, notification_callback, NULL, NULL, NULL);
+    ogs_freeaddrinfo(address);
+    ogs_assert(sess);
+    ogs_sbi_self()->tls.server.scheme = OpenAPI_uri_scheme_http;
+    url = _pcf_app_session_get_notif_url(sess);
+    ABTS_PTR_NOTNULL(tc, url);
+    if (url) {
+        ABTS_TRUE(tc, !strncmp(url, "http://[::1]:", 13));
+        ABTS_TRUE(tc, strstr(url, "/npcf-policyauthorization/v1/app-session-instance/") != NULL);
+    }
+    pcf_session_free(session6);
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

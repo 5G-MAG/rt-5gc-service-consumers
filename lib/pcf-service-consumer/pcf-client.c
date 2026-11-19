@@ -47,6 +47,9 @@ pcf_app_session_t *_pcf_app_session_new(pcf_session_t *pcf_session, const ue_net
     _pcf_client_sess_ipv4addr_set_from_sockaddr(sess, sess->ue_network_identifier->address);
     _pcf_client_sess_ipv6addr_set_from_sockaddr(sess, sess->ue_network_identifier->address);
 
+    /* the IP domain assists the session binding of an UE address that is not unique (TS 29.512 V19.7.0 clause 4.2.2.2 note 10) */
+    if (ue_connection->ip_domain) sess->ip_domain = ogs_strdup(ue_connection->ip_domain);
+
     ogs_list_init(&sess->pcf_event_notifications);
 
     _pcf_app_session_add_event_notification(sess, events, notify_callback, notify_user_data);
@@ -88,6 +91,7 @@ void _pcf_app_session_free(pcf_app_session_t *app_session)
     if (app_session->supi) ogs_free(app_session->supi);
     if (app_session->gpsi) ogs_free(app_session->gpsi);
     if (app_session->dnn) ogs_free(app_session->dnn);
+    if (app_session->ip_domain) ogs_free(app_session->ip_domain);
 
     if (app_session->pcf_app_session_context_requested)
         OpenAPI_app_session_context_free(app_session->pcf_app_session_context_requested);
