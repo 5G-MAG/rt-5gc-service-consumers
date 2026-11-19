@@ -33,6 +33,7 @@ static void create_ipv6_func(abts_case *tc, void *data);
 static void create_answer_func(abts_case *tc, void *data);
 static void no_query_func(abts_case *tc, void *data);
 static void update_sponsor_func(abts_case *tc, void *data);
+static void update_answer_func(abts_case *tc, void *data);
 static void update_request_func(abts_case *tc, void *data);
 
 int pcf_unit_initialise(void)
@@ -71,6 +72,7 @@ abts_suite *test_pcf_unit(abts_suite *suite)
     abts_run_test(suite, update_request_func, NULL);
     abts_run_test(suite, no_query_func, NULL);
     abts_run_test(suite, update_sponsor_func, NULL);
+    abts_run_test(suite, update_answer_func, NULL);
 
     return suite;
 }
@@ -325,6 +327,31 @@ static void update_sponsor_func(abts_case *tc, void *data)
     if (request) ogs_sbi_request_free(request);
     pcf_media_components_rm_free(media_component_rm);
     _pcf_app_session_free(sess);
+}
+
+/* TS 29.514 V19.8.0 table 5.3.3.3.2-3: the PATCH is answered with 200 and the representation, or with 204 and none; both are success */
+static void update_answer_func(abts_case *tc, void *data)
+{
+    static const int statuses[] = {200, 204};
+    int i;
+
+    for (i = 0; i < 2; i++) {
+        outcome_t outcome;
+        pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+
+        memset(&outcome, 0, sizeof(outcome));
+        sess->pcf_app_session_id = ogs_strdup("42");
+        sess->result.callback = result_callback;
+        sess->result.user_data = &outcome;
+        sess->operation = PCF_APP_SESSION_OP_UPDATE;
+        answer(tc, sess, "PATCH", "app-sessions/42", statuses[i], NULL,
+               statuses[i] == 200 ? "{\"ascReqData\":{\"notifUri\":\"http://127.0.0.1:9999/n\",\"suppFeat\":\"2\"}}" : NULL);
+        ABTS_INT_EQUAL(tc, 1, outcome.calls);
+        ABTS_INT_EQUAL(tc, PCF_APP_SESSION_OP_UPDATE, outcome.operation);
+        ABTS_TRUE(tc, outcome.success);
+        ABTS_INT_EQUAL(tc, statuses[i], outcome.http_status);
+        _pcf_app_session_free(sess);
+    }
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

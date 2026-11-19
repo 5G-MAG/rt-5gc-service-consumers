@@ -292,6 +292,10 @@ bool _pcf_process_event(ogs_event_t *e)
                                 CASE(OGS_SBI_HTTP_METHOD_PATCH)
                                     if (message.res_status == OGS_SBI_HTTP_STATUS_OK) {
                                         pcf_policyauthorization_update(sess, &message);
+                                    } else if (message.res_status == OGS_SBI_HTTP_STATUS_NO_CONTENT) {
+                                        /* TS 29.514 V19.8.0 table 5.3.3.3.2-3: the context was modified and no representation of it is returned */
+                                        if (!_pcf_app_session_change_callback_call(sess, false))
+                                            ogs_error("AppSessionContext change callback failed");
 				    } else {
                                         ogs_error("HTTP response error [%d]", message.res_status);
                                         /* the update was not accepted: the context in the PCF is unchanged and the requester is told */
