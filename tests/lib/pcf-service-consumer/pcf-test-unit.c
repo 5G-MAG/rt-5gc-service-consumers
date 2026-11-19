@@ -32,6 +32,7 @@ static void create_ipv4_func(abts_case *tc, void *data);
 static void create_ipv6_func(abts_case *tc, void *data);
 static void create_answer_func(abts_case *tc, void *data);
 static void no_query_func(abts_case *tc, void *data);
+static void update_sponsor_func(abts_case *tc, void *data);
 static void update_request_func(abts_case *tc, void *data);
 
 int pcf_unit_initialise(void)
@@ -69,6 +70,7 @@ abts_suite *test_pcf_unit(abts_suite *suite)
     abts_run_test(suite, create_answer_func, NULL);
     abts_run_test(suite, update_request_func, NULL);
     abts_run_test(suite, no_query_func, NULL);
+    abts_run_test(suite, update_sponsor_func, NULL);
 
     return suite;
 }
@@ -295,6 +297,32 @@ static void no_query_func(abts_case *tc, void *data)
         ABTS_INT_EQUAL(tc, 0, (int)ogs_hash_count(request->http.params));
         ogs_sbi_request_free(request);
     }
+    pcf_media_components_rm_free(media_component_rm);
+    _pcf_app_session_free(sess);
+}
+
+/*
+ * TS 29.514 V19.8.0 clause 4.2.3.5 and RFC 7396: an update that does not speak of sponsored connectivity leaves it as it is, so it carries no
+ * sponStatus (SPONSOR_DISABLED would end the sponsoring of a session that was created with SPONSOR_ENABLED).
+ */
+static void update_sponsor_func(abts_case *tc, void *data)
+{
+    pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+    OpenAPI_list_t *media_component_rm = media_component_rm_new();
+    ogs_sbi_request_t *request;
+    cJSON *json, *req_data;
+
+    sess->pcf_app_session_id = ogs_strdup("42");
+    request = pcf_policyauthorization_request_update(sess, media_component_rm);
+    json = content_of(tc, request);
+    req_data = cJSON_GetObjectItemCaseSensitive(json, "ascReqData");
+    ABTS_PTR_NOTNULL(tc, req_data);
+    if (req_data) {
+        ABTS_PTR_NOTNULL(tc, cJSON_GetObjectItemCaseSensitive(req_data, "medComponents"));
+        ABTS_TRUE(tc, cJSON_GetObjectItemCaseSensitive(req_data, "sponStatus") == NULL);
+    }
+    if (json) cJSON_Delete(json);
+    if (request) ogs_sbi_request_free(request);
     pcf_media_components_rm_free(media_component_rm);
     _pcf_app_session_free(sess);
 }

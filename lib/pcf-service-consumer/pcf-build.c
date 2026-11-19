@@ -236,8 +236,6 @@ ogs_sbi_request_t *pcf_policyauthorization_request_update(pcf_app_session_t *ses
 
     ogs_debug("\n PCF policy authorization update (Request header): \n Method: [%s] \n URI: [%s] \n Service Name: [%s] \n Resource Component: [%s]\n", message.h.method, message.h.uri, header.service.name, message.h.resource.component[0]);
 
-    AscUpdateData.spon_status = OpenAPI_sponsoring_status_SPONSOR_DISABLED;
-
     AscUpdateData.res_prio = OpenAPI_reserv_priority_PRIO_16;
 
     AscUpdateData.med_components = media_component;
