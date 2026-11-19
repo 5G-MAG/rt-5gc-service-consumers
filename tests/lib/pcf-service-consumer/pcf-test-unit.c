@@ -31,6 +31,7 @@ static pcf_session_t *session = NULL;
 static void create_ipv4_func(abts_case *tc, void *data);
 static void create_ipv6_func(abts_case *tc, void *data);
 static void create_answer_func(abts_case *tc, void *data);
+static void no_query_func(abts_case *tc, void *data);
 static void update_request_func(abts_case *tc, void *data);
 
 int pcf_unit_initialise(void)
@@ -67,6 +68,7 @@ abts_suite *test_pcf_unit(abts_suite *suite)
     abts_run_test(suite, create_ipv6_func, NULL);
     abts_run_test(suite, create_answer_func, NULL);
     abts_run_test(suite, update_request_func, NULL);
+    abts_run_test(suite, no_query_func, NULL);
 
     return suite;
 }
@@ -257,6 +259,40 @@ static void update_request_func(abts_case *tc, void *data)
         ABTS_STR_EQUAL(tc, OGS_SBI_HTTP_METHOD_PATCH, request->h.method);
         content_type = ogs_sbi_header_get(request->http.headers, OGS_SBI_CONTENT_TYPE);
         ABTS_STR_EQUAL(tc, OGS_SBI_CONTENT_MERGE_PATCH_TYPE, content_type ? content_type : "");
+        ogs_sbi_request_free(request);
+    }
+    pcf_media_components_rm_free(media_component_rm);
+    _pcf_app_session_free(sess);
+}
+
+/* TS 29.514 V19.8.0 tables 5.3.2.3.1-1 and 5.3.3.3.2-1: the methods that create, modify and delete take no URI query parameter */
+static void no_query_func(abts_case *tc, void *data)
+{
+    pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF);
+    pcf_app_session_options_t options;
+    OpenAPI_list_t *media_component_rm = media_component_rm_new();
+    ogs_sbi_request_t *request;
+
+    memset(&options, 0, sizeof(options));
+    options.events = PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF;
+    sess->pcf_app_session_id = ogs_strdup("42");
+
+    request = pcf_policyauthorization_request_create(sess, NULL, &options);
+    ABTS_PTR_NOTNULL(tc, request);
+    if (request) {
+        ABTS_INT_EQUAL(tc, 0, (int)ogs_hash_count(request->http.params));
+        ogs_sbi_request_free(request);
+    }
+    request = pcf_policyauthorization_request_update(sess, media_component_rm);
+    ABTS_PTR_NOTNULL(tc, request);
+    if (request) {
+        ABTS_INT_EQUAL(tc, 0, (int)ogs_hash_count(request->http.params));
+        ogs_sbi_request_free(request);
+    }
+    request = pcf_policyauthorization_request_delete(sess);
+    ABTS_PTR_NOTNULL(tc, request);
+    if (request) {
+        ABTS_INT_EQUAL(tc, 0, (int)ogs_hash_count(request->http.params));
         ogs_sbi_request_free(request);
     }
     pcf_media_components_rm_free(media_component_rm);

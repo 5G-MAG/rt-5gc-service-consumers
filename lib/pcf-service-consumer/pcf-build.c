@@ -56,8 +56,6 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
     message.h.resource.component[0] =
         (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
 
-    message.param.ipv4addr = pcf_ipv4addr;
-    
     message.h.uri = ogs_msprintf("http://%s:%i/npcf-policyauthorization/v1/app-sessions", pcf_ipv4addr, pcf_port);
     message.AppSessionContext = &AppSessionContext;
 
@@ -223,8 +221,6 @@ ogs_sbi_request_t *pcf_policyauthorization_request_update(pcf_app_session_t *ses
     message.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
     message.h.resource.component[1] = sess->pcf_app_session_id;
 
-    message.param.ipv4addr = pcf_addr;
-
     message.h.uri = ogs_msprintf("http://%s:%i/npcf-policyauthorization/v1/app-sessions/%s", pcf_addr, pcf_port, sess->pcf_app_session_id);
 
     message.AppSessionContextUpdateDataPatch = &AppSessionContextUpdateDataPatch;
@@ -304,7 +300,6 @@ ogs_sbi_request_t *pcf_policyauthorization_subscribe_request_event(pcf_app_sessi
     message.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
     message.h.resource.component[1] = (char *)sess->pcf_app_session_id;
     message.h.resource.component[2] = "events-subscription";
-    message.param.ipv4addr = pcf_addr;
 
     message.h.uri = ogs_msprintf("http://%s:%i/npcf-policyauthorization/v1/app-sessions/%s/events-subscription", pcf_addr, pcf_port, sess->pcf_app_session_id);
 
@@ -449,8 +444,6 @@ ogs_sbi_request_t *pcf_policyauthorization_request_subscribe_event(pcf_app_sessi
     message.h.resource.component[0] =
         (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
 
-    message.param.ipv4addr = pcf_addr;
-
     message.h.uri = ogs_msprintf("http://%s:%i/npcf-policyauthorization/v1/app-sessions/%s/events-subscription", pcf_addr, pcf_port, sess->pcf_app_session_id);	    
 
     ev_subsc = OpenAPI_events_subsc_req_data_convertToJSON(evSubsc);
@@ -544,7 +537,6 @@ ogs_sbi_request_t *pcf_policyauthorization_request_delete(pcf_app_session_t *ses
     message.h.resource.component[2] =
         (char *)OGS_SBI_RESOURCE_NAME_DELETE;
     
-    message.param.ipv4addr = pcf_addr;
     message.h.uri = ogs_msprintf("http://%s:%i/npcf-policyauthorization/v1/app-sessions/%s/%s", pcf_addr, pcf_port, sess->pcf_app_session_id, (char *)OGS_SBI_RESOURCE_NAME_DELETE);
     request = ogs_sbi_build_request(&message);
     ogs_free(message.h.uri);
