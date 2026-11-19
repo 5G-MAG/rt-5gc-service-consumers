@@ -33,6 +33,7 @@ static void create_ipv6_func(abts_case *tc, void *data);
 static void create_answer_func(abts_case *tc, void *data);
 static void create_resp_data_func(abts_case *tc, void *data);
 static void subscribe_merge_func(abts_case *tc, void *data);
+static void create_events_func(abts_case *tc, void *data);
 static void no_query_func(abts_case *tc, void *data);
 static void update_sponsor_func(abts_case *tc, void *data);
 static void update_answer_func(abts_case *tc, void *data);
@@ -73,6 +74,7 @@ abts_suite *test_pcf_unit(abts_suite *suite)
     abts_run_test(suite, create_answer_func, NULL);
     abts_run_test(suite, create_resp_data_func, NULL);
     abts_run_test(suite, subscribe_merge_func, NULL);
+    abts_run_test(suite, create_events_func, NULL);
     abts_run_test(suite, update_request_func, NULL);
     abts_run_test(suite, no_query_func, NULL);
     abts_run_test(suite, update_sponsor_func, NULL);
@@ -478,6 +480,38 @@ static void subscribe_merge_func(abts_case *tc, void *data)
     }
     ABTS_INT_EQUAL(tc, 1, put_events(tc, sess));
     _pcf_app_session_free(sess);
+}
+
+/* TS 29.514 V19.8.0 table 5.6.2.6-1: events has 1..N entries, so a request that subscribes to no event carries no evSubsc */
+static void create_events_func(abts_case *tc, void *data)
+{
+    static const int masks[] = {PCF_APP_SESSION_EVENT_TYPE_NONE, PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF};
+    int i;
+
+    for (i = 0; i < 2; i++) {
+        pcf_app_session_t *sess = app_session_new("10.45.0.2", masks[i]);
+        pcf_app_session_options_t options;
+        ogs_sbi_request_t *request;
+        cJSON *json, *req_data, *ev_subsc;
+
+        memset(&options, 0, sizeof(options));
+        options.events = masks[i];
+        request = pcf_policyauthorization_request_create(sess, NULL, &options);
+        json = content_of(tc, request);
+        req_data = cJSON_GetObjectItemCaseSensitive(json, "ascReqData");
+        ABTS_PTR_NOTNULL(tc, req_data);
+        ev_subsc = cJSON_GetObjectItemCaseSensitive(req_data, "evSubsc");
+        if (masks[i] == PCF_APP_SESSION_EVENT_TYPE_NONE) {
+            ABTS_TRUE(tc, ev_subsc == NULL);
+        } else {
+            ABTS_PTR_NOTNULL(tc, ev_subsc);
+            ABTS_INT_EQUAL(tc, 1, cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(ev_subsc, "events")));
+            ABTS_PTR_NOTNULL(tc, string_of(ev_subsc, "notifUri"));
+        }
+        if (json) cJSON_Delete(json);
+        if (request) ogs_sbi_request_free(request);
+        _pcf_app_session_free(sess);
+    }
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

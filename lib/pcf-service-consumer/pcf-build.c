@@ -127,7 +127,8 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
     }
 
     evSubsc.notif_uri = ogs_strdup(_pcf_app_session_get_notif_url(sess));
-    AscReqData.ev_subsc = &evSubsc;
+    /* TS 29.514 V19.8.0 table 5.6.2.6-1: events has 1..N entries, so there is no event subscription to send without an event */
+    if (evSubsc.events->count) AscReqData.ev_subsc = &evSubsc;
 
     memset(&sNssai, 0, sizeof(sNssai));
     if (sess->s_nssai.sst) {
