@@ -31,6 +31,7 @@ static pcf_session_t *session = NULL;
 static void create_ipv4_func(abts_case *tc, void *data);
 static void create_ipv6_func(abts_case *tc, void *data);
 static void create_answer_func(abts_case *tc, void *data);
+static void create_resp_data_func(abts_case *tc, void *data);
 static void no_query_func(abts_case *tc, void *data);
 static void update_sponsor_func(abts_case *tc, void *data);
 static void update_answer_func(abts_case *tc, void *data);
@@ -69,6 +70,7 @@ abts_suite *test_pcf_unit(abts_suite *suite)
     abts_run_test(suite, create_ipv4_func, NULL);
     abts_run_test(suite, create_ipv6_func, NULL);
     abts_run_test(suite, create_answer_func, NULL);
+    abts_run_test(suite, create_resp_data_func, NULL);
     abts_run_test(suite, update_request_func, NULL);
     abts_run_test(suite, no_query_func, NULL);
     abts_run_test(suite, update_sponsor_func, NULL);
@@ -351,6 +353,36 @@ static void update_answer_func(abts_case *tc, void *data)
         ABTS_TRUE(tc, outcome.success);
         ABTS_INT_EQUAL(tc, statuses[i], outcome.http_status);
         _pcf_app_session_free(sess);
+    }
+}
+
+/*
+ * TS 29.514 V19.8.0 clause 5.8 and table 5.6.2.2-1: the PCF gives the features in the AppSessionContextRespData (ascRespData), and the
+ * AppSessionContextReqData (ascReqData) may be left out of the answer.
+ */
+static void create_resp_data_func(abts_case *tc, void *data)
+{
+    static const char *answers[] = {
+        "{\"ascRespData\":{\"suppFeat\":\"2\"}}",
+        /* what the answer says in ascRespData decides, not what ascReqData repeats */
+        "{\"ascReqData\":{\"notifUri\":\"http://127.0.0.1:9999/n\",\"suppFeat\":\"3\"},\"ascRespData\":{\"suppFeat\":\"2\"}}"
+    };
+    int i;
+
+    for (i = 0; i < 2; i++) {
+        outcome_t outcome;
+        pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF);
+
+        memset(&outcome, 0, sizeof(outcome));
+        sess->result.callback = result_callback;
+        sess->result.user_data = &outcome;
+        sess->operation = PCF_APP_SESSION_OP_CREATE;
+        sess->policyauthorization_features = PCF_LIB_FEATURES | 1;
+        answer(tc, sess, "POST", "app-sessions", 201, CREATED_URI, answers[i]);
+        ABTS_INT_EQUAL(tc, 1, outcome.calls);
+        ABTS_TRUE(tc, outcome.success);
+        ABTS_TRUE(tc, outcome.features == 2);
+        if (outcome.success) _pcf_app_session_free(sess);
     }
 }
 

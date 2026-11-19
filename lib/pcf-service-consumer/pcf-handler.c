@@ -157,6 +157,8 @@ void pcf_policyauthorization_create(
 
     OpenAPI_app_session_context_t *AppSessionContext = NULL;
     OpenAPI_app_session_context_req_data_t *AscReqData = NULL;
+    OpenAPI_app_session_context_resp_data_t *AscRespData = NULL;
+    const char *supp_feat = NULL;
 
     cJSON *app_sess_context;
     char *app_sess_context_text;
@@ -204,23 +206,24 @@ void pcf_policyauthorization_create(
 
     _pcf_client_received_app_sess_context_set(sess, recvmsg->AppSessionContext);
 
+    /*
+     * TS 29.514 V19.8.0 clause 5.8: the PCF gives the supported features in the AppSessionContextRespData. The AppSessionContextReqData
+     * that some PCFs repeat in the answer (the Open5GS PCF) carries them as well.
+     */
+    AscRespData = AppSessionContext->asc_resp_data;
     AscReqData = AppSessionContext->asc_req_data;
-    if (!AscReqData) {
-        ogs_error("[%s:%s] No AscReqData",
+    if (AscRespData && AscRespData->supp_feat) {
+        supp_feat = AscRespData->supp_feat;
+    } else if (AscReqData && AscReqData->supp_feat) {
+        supp_feat = AscReqData->supp_feat;
+    } else {
+        ogs_error("[%s:%s] No suppFeat",
                 sess->ipv4addr ? sess->ipv4addr : "Unknown",
                 sess->ipv6addr ? sess->ipv6addr : "Unknown");
         goto cleanup;
     }
 
-    if (!AscReqData->supp_feat) {
-        ogs_error("[%s:%s] No AscReqData->suppFeat",
-                sess->ipv4addr ? sess->ipv4addr : "Unknown",
-                sess->ipv6addr ? sess->ipv6addr : "Unknown");
-        goto cleanup;
-    }
-
-   
-    ogs_sbi_features_from_string(AscReqData->supp_feat, &supported_features, &supported_features_hi);
+    ogs_sbi_features_from_string(supp_feat, &supported_features, &supported_features_hi);
     sess->policyauthorization_features &= supported_features;
     sess->policyauthorization_features_hi &= supported_features_hi;
     sess->pcf_app_session_id = ogs_strdup(message.h.resource.component[1]);
