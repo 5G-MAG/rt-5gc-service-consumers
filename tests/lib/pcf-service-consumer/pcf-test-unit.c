@@ -539,6 +539,8 @@ static void create_features_func(abts_case *tc, void *data)
     ABTS_PTR_NOTNULL(tc, req_data);
     if (req_data) {
         ABTS_PTR_NOTNULL(tc, string_of(req_data, "suppFeat"));
+        /* TS 29.571 V19.8.0 clause 5.2.2: hexadecimal characters, feature n is the n-th bit from the right end of the string: 2, 15, 16, 17, 28, 59, 63, 68, 69 */
+        ABTS_STR_EQUAL(tc, "18440000000801c002", string_of(req_data, "suppFeat") ? string_of(req_data, "suppFeat") : "");
         if (string_of(req_data, "suppFeat"))
             ogs_sbi_features_from_string(string_of(req_data, "suppFeat"), &lo, &hi);
         ABTS_TRUE(tc, lo & ((uint64_t)1 << (16 - 1)));
