@@ -39,6 +39,9 @@ struct pcf_bdt_policy_s {
     void *user_data;
 };
 
+/* A policy that waits for the answer to an operation; library internal, used by the tests */
+pcf_bdt_policy_t *_pcf_bdt_policy_new(pcf_session_t *session, pcf_bdt_operation_t operation, pcf_bdt_result_callback callback, void *user_data);
+
 /* The callback of the client library for every request (the event goes to _pcf_process_event()) */
 int client_notify_cb(int status, ogs_sbi_response_t *response, void *data);
 

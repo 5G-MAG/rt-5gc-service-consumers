@@ -19,6 +19,7 @@
 #include "pcf-build.h"
 #include "utils.h"
 #include "pcf-evsubsc.h"
+#include "pcf-bdt.h"
 
 /* Unit test includes */
 #include "pcf-test-unit.h"
@@ -56,6 +57,8 @@ static void features_gate_func(abts_case *tc, void *data);
 static void companion_events_func(abts_case *tc, void *data);
 static void update_without_patch_correction_func(abts_case *tc, void *data);
 static void ue_identifier_func(abts_case *tc, void *data);
+static void bdt_select_func(abts_case *tc, void *data);
+static void server_requests_func(abts_case *tc, void *data);
 
 int pcf_unit_initialise(void)
 {
@@ -113,6 +116,8 @@ abts_suite *test_pcf_unit(abts_suite *suite)
     abts_run_test(suite, companion_events_func, NULL);
     abts_run_test(suite, update_without_patch_correction_func, NULL);
     abts_run_test(suite, ue_identifier_func, NULL);
+    abts_run_test(suite, bdt_select_func, NULL);
+    abts_run_test(suite, server_requests_func, NULL);
 
     return suite;
 }
@@ -1327,6 +1332,243 @@ static void ue_identifier_func(abts_case *tc, void *data)
     if (json) cJSON_Delete(json);
     if (request) ogs_sbi_request_free(request);
     _pcf_app_session_free(sess);
+}
+
+typedef struct bdt_outcome_s {
+    int calls;
+    pcf_bdt_operation_t operation;
+    bool success;
+    int http_status;
+} bdt_outcome_t;
+
+static void bdt_callback(pcf_bdt_policy_t *policy, const pcf_bdt_result_t *result, void *user_data)
+{
+    bdt_outcome_t *outcome = user_data;
+
+    outcome->calls++;
+    outcome->operation = result->operation;
+    outcome->success = result->success;
+    outcome->http_status = result->http_status;
+}
+
+/* The answer of the PCF to a request about a BDT policy, as the client of the library hands it over */
+static void bdt_answer(abts_case *tc, pcf_bdt_policy_t *policy, const char *method, int status, const char *location, const char *content)
+{
+    ogs_event_t *e = ogs_event_new(OGS_EVENT_SBI_CLIENT);
+    ogs_sbi_response_t *response = ogs_sbi_response_new();
+
+    ogs_assert(e && response);
+    response->status = status;
+    response->h.method = ogs_strdup(method);
+    response->h.uri = ogs_strdup("http://127.0.0.13:7777/npcf-bdtpolicycontrol/v1/bdtpolicies/1");
+    if (location) ogs_sbi_header_set(response->http.headers, OGS_SBI_LOCATION, location);
+    if (content) {
+        response->http.content = ogs_strdup(content);
+        response->http.content_length = strlen(content);
+        ogs_sbi_header_set(response->http.headers, OGS_SBI_CONTENT_TYPE, OGS_SBI_CONTENT_JSON_TYPE);
+    }
+    e->sbi.response = response;
+    e->sbi.data = policy;
+    e->sbi.state = OGS_OK;
+    ABTS_TRUE(tc, pcf_session_process_event(e));
+    ogs_event_free(e);
+}
+
+/*
+ * TS 29.554 V19.2.1 clauses 4.2.3.2 and 5.3.3.3.2 (CONSUMERS audit O17): the selection of a transfer policy is answered with 204 and no body, or 200 with
+ * the policy; both select it, and a refusal leaves the selection as it was.
+ */
+static void bdt_select_func(abts_case *tc, void *data)
+{
+    bdt_outcome_t outcome;
+    pcf_bdt_policy_t *policy;
+
+    memset(&outcome, 0, sizeof(outcome));
+    policy = _pcf_bdt_policy_new(session, PCF_BDT_OP_CREATE, bdt_callback, &outcome);
+    ABTS_PTR_NOTNULL(tc, policy);
+    if (!policy) return;
+    bdt_answer(tc, policy, "POST", 201, "http://127.0.0.13:7777/npcf-bdtpolicycontrol/v1/bdtpolicies/1",
+               "{\"bdtPolData\":{\"bdtRefId\":\"ref-1\",\"transfPolicies\":[{\"transPolicyId\":1,\"ratingGroup\":10},"
+               "{\"transPolicyId\":2,\"ratingGroup\":11}],\"suppFeat\":\"8\"}}");
+    ABTS_INT_EQUAL(tc, 1, outcome.calls);
+    ABTS_TRUE(tc, outcome.success);
+    ABTS_INT_EQUAL(tc, 2, pcf_bdt_policy_get_num_transfer_policies(policy));
+    ABTS_INT_EQUAL(tc, 0, pcf_bdt_policy_get_selected_transfer_policy_id(policy));
+
+    /* 204: no body, the policy that was asked for is selected */
+    outcome.calls = 0;
+    policy->operation = PCF_BDT_OP_SELECT;
+    policy->pending_selected = 2;
+    bdt_answer(tc, policy, "PATCH", 204, NULL, NULL);
+    ABTS_INT_EQUAL(tc, 1, outcome.calls);
+    ABTS_INT_EQUAL(tc, PCF_BDT_OP_SELECT, outcome.operation);
+    ABTS_TRUE(tc, outcome.success);
+    ABTS_INT_EQUAL(tc, 204, outcome.http_status);
+    ABTS_INT_EQUAL(tc, 2, pcf_bdt_policy_get_selected_transfer_policy_id(policy));
+
+    /* 200: the policy as the PCF holds it */
+    outcome.calls = 0;
+    policy->operation = PCF_BDT_OP_SELECT;
+    policy->pending_selected = 1;
+    bdt_answer(tc, policy, "PATCH", 200, NULL,
+               "{\"bdtPolData\":{\"bdtRefId\":\"ref-1\",\"transfPolicies\":[{\"transPolicyId\":1,\"ratingGroup\":10},"
+               "{\"transPolicyId\":2,\"ratingGroup\":11}],\"selTransPolicyId\":1,\"suppFeat\":\"8\"}}");
+    ABTS_TRUE(tc, outcome.success);
+    ABTS_INT_EQUAL(tc, 1, pcf_bdt_policy_get_selected_transfer_policy_id(policy));
+
+    /* a refusal: the selection stays */
+    outcome.calls = 0;
+    policy->operation = PCF_BDT_OP_SELECT;
+    policy->pending_selected = 2;
+    bdt_answer(tc, policy, "PATCH", 403, NULL, "{\"title\":\"Forbidden\",\"status\":403}");
+    ABTS_INT_EQUAL(tc, 1, outcome.calls);
+    ABTS_TRUE(tc, !outcome.success);
+    ABTS_INT_EQUAL(tc, 403, outcome.http_status);
+    ABTS_INT_EQUAL(tc, 1, pcf_bdt_policy_get_selected_transfer_policy_id(policy));
+
+    /* the deletion ends the object */
+    outcome.calls = 0;
+    policy->operation = PCF_BDT_OP_DELETE;
+    bdt_answer(tc, policy, "DELETE", 204, NULL, NULL);
+    ABTS_INT_EQUAL(tc, 1, outcome.calls);
+    ABTS_TRUE(tc, outcome.success);
+}
+
+/*
+ * The requests that the PCF sends to the notification server of the library (TS 29.514 V19.8.0 clause 5.5): a client of the library's own POSTs to
+ * the notification URI over a loopback connection and the library's event handling is run (CONSUMERS audit O17, O14).
+ */
+typedef struct http_outcome_s {
+    bool done;
+    int status;
+} http_outcome_t;
+
+static int http_callback(int status, ogs_sbi_response_t *response, void *data)
+{
+    http_outcome_t *outcome = data;
+
+    outcome->done = true;
+    outcome->status = (status == OGS_OK && response) ? response->status : -1;
+    if (response) ogs_sbi_response_free(response);
+    return OGS_OK;
+}
+
+/* Run what an NF runs: the poll set, the timers and the event queue; SBI server events go to the library; until *done or the time is up */
+static void run_events(const bool *done, int milliseconds)
+{
+    ogs_time_t end = ogs_time_now() + ogs_time_from_msec(milliseconds);
+
+    while (!*done && ogs_time_now() < end) {
+        ogs_event_t *e = NULL;
+
+        ogs_pollset_poll(ogs_app()->pollset, ogs_time_from_msec(50));
+        ogs_timer_mgr_expire(ogs_app()->timer_mgr);
+        while (OGS_OK == ogs_queue_trypop(ogs_app()->queue, (void **)&e)) {
+            pcf_session_process_event(e);
+            ogs_event_free(e);
+        }
+    }
+}
+
+static int post_to(abts_case *tc, ogs_sbi_client_t *client, const char *uri, const char *content)
+{
+    http_outcome_t outcome;
+    ogs_sbi_request_t *request = ogs_sbi_request_new();
+
+    memset(&outcome, 0, sizeof(outcome));
+    request->h.method = ogs_strdup(OGS_SBI_HTTP_METHOD_POST);
+    request->h.uri = ogs_strdup(uri);
+    request->h.api.version = ogs_strdup("v1");
+    if (content) {
+        request->http.content = ogs_strdup(content);
+        request->http.content_length = strlen(content);
+        ogs_sbi_header_set(request->http.headers, OGS_SBI_CONTENT_TYPE, OGS_SBI_CONTENT_JSON_TYPE);
+    }
+    ABTS_TRUE(tc, ogs_sbi_client_send_request(client, http_callback, request, &outcome));
+    ogs_sbi_request_free(request);
+    run_events(&outcome.done, 5000);
+    ABTS_TRUE(tc, outcome.done);
+    return outcome.status;
+}
+
+static void server_requests_func(abts_case *tc, void *data)
+{
+    static const char *notification = "{\"evSubsUri\":\"http://127.0.0.13:7777/npcf-policyauthorization/v1/app-sessions/42/events-subscription\","
+        "\"evNotifs\":[{\"event\":\"QOS_NOTIF\"}]}";
+    ue_network_identifier_t ue;
+    ogs_sockaddr_t *address = NULL;
+    pcf_app_session_t *sess;
+    ogs_sbi_client_t *client;
+    outcome_t outcome;
+    char *uri = NULL;
+    const char *url;
+    unsigned int port = 0;
+    int i, found = 0;
+
+    ogs_assert(OGS_OK == ogs_getaddrinfo(&address, AF_UNSPEC, "10.45.0.2", 0, 0));
+    memset(&ue, 0, sizeof(ue));
+    ue.address = address;
+    memset(&outcome, 0, sizeof(outcome));
+    outcome.retry_after = -1;
+    sess = _pcf_app_session_new(session, &ue, PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF, counting_callback, &outcome, NULL, NULL);
+    ogs_freeaddrinfo(address);
+    ogs_assert(sess);
+    sess->pcf_app_session_id = ogs_strdup("42");
+    sess->result.callback = result_callback;
+    sess->result.user_data = &outcome;
+
+    /* the notification URI is that of the notification server that the library starts for the PCF session (plain HTTP: the configuration of an NF sets this) */
+    ogs_sbi_self()->tls.server.scheme = OpenAPI_uri_scheme_http;
+    url = _pcf_app_session_get_notif_url(sess);
+    ABTS_PTR_NOTNULL(tc, url);
+    if (!url) { _pcf_app_session_free(sess); return; }
+    for (i = 0; url[i]; i++)
+        if (url[i] == ':' && url[i + 1] >= '0' && url[i + 1] <= '9') { port = (unsigned int)atoi(url + i + 1); found = 1; }
+    ABTS_TRUE(tc, found);
+    ogs_assert(OGS_OK == ogs_getaddrinfo(&address, AF_UNSPEC, "127.0.0.1", port, 0));
+    client = ogs_sbi_client_add(OpenAPI_uri_scheme_http, NULL, 0, address, NULL);
+    ogs_freeaddrinfo(address);
+    ABTS_PTR_NOTNULL(tc, client);
+    if (!client) { _pcf_app_session_free(sess); return; }
+
+    /* a notification: 204 and the callbacks of the events (clause 5.5.2) */
+    uri = ogs_msprintf("%s/notify", url);
+    ABTS_INT_EQUAL(tc, 204, post_to(tc, client, uri, notification));
+    ABTS_INT_EQUAL(tc, EVENT_BIT(OpenAPI_npcf_af_event_QOS_NOTIF), outcome.notifications);
+    /* a body that is not valid is refused with 4xx (clause 5.5.2.3.1, TS 29.500 table 5.2.7.1-1) */
+    ABTS_INT_EQUAL(tc, 400, post_to(tc, client, uri, "not json"));
+    ABTS_INT_EQUAL(tc, 400, post_to(tc, client, uri, "{\"evNotifs\":[{\"event\":\"NO_SUCH_EVENT\"}]}"));
+    ogs_free(uri);
+    /* another operation of the notification URI is refused */
+    uri = ogs_msprintf("%s/other", url);
+    ABTS_INT_EQUAL(tc, 400, post_to(tc, client, uri, notification));
+    ogs_free(uri);
+
+    /* the termination request (clause 5.5.3): 204, the application is told with the cause, and the library deletes the context in the PCF */
+    outcome.calls = 0;
+    uri = ogs_msprintf("%s/terminate", url);
+    ABTS_INT_EQUAL(tc, 204, post_to(tc, client, uri, "{\"resUri\":\"http://127.0.0.13:7777/npcf-policyauthorization/v1/app-sessions/42\","
+                                    "\"termCause\":\"PDU_SESSION_TERMINATION\"}"));
+    ogs_free(uri);
+    ABTS_INT_EQUAL(tc, 1, outcome.calls);
+    ABTS_INT_EQUAL(tc, PCF_APP_SESSION_OP_TERMINATED, outcome.operation);
+    ABTS_STR_EQUAL(tc, "PDU_SESSION_TERMINATION", outcome.termination_cause);
+    /* the request to delete goes to a PCF that is not there: it fails and the object is released by the library */
+    {
+        bool released = false;
+        ogs_time_t end = ogs_time_now() + ogs_time_from_msec(3000);
+
+        while (!released && ogs_time_now() < end) {
+            bool never = false;
+            pcf_app_session_t *held = NULL;
+
+            run_events(&never, 100);
+            ogs_list_for_each(&session->pcf_app_sessions, held)
+                if (held == sess) break;
+            released = held == NULL;
+        }
+        ABTS_TRUE(tc, released);
+    }
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

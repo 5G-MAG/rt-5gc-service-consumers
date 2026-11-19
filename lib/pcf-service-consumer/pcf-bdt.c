@@ -101,6 +101,12 @@ static pcf_bdt_policy_t *policy_new(pcf_session_t *session, pcf_bdt_operation_t 
     return policy;
 }
 
+/* The same, for the tests of the library (the answers of a PCF are made up and handed to _pcf_bdt_process_client_event()) */
+pcf_bdt_policy_t *_pcf_bdt_policy_new(pcf_session_t *session, pcf_bdt_operation_t operation, pcf_bdt_result_callback callback, void *user_data)
+{
+    return policy_new(session, operation, callback, user_data);
+}
+
 static ogs_sbi_request_t *build_request(const char *method, const char *uri, const char *content)
 {
     ogs_sbi_message_t message;

@@ -137,17 +137,17 @@ bool _pcf_process_event(ogs_event_t *e)
                                                 ogs_sbi_response_t *response;
 
                                                 ogs_info("The PCF terminated an application session context");
-                                                response = ogs_sbi_build_response(&message, OGS_SBI_HTTP_STATUS_NO_CONTENT);
-                                                ogs_assert(response);
-                                                ogs_assert(true == ogs_sbi_server_send_response(stream, response));
-
                                                 app_session->operation = PCF_APP_SESSION_OP_TERMINATED;
                                                 _pcf_app_session_set_answer(app_session, 0, NULL);
                                                 /*
                                                  * The TerminationInfo (table 5.5.3.3.1-2) says why: its termCause goes to the application. A body that
-                                                 * cannot be read does not stop the termination: the PCF said that the context is no longer valid.
+                                                 * cannot be read does not stop the termination: the PCF said that the context is no longer valid. The
+                                                 * request is the SBI server's and is released when the response has been sent: it is read before.
                                                  */
                                                 _pcf_app_session_set_termination_cause(app_session, request->http.content);
+                                                response = ogs_sbi_build_response(&message, OGS_SBI_HTTP_STATUS_NO_CONTENT);
+                                                ogs_assert(response);
+                                                ogs_assert(true == ogs_sbi_server_send_response(stream, response));
                                                 if (!_pcf_app_session_change_callback_call(app_session, true))
                                                     ogs_error("AppSession Change callback failed");
                                                 /*
