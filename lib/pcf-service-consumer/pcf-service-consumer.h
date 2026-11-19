@@ -85,7 +85,12 @@ typedef bool (*pcf_app_session_change_callback)(pcf_app_session_t *app_session, 
  * UE Network address information to be used in registering the AppSessionContext
  */
 typedef struct ue_network_identifier_s {
-    ogs_sockaddr_t *address; /** The IP address of the UE for a PDU session. */
+    ogs_sockaddr_t *address; /** The IP address of the UE for a PDU session: the only one of these that the requests carry. */
+    /*
+     * The four that follow are kept but not sent (TS 29.514 V19.8.0 clause 4.2.2.2 lets the consumer include them, "may"): the PCF matches all that
+     * it is given (note 7) and uses the DNN as it is given, without a transformation (note 2 of table 5.6.2.3-1), so a DNN of another form than the
+     * PCF's own makes the binding fail (PDU_SESSION_NOT_AVAILABLE). The address binds the session. See CONSUMERS audit O6 (no CR).
+     */
     char *supi;              /** The SUPI of the UE's PDU session. */
     char *gpsi;              /** The GPSI of the UE's PDU session. */
     char *dnn;               /** The network name of the UE's PDU session. */

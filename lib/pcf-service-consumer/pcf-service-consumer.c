@@ -13,6 +13,7 @@ https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
 #include "npcf-process.h"
 #include "pcf-bdt.h"
 #include "utils.h"
+#include "pcf-evsubsc.h"
 
 
 pcf_session_t *pcf_session_new(const ogs_sockaddr_t *pcf_address)
@@ -69,6 +70,17 @@ static bool create_app_session(pcf_session_t *session,
     pcf_app_session_t *sess; 
     ogs_sbi_request_t *request;
     bool rv;
+    char what[96];
+
+    /*
+     * TS 29.500 V19.7.1 clause 6.6.2: what relates to a feature is sent only if the feature is supported (clause 5.8 of TS 29.514: here what the library
+     * offers, the PCF has not answered yet). An event or an attribute of another feature is not sent: the creation is refused, as the application
+     * would otherwise wait for notifications that no callback can get (CONSUMERS audit O11, O13).
+     */
+    if (!pcf_events_subscription_allowed(options->events, options->events_subscription, PCF_LIB_FEATURES, PCF_LIB_FEATURES_HI, what, sizeof(what))) {
+        ogs_error("The application session context is not created: %s is not offered by this library", what);
+        return false;
+    }
 
     /* the notifications of the events of the subscription details go to the same callback */
     sess = _pcf_app_session_new(session, ue_connection,
@@ -137,6 +149,11 @@ bool pcf_session_create_app_session_with_options(pcf_session_t *session,
 
 bool pcf_session_update_app_session(pcf_app_session_t *app_sess, OpenAPI_list_t *media_component)
 {
+    /*
+     * Implementation choice, text silent, see CONSUMERS audit O9 (no CR): the update is sent whether or not PatchCorrection (feature 28) was
+     * negotiated. TS 29.514 V19.8.0 clauses 4.2.3.2 and 5.8 give no other way to update a context, only the remark that without the feature the
+     * interoperability "can only be ensured when it is not required the update"; the PCF answers (or refuses) it, and the application is told.
+     */
 
     ogs_sbi_request_t *request;
     bool rv;
@@ -219,8 +236,17 @@ bool pcf_app_session_subscribe_event(pcf_app_session_t *app_session,
     int merged = 0;
     int events_mask;
 
+    char what[96];
+
     if(!app_session || !callback)
         return false;
+
+    /* only what the PCF and the library both support is sent (TS 29.500 V19.7.1 clause 6.6.2); see pcf_session_create_app_session() */
+    if (!pcf_events_subscription_allowed(0, evt_subsc_req, app_session->policyauthorization_features, app_session->policyauthorization_features_hi,
+                what, sizeof(what))) {
+        ogs_error("The events are not subscribed: %s is not supported for this application session context", what);
+        return false;
+    }
 
     events_mask = events_subsc_req_data_to_events_mask(evt_subsc_req);
     _pcf_app_session_add_event_notification(app_session, events_mask, callback, user_data);

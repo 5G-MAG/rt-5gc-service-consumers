@@ -37,6 +37,46 @@ static char *session_uri(const pcf_app_session_t *sess, const char *suffix)
     return uri;
 }
 
+/*
+ * The subscriptions that the text ties to what the media components ask for (the consumer "shall also subscribe"): TS 29.514 V19.8.0 clause 4.2.2.32,
+ * alternative service requirements need the notifications of the outcome of the resources allocation and of the QoS notification control, and
+ * clause 4.2.2.43, the indication of ECN marking for L4S needs the L4S_SUPP event. They are added to the events when the application did not give them.
+ */
+static void add_event_if_missing(OpenAPI_list_t *events, OpenAPI_npcf_af_event_e event)
+{
+    OpenAPI_lnode_t *node = NULL;
+    OpenAPI_af_event_subscription_t *added;
+
+    OpenAPI_list_for_each(events, node) {
+        OpenAPI_af_event_subscription_t *held = node->data;
+
+        if (held && held->event == event) return;
+    }
+    added = ogs_calloc(1, sizeof(*added));
+    ogs_assert(added);
+    added->event = event;
+    added->notif_method = OpenAPI_af_notif_method_EVENT_DETECTION;
+    OpenAPI_list_add(events, added);
+}
+
+static void ensure_companion_events(OpenAPI_list_t *events, OpenAPI_list_t *media_components)
+{
+    OpenAPI_lnode_t *node = NULL;
+
+    OpenAPI_list_for_each(media_components, node) {
+        OpenAPI_map_t *entry = node->data;
+        OpenAPI_media_component_t *component = entry ? entry->value : NULL;
+
+        if (!component) continue;
+        if ((component->alt_ser_reqs && component->alt_ser_reqs->count) || (component->alt_ser_reqs_data && component->alt_ser_reqs_data->count)) {
+            add_event_if_missing(events, OpenAPI_npcf_af_event_SUCCESSFUL_RESOURCES_ALLOCATION);
+            add_event_if_missing(events, OpenAPI_npcf_af_event_QOS_NOTIF);
+        }
+        if (component->l4s_ind != OpenAPI_uplink_downlink_support_NULL)
+            add_event_if_missing(events, OpenAPI_npcf_af_event_L4S_SUPP);
+    }
+}
+
 ogs_sbi_request_t *pcf_policyauthorization_request_create(
         pcf_app_session_t *sess, OpenAPI_list_t *media_component, const pcf_app_session_options_t *options)
 {
@@ -94,6 +134,12 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
     AscReqData.ue_ipv4 = sess->ipv4addr;
     AscReqData.ue_ipv6 = sess->ipv6addr;
 
+    /*
+     * Implementation choice, text silent, see CONSUMERS audit O6 (no CR): supi, gpsi and dnn of the application session are never set (the fields of
+     * ue_network_identifier_t are not copied to it): they are optional ("may"), and the PCF matches every attribute that it is given and takes
+     * the DNN in the form that it uses itself (table 5.6.2.3-1 notes 2 and 7), so a value of the application that is not that of the PCF would
+     * make the binding fail. The UE address alone binds the application session.
+     */
     AscReqData.dnn = sess->dnn;
 
     memset(&evSubsc, 0, sizeof(evSubsc));
@@ -145,6 +191,8 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
         evSubsc.is_avrg_wndw = extra->is_avrg_wndw;
         evSubsc.avrg_wndw = extra->avrg_wndw;
     }
+
+    ensure_companion_events(evSubsc.events, media_component);
 
     evSubsc.notif_uri = ogs_strdup(_pcf_app_session_get_notif_url(sess));
     /* TS 29.514 V19.8.0 table 5.6.2.6-1: events has 1..N entries, so there is no event subscription to send without an event */

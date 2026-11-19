@@ -18,6 +18,7 @@
 #include "pcf-client-sess.h"
 #include "pcf-build.h"
 #include "utils.h"
+#include "pcf-evsubsc.h"
 
 /* Unit test includes */
 #include "pcf-test-unit.h"
@@ -51,6 +52,10 @@ static void unsubscribe_func(abts_case *tc, void *data);
 static void subscribe_details_func(abts_case *tc, void *data);
 static void delete_sibling_func(abts_case *tc, void *data);
 static void termination_cause_func(abts_case *tc, void *data);
+static void features_gate_func(abts_case *tc, void *data);
+static void companion_events_func(abts_case *tc, void *data);
+static void update_without_patch_correction_func(abts_case *tc, void *data);
+static void ue_identifier_func(abts_case *tc, void *data);
 
 int pcf_unit_initialise(void)
 {
@@ -104,6 +109,10 @@ abts_suite *test_pcf_unit(abts_suite *suite)
     abts_run_test(suite, subscribe_details_func, NULL);
     abts_run_test(suite, delete_sibling_func, NULL);
     abts_run_test(suite, termination_cause_func, NULL);
+    abts_run_test(suite, features_gate_func, NULL);
+    abts_run_test(suite, companion_events_func, NULL);
+    abts_run_test(suite, update_without_patch_correction_func, NULL);
+    abts_run_test(suite, ue_identifier_func, NULL);
 
     return suite;
 }
@@ -1088,6 +1097,236 @@ static void termination_cause_func(abts_case *tc, void *data)
         ABTS_STR_EQUAL(tc, causes[i], outcome.termination_cause);
         _pcf_app_session_free(sess);
     }
+}
+
+/*
+ * TS 29.500 V19.7.1 clause 6.6.2: "attributes or enumerated values" that relate to a feature "shall only be sent" if the feature is supported. The
+ * AfEvent values and the attributes of the events subscription carry their feature in the column Applicability of TS 29.514 V19.8.0 tables 5.6.3.7-1,
+ * 5.6.2.6-1 and 5.6.2.10-1; the library offers the features 2, 15, 16, 17, 28, 59, 63, 68 and 69 (CONSUMERS audit O11, O13).
+ */
+static void features_gate_func(abts_case *tc, void *data)
+{
+    static const OpenAPI_npcf_af_event_e unmapped[] = {
+        OpenAPI_npcf_af_event_EXTRA_UE_ADDR, OpenAPI_npcf_af_event_QOS_MON_CAP_REPO, OpenAPI_npcf_af_event_UE_REACH_STATUS_CH,
+        OpenAPI_npcf_af_event_BAT_OFFSET_INFO, OpenAPI_npcf_af_event_URSP_ENF_INFO, OpenAPI_npcf_af_event_PACK_DEL_VAR,
+        OpenAPI_npcf_af_event_RT_DELAY_TWO_QOS_FLOWS, OpenAPI_npcf_af_event_RATE_LIMIT_INFO_REPO, OpenAPI_npcf_af_event_UP_PATH_CHANGE,
+        OpenAPI_npcf_af_event_CN_HEALTH_MONITOR, OpenAPI_npcf_af_event_UE_TEMPORARILY_UNAVAILABLE
+    };
+    static const OpenAPI_npcf_af_event_e offered[] = {
+        OpenAPI_npcf_af_event_ACCESS_TYPE_CHANGE, OpenAPI_npcf_af_event_QOS_NOTIF, OpenAPI_npcf_af_event_QOS_MONITORING,
+        OpenAPI_npcf_af_event_USAGE_REPORT, OpenAPI_npcf_af_event_L4S_SUPP, OpenAPI_npcf_af_event_SUCCESSFUL_RESOURCES_ALLOCATION
+    };
+    char what[96];
+    int i;
+    OpenAPI_events_subsc_req_data_t *subsc;
+    ogs_sockaddr_t *ue_address = NULL;
+    ue_network_identifier_t ue;
+    pcf_app_session_options_t options;
+    int sessions_before = (int)ogs_list_count(&session->pcf_app_sessions);
+
+    /* the 11 events that have no callback bit, and every event of a feature that the library does not offer, are not sent */
+    for (i = 0; i < (int)(sizeof(unmapped) / sizeof(unmapped[0])); i++) {
+        subsc = subsc_new(1, &unmapped[i]);
+        ABTS_TRUE(tc, !pcf_events_subscription_allowed(0, subsc, PCF_LIB_FEATURES, PCF_LIB_FEATURES_HI, what, sizeof(what)));
+        subsc_free(subsc);
+    }
+    ABTS_TRUE(tc, !pcf_events_subscription_allowed(PCF_APP_SESSION_EVENT_TYPE_ANI_REPORT, NULL, PCF_LIB_FEATURES, PCF_LIB_FEATURES_HI, what, sizeof(what)));
+    ABTS_TRUE(tc, strstr(what, "ANI_REPORT") != NULL);
+    ABTS_TRUE(tc, !pcf_events_subscription_allowed(PCF_APP_SESSION_EVENT_TYPE_OUT_OF_CREDIT, NULL, PCF_LIB_FEATURES, PCF_LIB_FEATURES_HI, what, sizeof(what)));
+    /* the events of the features that are offered, and those of no feature, are */
+    for (i = 0; i < (int)(sizeof(offered) / sizeof(offered[0])); i++) {
+        subsc = subsc_new(1, &offered[i]);
+        ABTS_TRUE(tc, pcf_events_subscription_allowed(0, subsc, PCF_LIB_FEATURES, PCF_LIB_FEATURES_HI, what, sizeof(what)));
+        subsc_free(subsc);
+    }
+    ABTS_TRUE(tc, pcf_events_subscription_allowed(PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF | PCF_APP_SESSION_EVENT_TYPE_QOS_MONITORING |
+                PCF_APP_SESSION_EVENT_TYPE_USAGE_REPORT, NULL, PCF_LIB_FEATURES, PCF_LIB_FEATURES_HI, what, sizeof(what)));
+    /* after the answer of the PCF only the features that both support: QOS_MONITORING needs feature 16 */
+    ABTS_TRUE(tc, !pcf_events_subscription_allowed(PCF_APP_SESSION_EVENT_TYPE_QOS_MONITORING, NULL, PCF_LIB_FEATURES & ~((uint64_t)1 << 15), PCF_LIB_FEATURES_HI,
+                what, sizeof(what)));
+    ABTS_TRUE(tc, pcf_events_subscription_allowed(PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF, NULL, 0, 0, what, sizeof(what)));
+
+    /* the attributes of the subscription */
+    subsc = subsc_new(1, &offered[2]);
+    subsc->notif_corre_id = (char *)"c";
+    subsc->usg_thres = (OpenAPI_usage_threshold_t *)subsc;   /* only its presence is looked at */
+    ABTS_TRUE(tc, pcf_events_subscription_allowed(0, subsc, PCF_LIB_FEATURES, PCF_LIB_FEATURES_HI, what, sizeof(what)));
+    ABTS_TRUE(tc, !pcf_events_subscription_allowed(0, subsc, PCF_LIB_FEATURES & ~((uint64_t)1 << 1), PCF_LIB_FEATURES_HI, what, sizeof(what)));
+    ABTS_TRUE(tc, strstr(what, "usgThres") != NULL);
+    subsc->usg_thres = NULL;
+    subsc->notif_corre_id = NULL;
+    subsc->is_avrg_wndw = true;                 /* EnQoSMon, not offered */
+    ABTS_TRUE(tc, !pcf_events_subscription_allowed(0, subsc, PCF_LIB_FEATURES, PCF_LIB_FEATURES_HI, what, sizeof(what)));
+    subsc->is_avrg_wndw = false;
+    subsc->is_direct_notif_ind = true;          /* ExposureToEAS or EnQoSMon, neither offered */
+    ABTS_TRUE(tc, !pcf_events_subscription_allowed(0, subsc, PCF_LIB_FEATURES, PCF_LIB_FEATURES_HI, what, sizeof(what)));
+    subsc->is_direct_notif_ind = false;
+    ((OpenAPI_af_event_subscription_t *)subsc->events->first->data)->qos_mon_param_type = OpenAPI_qos_monitoring_param_type_CONGESTION;
+    ABTS_TRUE(tc, !pcf_events_subscription_allowed(0, subsc, PCF_LIB_FEATURES, PCF_LIB_FEATURES_HI, what, sizeof(what)));
+    ((OpenAPI_af_event_subscription_t *)subsc->events->first->data)->qos_mon_param_type = OpenAPI_qos_monitoring_param_type_NULL;
+    ((OpenAPI_af_event_subscription_t *)subsc->events->first->data)->notif_method = OpenAPI_af_notif_method_PERIODIC;
+    ABTS_TRUE(tc, pcf_events_subscription_allowed(0, subsc, PCF_LIB_FEATURES, PCF_LIB_FEATURES_HI, what, sizeof(what)));
+    ABTS_TRUE(tc, !pcf_events_subscription_allowed(0, subsc, PCF_LIB_FEATURES & ~((uint64_t)1 << 14), PCF_LIB_FEATURES_HI, what, sizeof(what)));
+    subsc_free(subsc);
+
+    /* the creation of an application session context with such an event is refused, and nothing is sent */
+    ogs_assert(OGS_OK == ogs_getaddrinfo(&ue_address, AF_UNSPEC, "10.45.0.2", 0, 0));
+    memset(&ue, 0, sizeof(ue));
+    ue.address = ue_address;
+    memset(&options, 0, sizeof(options));
+    options.events = PCF_APP_SESSION_EVENT_TYPE_ANI_REPORT;
+    ABTS_TRUE(tc, !pcf_session_create_app_session_with_options(session, &ue, &options, NULL, notification_callback, NULL, result_callback, NULL));
+    ABTS_INT_EQUAL(tc, sessions_before, (int)ogs_list_count(&session->pcf_app_sessions));
+    ogs_freeaddrinfo(ue_address);
+
+    /* and so is the subscription to it later */
+    {
+        pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+
+        sess->pcf_app_session_id = ogs_strdup("42");
+        sess->policyauthorization_features = PCF_LIB_FEATURES & ~((uint64_t)1 << 15);     /* QoSMonitoring was not negotiated */
+        subsc = subsc_new(1, &offered[2]);
+        ABTS_TRUE(tc, !pcf_app_session_subscribe_event(sess, subsc, notification_callback, NULL));
+        ABTS_INT_EQUAL(tc, 1, (int)ogs_list_count(&sess->pcf_event_notifications));
+        subsc_free(subsc);
+        _pcf_app_session_free(sess);
+    }
+}
+
+/*
+ * TS 29.514 V19.8.0 clauses 4.2.2.32 and 4.2.2.43: a consumer that provides alternative service requirements "shall also subscribe" to the outcome of the
+ * resources allocation and to the QoS notification control, and one that gives the indication of ECN marking for L4S shall subscribe to L4S_SUPP.
+ */
+static OpenAPI_list_t *media_component_new(bool alternatives, OpenAPI_uplink_downlink_support_e l4s)
+{
+    OpenAPI_list_t *list = OpenAPI_list_create();
+    OpenAPI_media_component_t *component = ogs_calloc(1, sizeof(*component));
+
+    ogs_assert(list && component);
+    component->med_comp_n = 1;
+    component->f_status = OpenAPI_flow_status_ENABLED;
+    if (alternatives) {
+        component->alt_ser_reqs = OpenAPI_list_create();
+        OpenAPI_list_add(component->alt_ser_reqs, ogs_strdup("reference-1"));
+    }
+    component->l4s_ind = l4s;
+    OpenAPI_list_add(list, OpenAPI_map_create(ogs_msprintf("%d", component->med_comp_n), component));
+    return list;
+}
+
+static int event_count(cJSON *json, const char *event_name)
+{
+    cJSON *req_data = cJSON_GetObjectItemCaseSensitive(json, "ascReqData");
+    cJSON *ev_subsc = req_data ? cJSON_GetObjectItemCaseSensitive(req_data, "evSubsc") : NULL;
+    cJSON *events = ev_subsc ? cJSON_GetObjectItemCaseSensitive(ev_subsc, "events") : NULL;
+    cJSON *event;
+    int count = 0;
+
+    cJSON_ArrayForEach(event, events)
+        if (string_of(event, "event") && !strcmp(string_of(event, "event"), event_name)) count++;
+    return count;
+}
+
+static void companion_events_func(abts_case *tc, void *data)
+{
+    static const struct {
+        bool alternatives;
+        OpenAPI_uplink_downlink_support_e l4s;
+        int events;
+        int resources, qos_notif, l4s_supp;
+    } cases[] = {
+        {false, OpenAPI_uplink_downlink_support_NULL, PCF_APP_SESSION_EVENT_TYPE_NONE, 0, 0, 0},
+        {true, OpenAPI_uplink_downlink_support_NULL, PCF_APP_SESSION_EVENT_TYPE_NONE, 1, 1, 0},
+        /* given by the application: not listed twice */
+        {true, OpenAPI_uplink_downlink_support_NULL, PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF | PCF_APP_SESSION_EVENT_TYPE_SUCCESSFUL_RESOURCES_ALLOCATION, 1, 1, 0},
+        {false, OpenAPI_uplink_downlink_support_UL_DL, PCF_APP_SESSION_EVENT_TYPE_NONE, 0, 0, 1},
+        {false, OpenAPI_uplink_downlink_support_DL, PCF_APP_SESSION_EVENT_TYPE_L4S_SUPP, 0, 0, 1},
+    };
+    int i;
+
+    for (i = 0; i < (int)(sizeof(cases) / sizeof(cases[0])); i++) {
+        pcf_app_session_t *sess = app_session_new("10.45.0.2", cases[i].events);
+        pcf_app_session_options_t options;
+        OpenAPI_list_t *components = media_component_new(cases[i].alternatives, cases[i].l4s);
+        ogs_sbi_request_t *request;
+        cJSON *json;
+
+        memset(&options, 0, sizeof(options));
+        options.events = cases[i].events;
+        request = pcf_policyauthorization_request_create(sess, components, &options);
+        json = content_of(tc, request);
+        ABTS_INT_EQUAL(tc, cases[i].resources, event_count(json, "SUCCESSFUL_RESOURCES_ALLOCATION"));
+        ABTS_INT_EQUAL(tc, cases[i].qos_notif, event_count(json, "QOS_NOTIF"));
+        ABTS_INT_EQUAL(tc, cases[i].l4s_supp, event_count(json, "L4S_SUPP"));
+        if (json) cJSON_Delete(json);
+        if (request) ogs_sbi_request_free(request);
+        pcf_media_components_free(components);
+        _pcf_app_session_free(sess);
+    }
+}
+
+/*
+ * Implementation choice, text silent, see CONSUMERS audit O9: the update is a PATCH whether or not PatchCorrection (feature 28) was negotiated (TS 29.514
+ * V19.8.0 clauses 4.2.3.2 and 5.8 give no other way to update a context).
+ */
+static void update_without_patch_correction_func(abts_case *tc, void *data)
+{
+    pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+    OpenAPI_list_t *media_component_rm = media_component_rm_new();
+    ogs_sbi_request_t *request;
+
+    sess->pcf_app_session_id = ogs_strdup("42");
+    sess->policyauthorization_features = 0;
+    sess->policyauthorization_features_hi = 0;
+    request = pcf_policyauthorization_request_update(sess, media_component_rm);
+    ABTS_PTR_NOTNULL(tc, request);
+    if (request) {
+        ABTS_STR_EQUAL(tc, OGS_SBI_HTTP_METHOD_PATCH, request->h.method);
+        ogs_sbi_request_free(request);
+    }
+    pcf_media_components_rm_free(media_component_rm);
+    _pcf_app_session_free(sess);
+}
+
+/*
+ * Implementation choice, text silent, see CONSUMERS audit O6: the SUPI, GPSI, DNN and IP domain that the application gives are kept and not sent; the
+ * UE address binds the application session (TS 29.514 V19.8.0 table 5.6.2.3-1 notes 2 and 7: the PCF matches all it is given, with the DNN as given).
+ */
+static void ue_identifier_func(abts_case *tc, void *data)
+{
+    ue_network_identifier_t ue;
+    ogs_sockaddr_t *ue_address = NULL;
+    pcf_app_session_t *sess;
+    pcf_app_session_options_t options;
+    ogs_sbi_request_t *request;
+    cJSON *json, *req_data;
+
+    ogs_assert(OGS_OK == ogs_getaddrinfo(&ue_address, AF_UNSPEC, "10.45.0.2", 0, 0));
+    memset(&ue, 0, sizeof(ue));
+    ue.address = ue_address;
+    ue.supi = (char *)"imsi-001010000000001";
+    ue.gpsi = (char *)"msisdn-123456";
+    ue.dnn = (char *)"internet";
+    ue.ip_domain = (char *)"domain-1";
+    sess = _pcf_app_session_new(session, &ue, PCF_APP_SESSION_EVENT_TYPE_NONE, notification_callback, NULL, NULL, NULL);
+    ogs_freeaddrinfo(ue_address);
+    ogs_assert(sess);
+    sess->notif_url = ogs_strdup("http://127.0.0.1:9999/npcf-policyauthorization/v1/app-session-instance/1");
+    memset(&options, 0, sizeof(options));
+    request = pcf_policyauthorization_request_create(sess, NULL, &options);
+    json = content_of(tc, request);
+    req_data = cJSON_GetObjectItemCaseSensitive(json, "ascReqData");
+    ABTS_PTR_NOTNULL(tc, req_data);
+    if (req_data) {
+        ABTS_STR_EQUAL(tc, "10.45.0.2", string_of(req_data, "ueIpv4") ? string_of(req_data, "ueIpv4") : "");
+        ABTS_TRUE(tc, cJSON_GetObjectItemCaseSensitive(req_data, "supi") == NULL);
+        ABTS_TRUE(tc, cJSON_GetObjectItemCaseSensitive(req_data, "gpsi") == NULL);
+        ABTS_TRUE(tc, cJSON_GetObjectItemCaseSensitive(req_data, "dnn") == NULL);
+        ABTS_TRUE(tc, cJSON_GetObjectItemCaseSensitive(req_data, "ipDomain") == NULL);
+    }
+    if (json) cJSON_Delete(json);
+    if (request) ogs_sbi_request_free(request);
+    _pcf_app_session_free(sess);
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:
