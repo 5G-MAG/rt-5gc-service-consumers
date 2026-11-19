@@ -49,6 +49,8 @@ typedef struct pcf_app_session_s {
     uint64_t policyauthorization_features_hi;   /* the features above number 64 */
 
     char *pcf_app_session_id;
+    /* the path of the Individual Application Session Context resource, from the Location of the answer to its creation */
+    char *resource_path;
 
     /* names this object in the notification URL; unrelated to its address */
     uint64_t instance_id;
@@ -86,6 +88,10 @@ typedef struct pcf_app_session_s {
     int last_status;
     char *problem_title;
     char *problem_detail;
+    char *problem_cause;
+    int retry_after;            /* seconds, -1 if the answer had none */
+    char *redirect_location;
+    char *termination_cause;
 
     ogs_list_t pcf_event_notifications; // Nodes of this list are of type pcf_event_notification_t *
 
@@ -113,6 +119,9 @@ extern bool _pcf_app_session_notifications_callback_call(pcf_app_session_t *app_
 	       					         OpenAPI_events_notification_t *notifications);
 extern bool _pcf_app_session_exists(pcf_app_session_t *app_session);
 extern void _pcf_app_session_set_answer(pcf_app_session_t *app_session, int http_status, const OpenAPI_problem_details_t *problem);
+extern void _pcf_app_session_set_answer_headers(pcf_app_session_t *app_session, const ogs_sbi_response_t *response);
+extern void _pcf_app_session_answer_notifications(pcf_app_session_t *app_session, const OpenAPI_events_notification_t *notifications);
+extern void _pcf_app_session_set_termination_cause(pcf_app_session_t *app_session, const char *termination_info_json);
 extern pcf_app_session_t *_pcf_app_session_find_by_instance_id(uint64_t instance_id);
 
 #ifdef __cplusplus

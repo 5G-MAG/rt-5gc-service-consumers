@@ -7,6 +7,14 @@
  * https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
  */
 
+/* strptime() and timegm() for the Retry-After header field */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+#include <ctype.h>
+#include <limits.h>
+#include <time.h>
+
 #include "ogs-core.h"
 #include "ogs-sbi.h"
 
@@ -22,6 +30,100 @@ extern "C" {
 char *_sockaddr_to_string(const ogs_sockaddr_t *addr)
 {
     return ogs_ipstrdup((ogs_sockaddr_t*)addr); /* safe to remove const as OGS routines just use it read-only */
+}
+
+char *_pcf_authority(const ogs_sockaddr_t *addr)
+{
+    char host[OGS_ADDRSTRLEN];
+    ogs_sockaddr_t *address = (ogs_sockaddr_t *)addr; /* only read by the Open5GS macros */
+
+    if (!addr) return NULL;
+    OGS_ADDR(address, host);
+    return addr->ogs_sa_family == AF_INET6 ? ogs_msprintf("[%s]:%d", host, OGS_PORT(address)) : ogs_msprintf("%s:%d", host, OGS_PORT(address));
+}
+
+/* RFC 3986 clause 5.2.4: the dot segments of an absolute path are removed (in place) */
+static void remove_dot_segments(char *path)
+{
+    char *out = path, *in = path;
+
+    while (*in) {
+        char *next = strchr(in + 1, '/');
+        size_t len = next ? (size_t)(next - in) : strlen(in);
+
+        if (len == 2 && in[0] == '/' && in[1] == '.') {
+            /* "/." is dropped (a path that ends with it keeps its slash) */
+            if (!next) *out++ = '/';
+        } else if (len == 3 && in[0] == '/' && in[1] == '.' && in[2] == '.') {
+            while (out > path && *--out != '/');
+            if (!next) *out++ = '/';
+        } else {
+            memmove(out, in, len);
+            out += len;
+        }
+        in += len;
+    }
+    *out = '\0';
+}
+
+char *_location_path(const char *location, const char *request_path)
+{
+    char *copy, *path, *end, *result;
+
+    if (!location || !*location) return NULL;
+    copy = ogs_strdup(location);
+    if ((end = strpbrk(copy, "?#")) != NULL) *end = '\0';
+    if (strstr(copy, "://") != NULL || (copy[0] == '/' && copy[1] == '/')) {
+        /* absolute URI, or a network-path reference: the path follows the authority */
+        char *authority = strstr(copy, "//") + 2;
+
+        path = strchr(authority, '/');
+        if (!path) { ogs_free(copy); return NULL; }
+        result = ogs_strdup(path);
+    } else if (copy[0] == '/') {
+        result = ogs_strdup(copy);
+    } else {
+        /* a relative reference: merged with the path of the request (RFC 3986 clause 5.2.3) */
+        char *slash = request_path ? strrchr(request_path, '/') : NULL;
+        size_t dir = slash ? (size_t)(slash - request_path) + 1 : 1;
+
+        result = ogs_calloc(1, dir + strlen(copy) + 2);
+        if (slash) memcpy(result, request_path, dir); else result[0] = '/';
+        strcat(result, copy);
+    }
+    ogs_free(copy);
+    remove_dot_segments(result);
+    /* the identifier of the resource is the last segment: a trailing slash does not name another one */
+    end = result + strlen(result);
+    while (end > result + 1 && end[-1] == '/') *--end = '\0';
+    return result;
+}
+
+int _retry_after_seconds(const char *value, time_t now)
+{
+    if (!value) return -1;
+    while (*value == ' ' || *value == '\t') value++;
+    if (!*value) return -1;
+    if (isdigit((unsigned char)*value)) {
+        long long seconds = 0;
+
+        for (; isdigit((unsigned char)*value); value++) {
+            seconds = seconds * 10 + (*value - '0');
+            if (seconds > INT_MAX) seconds = INT_MAX;
+        }
+        while (*value == ' ' || *value == '\t') value++;
+        return *value ? -1 : (int)seconds;
+    } else {
+        struct tm tm;
+        const char *end;
+        long long delta;
+
+        memset(&tm, 0, sizeof(tm));
+        end = strptime(value, "%a, %d %b %Y %H:%M:%S GMT", &tm);
+        if (!end || *end) return -1;
+        delta = (long long)timegm(&tm) - (long long)now;
+        return delta < 0 ? 0 : (delta > INT_MAX ? INT_MAX : (int)delta);
+    }
 }
 
 int events_notification_to_events_mask(const OpenAPI_events_notification_t *events_notif)

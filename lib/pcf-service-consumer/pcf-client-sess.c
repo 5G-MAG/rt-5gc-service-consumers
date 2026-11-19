@@ -96,6 +96,52 @@ static bool event_subscription_equal(const OpenAPI_af_event_subscription_t *a, c
 }
 
 /*
+ * The details of an events subscription (EventsSubscReqData of table 5.6.2.6-1: the QoS monitoring information and parameters, the usage threshold,
+ * the notification correlation id, ...) that the caller gives replace those held; what is not given stays. They are deep copies: the caller keeps its
+ * own. Returns 1 if some detail was given (the request is then sent although no event changed), else 0. See CONSUMERS audit O12 (no CR: library
+ * behaviour).
+ */
+#define TAKE(field, release) \
+    if (copy->field) { if (held->field) { release(held->field); } held->field = copy->field; copy->field = NULL; given = 1; }
+static void list_free_values(OpenAPI_list_t *list) { OpenAPI_list_free(list); }
+static void list_free_strings(OpenAPI_list_t *list)
+{
+    OpenAPI_lnode_t *node = NULL;
+
+    OpenAPI_list_for_each(list, node)
+        ogs_free(node->data);
+    OpenAPI_list_free(list);
+}
+
+static int merge_details(OpenAPI_events_subsc_req_data_t *held, OpenAPI_events_subsc_req_data_t *given_data)
+{
+    OpenAPI_events_subsc_req_data_t *copy;
+    int given = 0;
+
+    if (!given_data->events || !given_data->events->count) return 0;
+    copy = OpenAPI_events_subsc_req_data_copy(NULL, given_data);
+    if (!copy) return 0;
+    TAKE(req_qos_mon_params, list_free_values)
+    TAKE(qos_mon, OpenAPI_qos_monitoring_information_free)
+    TAKE(qos_mon_dat_rate, OpenAPI_qos_monitoring_information_free)
+    TAKE(pdv_req_mon_params, list_free_values)
+    TAKE(pdv_mon, OpenAPI_qos_monitoring_information_free)
+    TAKE(congest_mon, OpenAPI_qos_monitoring_information_free)
+    TAKE(rtt_mon, OpenAPI_qos_monitoring_information_free)
+    TAKE(avl_bit_rate_mon, OpenAPI_qos_monitoring_information_free)
+    TAKE(rtt_flow_ref, OpenAPI_rtt_flow_reference_free)
+    TAKE(req_anis, list_free_values)
+    TAKE(usg_thres, OpenAPI_usage_threshold_free)
+    TAKE(notif_corre_id, ogs_free)
+    TAKE(af_app_ids, list_free_strings)
+    if (copy->is_direct_notif_ind) { held->is_direct_notif_ind = true; held->direct_notif_ind = copy->direct_notif_ind; given = 1; }
+    if (copy->is_avrg_wndw) { held->is_avrg_wndw = true; held->avrg_wndw = copy->avrg_wndw; given = 1; }
+    OpenAPI_events_subsc_req_data_free(copy);
+    return given;
+}
+#undef TAKE
+
+/*
  * TS 29.514 V19.8.0 clause 4.2.6.2: the PUT request carries the complete list of the subscribed events, so an event that is subscribed again
  * replaces its entry and is not listed twice. Returns the number of entries that were added or changed.
  */
@@ -143,6 +189,8 @@ int merge_event_subsc_to_app_session_context(pcf_app_session_t *app_session, Ope
         }
         merged_events++;
     }
+    /* the details of the subscription (O12) */
+    merged_events += merge_details(held, evt_subsc_req);
     return merged_events;
 }
 
@@ -260,6 +308,20 @@ void pcf_session_remove_all(void)
     ogs_list_for_each_safe(&pcf_self()->pcf_sessions, next, session)
        pcf_session_free(session);
 
+}
+
+void _pcf_app_session_clear_events(pcf_app_session_t *sess)
+{
+    OpenAPI_app_session_context_req_data_t *asc_req_data;
+
+    if (!sess) return;
+    if (sess->pcf_app_session_context_requested && (asc_req_data = sess->pcf_app_session_context_requested->asc_req_data) != NULL &&
+        asc_req_data->ev_subsc) {
+        OpenAPI_events_subsc_req_data_free(asc_req_data->ev_subsc);
+        asc_req_data->ev_subsc = NULL;
+    }
+    /* a callback node is released with the events that it was for (the user data is the application's) */
+    _pcf_app_session_remove_event_notification(sess, 0x7fffffff, NULL, NULL);
 }
 
 void _pcf_app_sess_event_notifications_remove(pcf_app_session_t *sess)

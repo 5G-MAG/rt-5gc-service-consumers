@@ -17,6 +17,7 @@
 #include "pcf-client.h"
 #include "pcf-client-sess.h"
 #include "pcf-build.h"
+#include "utils.h"
 
 /* Unit test includes */
 #include "pcf-test-unit.h"
@@ -39,6 +40,17 @@ static void no_query_func(abts_case *tc, void *data);
 static void update_sponsor_func(abts_case *tc, void *data);
 static void update_answer_func(abts_case *tc, void *data);
 static void update_request_func(abts_case *tc, void *data);
+static void create_options_func(abts_case *tc, void *data);
+static void ipv6_pcf_func(abts_case *tc, void *data);
+static void location_func(abts_case *tc, void *data);
+static void create_no_features_func(abts_case *tc, void *data);
+static void answer_result_func(abts_case *tc, void *data);
+static void retry_after_func(abts_case *tc, void *data);
+static void answer_notifications_func(abts_case *tc, void *data);
+static void unsubscribe_func(abts_case *tc, void *data);
+static void subscribe_details_func(abts_case *tc, void *data);
+static void delete_sibling_func(abts_case *tc, void *data);
+static void termination_cause_func(abts_case *tc, void *data);
 
 int pcf_unit_initialise(void)
 {
@@ -81,6 +93,17 @@ abts_suite *test_pcf_unit(abts_suite *suite)
     abts_run_test(suite, no_query_func, NULL);
     abts_run_test(suite, update_sponsor_func, NULL);
     abts_run_test(suite, update_answer_func, NULL);
+    abts_run_test(suite, create_options_func, NULL);
+    abts_run_test(suite, ipv6_pcf_func, NULL);
+    abts_run_test(suite, location_func, NULL);
+    abts_run_test(suite, create_no_features_func, NULL);
+    abts_run_test(suite, answer_result_func, NULL);
+    abts_run_test(suite, retry_after_func, NULL);
+    abts_run_test(suite, answer_notifications_func, NULL);
+    abts_run_test(suite, unsubscribe_func, NULL);
+    abts_run_test(suite, subscribe_details_func, NULL);
+    abts_run_test(suite, delete_sibling_func, NULL);
+    abts_run_test(suite, termination_cause_func, NULL);
 
     return suite;
 }
@@ -91,7 +114,7 @@ static bool notification_callback(pcf_app_session_t *app_session, const OpenAPI_
 }
 
 /* An application session for the UE address, as pcf_session_create_app_session() makes it, without the notification server */
-static pcf_app_session_t *app_session_new(const char *address, int events)
+static pcf_app_session_t *app_session_new_on(pcf_session_t *pcf_session, const char *address, int events)
 {
     ue_network_identifier_t ue;
     ogs_sockaddr_t *ue_address = NULL;
@@ -100,11 +123,16 @@ static pcf_app_session_t *app_session_new(const char *address, int events)
     ogs_assert(OGS_OK == ogs_getaddrinfo(&ue_address, AF_UNSPEC, address, 0, 0));
     memset(&ue, 0, sizeof(ue));
     ue.address = ue_address;
-    sess = _pcf_app_session_new(session, &ue, events, notification_callback, NULL, NULL, NULL);
+    sess = _pcf_app_session_new(pcf_session, &ue, events, notification_callback, NULL, NULL, NULL);
     ogs_freeaddrinfo(ue_address);
     ogs_assert(sess);
     sess->notif_url = ogs_strdup("http://127.0.0.1:9999/npcf-policyauthorization/v1/app-session-instance/1");
     return sess;
+}
+
+static pcf_app_session_t *app_session_new(const char *address, int events)
+{
+    return app_session_new_on(session, address, events);
 }
 
 /* The JSON of the content of a request; the caller releases it */
@@ -174,9 +202,9 @@ static void create_ipv6_func(abts_case *tc, void *data)
     _pcf_app_session_free(sess);
 }
 
-/* The answer of the PCF to a request, as the client of the library hands it over */
-static void answer(abts_case *tc, pcf_app_session_t *sess, const char *method, const char *path, int status, const char *location,
-                   const char *content)
+/* The answer of the PCF to a request, as the client of the library hands it over; retry_after is the value of a Retry-After header field, or NULL */
+static void answer_with(abts_case *tc, pcf_app_session_t *sess, const char *method, const char *path, int status, const char *location,
+                        const char *content, const char *retry_after)
 {
     ogs_event_t *e = ogs_event_new(OGS_EVENT_SBI_CLIENT);
     ogs_sbi_response_t *response = ogs_sbi_response_new();
@@ -186,10 +214,11 @@ static void answer(abts_case *tc, pcf_app_session_t *sess, const char *method, c
     response->h.method = ogs_strdup(method);
     response->h.uri = ogs_msprintf("http://127.0.0.13:7777/npcf-policyauthorization/v1/%s", path);
     if (location) ogs_sbi_header_set(response->http.headers, OGS_SBI_LOCATION, location);
+    if (retry_after) ogs_sbi_header_set(response->http.headers, "Retry-After", retry_after);
     if (content) {
         response->http.content = ogs_strdup(content);
         response->http.content_length = strlen(content);
-        ogs_sbi_header_set(response->http.headers, OGS_SBI_CONTENT_TYPE, OGS_SBI_CONTENT_JSON_TYPE);
+        ogs_sbi_header_set(response->http.headers, OGS_SBI_CONTENT_TYPE, status >= 300 ? OGS_SBI_CONTENT_PROBLEM_TYPE : OGS_SBI_CONTENT_JSON_TYPE);
     }
     e->sbi.response = response;
     e->sbi.data = sess;
@@ -198,12 +227,23 @@ static void answer(abts_case *tc, pcf_app_session_t *sess, const char *method, c
     ogs_event_free(e);
 }
 
+static void answer(abts_case *tc, pcf_app_session_t *sess, const char *method, const char *path, int status, const char *location,
+                   const char *content)
+{
+    answer_with(tc, sess, method, path, status, location, content, NULL);
+}
+
 typedef struct outcome_s {
     int calls;
     pcf_app_session_operation_t operation;
     bool success;
     int http_status;
     uint64_t features;
+    char problem_cause[64];
+    int retry_after;
+    char redirect_location[256];
+    char termination_cause[64];
+    int notifications;      /* the events of the notifications that arrived, as event mask bits */
 } outcome_t;
 
 static void result_callback(pcf_app_session_t *app_session, const pcf_app_session_result_t *result, void *user_data)
@@ -215,6 +255,20 @@ static void result_callback(pcf_app_session_t *app_session, const pcf_app_sessio
     outcome->success = result->success;
     outcome->http_status = result->http_status;
     outcome->features = pcf_app_session_get_features(app_session);
+    snprintf(outcome->problem_cause, sizeof(outcome->problem_cause), "%s", result->problem_cause ? result->problem_cause : "");
+    outcome->retry_after = result->retry_after;
+    snprintf(outcome->redirect_location, sizeof(outcome->redirect_location), "%s", result->redirect_location ? result->redirect_location : "");
+    snprintf(outcome->termination_cause, sizeof(outcome->termination_cause), "%s", result->termination_cause ? result->termination_cause : "");
+}
+
+static bool counting_callback(pcf_app_session_t *app_session, const OpenAPI_events_notification_t *notifications, void *user_data)
+{
+    outcome_t *outcome = user_data;
+    OpenAPI_lnode_t *node = NULL;
+
+    OpenAPI_list_for_each(notifications->ev_notifs, node)
+        outcome->notifications |= 1 << ((OpenAPI_af_event_notification_t *)node->data)->event;
+    return true;
 }
 
 #define CREATED_URI "http://127.0.0.13:7777/npcf-policyauthorization/v1/app-sessions/42"
@@ -554,6 +608,486 @@ static void create_features_func(abts_case *tc, void *data)
     subsc->notif_corre_id = NULL;
     subsc_free(subsc);
     _pcf_app_session_free(sess);
+}
+
+/*
+ * TS 29.514 V19.8.0 table 5.6.2.3-1: resPrio is optional and the PCF may take it into account, so none is sent unless the application asks (CONSUMERS
+ * audit O1); sponStatus is a matter of the SponsoredConnectivity feature and the absence of it means enabled, so it is sent only with the identities of
+ * a sponsor (O7).
+ */
+static void create_options_func(abts_case *tc, void *data)
+{
+    static const struct {
+        const char *asp_id, *spon_id;
+        bool enabled;
+        OpenAPI_reserv_priority_e priority;
+        const char *spon_status, *res_prio;
+    } cases[] = {
+        {NULL, NULL, false, OpenAPI_reserv_priority_NULL, NULL, NULL},
+        {NULL, NULL, true, OpenAPI_reserv_priority_NULL, NULL, NULL},
+        {"asp-1", "sponsor-1", true, OpenAPI_reserv_priority_PRIO_5, "SPONSOR_ENABLED", "PRIO_5"},
+        {"asp-1", "sponsor-1", false, OpenAPI_reserv_priority_NULL, "SPONSOR_DISABLED", NULL},
+        {"asp-1", NULL, true, OpenAPI_reserv_priority_PRIO_16, NULL, "PRIO_16"},
+    };
+    int i;
+
+    for (i = 0; i < (int)(sizeof(cases) / sizeof(cases[0])); i++) {
+        pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+        pcf_app_session_options_t options;
+        ogs_sbi_request_t *request;
+        cJSON *json, *req_data;
+
+        memset(&options, 0, sizeof(options));
+        options.asp_id = cases[i].asp_id;
+        options.spon_id = cases[i].spon_id;
+        options.sponsoring_enabled = cases[i].enabled;
+        options.res_prio = cases[i].priority;
+        request = pcf_policyauthorization_request_create(sess, NULL, &options);
+        json = content_of(tc, request);
+        req_data = cJSON_GetObjectItemCaseSensitive(json, "ascReqData");
+        ABTS_PTR_NOTNULL(tc, req_data);
+        if (req_data) {
+            ABTS_STR_EQUAL(tc, cases[i].spon_status ? cases[i].spon_status : "(none)", string_of(req_data, "sponStatus") ? string_of(req_data, "sponStatus") : "(none)");
+            ABTS_STR_EQUAL(tc, cases[i].res_prio ? cases[i].res_prio : "(none)", string_of(req_data, "resPrio") ? string_of(req_data, "resPrio") : "(none)");
+        }
+        if (json) cJSON_Delete(json);
+        if (request) ogs_sbi_request_free(request);
+        _pcf_app_session_free(sess);
+    }
+    /* an update does not speak of the priority either */
+    {
+        pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+        OpenAPI_list_t *media_component_rm = media_component_rm_new();
+        ogs_sbi_request_t *request;
+        cJSON *json, *req_data;
+
+        sess->pcf_app_session_id = ogs_strdup("42");
+        request = pcf_policyauthorization_request_update(sess, media_component_rm);
+        json = content_of(tc, request);
+        req_data = cJSON_GetObjectItemCaseSensitive(json, "ascReqData");
+        ABTS_PTR_NOTNULL(tc, req_data);
+        if (req_data) ABTS_TRUE(tc, cJSON_GetObjectItemCaseSensitive(req_data, "resPrio") == NULL);
+        if (json) cJSON_Delete(json);
+        if (request) ogs_sbi_request_free(request);
+        pcf_media_components_rm_free(media_component_rm);
+        _pcf_app_session_free(sess);
+    }
+}
+
+/*
+ * TS 29.501 V19.5.0 clause 4.4.1 and RFC 3986 clause 3.2.2: the authority of a URI holds an IPv6 address in square brackets; the URIs of a PCF with an
+ * IPv6 address are those of the operations of clause 4.2.
+ */
+static void ipv6_pcf_func(abts_case *tc, void *data)
+{
+    ogs_sockaddr_t *address = NULL;
+    pcf_session_t *session6;
+    pcf_app_session_t *sess;
+    pcf_app_session_options_t options;
+    ogs_sbi_request_t *request;
+    OpenAPI_list_t *media_component_rm = media_component_rm_new();
+    char *authority;
+
+    ogs_assert(OGS_OK == ogs_getaddrinfo(&address, AF_UNSPEC, "::1", 7777, 0));
+    authority = _pcf_authority(address);
+    ABTS_STR_EQUAL(tc, "[::1]:7777", authority);
+    ogs_free(authority);
+    session6 = pcf_session_new(address);
+    ogs_freeaddrinfo(address);
+    ABTS_PTR_NOTNULL(tc, session6);
+    if (!session6) { pcf_media_components_rm_free(media_component_rm); return; }
+
+    sess = app_session_new_on(session6, "10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF);
+    memset(&options, 0, sizeof(options));
+    options.events = PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF;
+    request = pcf_policyauthorization_request_create(sess, NULL, &options);
+    ABTS_PTR_NOTNULL(tc, request);
+    if (request) {
+        ABTS_STR_EQUAL(tc, "http://[::1]:7777/npcf-policyauthorization/v1/app-sessions", request->h.uri ? request->h.uri : "");
+        ogs_sbi_request_free(request);
+    }
+    sess->pcf_app_session_id = ogs_strdup("42");
+    request = pcf_policyauthorization_request_update(sess, media_component_rm);
+    ABTS_PTR_NOTNULL(tc, request);
+    if (request) {
+        ABTS_STR_EQUAL(tc, "http://[::1]:7777/npcf-policyauthorization/v1/app-sessions/42", request->h.uri ? request->h.uri : "");
+        ogs_sbi_request_free(request);
+    }
+    request = pcf_policyauthorization_request_delete(sess);
+    ABTS_PTR_NOTNULL(tc, request);
+    if (request) {
+        ABTS_STR_EQUAL(tc, "http://[::1]:7777/npcf-policyauthorization/v1/app-sessions/42/delete", request->h.uri ? request->h.uri : "");
+        ogs_sbi_request_free(request);
+    }
+    request = pcf_policyauthorization_req_unsubscribe_event(sess);
+    ABTS_PTR_NOTNULL(tc, request);
+    if (request) {
+        ABTS_STR_EQUAL(tc, "http://[::1]:7777/npcf-policyauthorization/v1/app-sessions/42/events-subscription", request->h.uri ? request->h.uri : "");
+        ogs_sbi_request_free(request);
+    }
+    pcf_media_components_rm_free(media_component_rm);
+    pcf_session_free(session6);
+}
+
+/*
+ * TS 29.501 V19.5.0 clause 4.6.1.1.1.2 and TS 29.514 V19.8.0 clause 4.2.2.2: the Location of the 201 is the URI of the created context, absolute
+ * or relative to the target URI of the POST, and the URIs of the later operations are built from it (CONSUMERS audit O4).
+ */
+static void location_func(abts_case *tc, void *data)
+{
+    static const struct { const char *location, *path; } cases[] = {
+        {"http://127.0.0.13:7777/npcf-policyauthorization/v1/app-sessions/42", "/npcf-policyauthorization/v1/app-sessions/42"},
+        {"http://[::1]:7777/prefix/npcf-policyauthorization/v1/app-sessions/42/", "/prefix/npcf-policyauthorization/v1/app-sessions/42"},
+        {"/npcf-policyauthorization/v1/app-sessions/42?x=1#f", "/npcf-policyauthorization/v1/app-sessions/42"},
+        {"//pcf.example/a/b/../c", "/a/c"},
+        {"app-sessions/42", "/npcf-policyauthorization/v1/app-sessions/42"},
+        {"../v1/app-sessions/42", "/npcf-policyauthorization/v1/app-sessions/42"},
+        {"http://pcf.example", NULL},
+        {"", NULL},
+    };
+    static const char *locations[] = {
+        "http://127.0.0.13:7777/prefix/npcf-policyauthorization/v1/app-sessions/42",
+        "/prefix/npcf-policyauthorization/v1/app-sessions/42",
+        "app-sessions/42"
+    };
+    static const char *expected_uri[] = {
+        "http://127.0.0.13:7777/prefix/npcf-policyauthorization/v1/app-sessions/42",
+        "http://127.0.0.13:7777/prefix/npcf-policyauthorization/v1/app-sessions/42",
+        "http://127.0.0.13:7777/npcf-policyauthorization/v1/app-sessions/42"
+    };
+    int i;
+
+    for (i = 0; i < (int)(sizeof(cases) / sizeof(cases[0])); i++) {
+        char *path = _location_path(cases[i].location, "/npcf-policyauthorization/v1/app-sessions");
+
+        ABTS_STR_EQUAL(tc, cases[i].path ? cases[i].path : "(none)", path ? path : "(none)");
+        if (path) ogs_free(path);
+    }
+    for (i = 0; i < 3; i++) {
+        outcome_t outcome;
+        pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF);
+        OpenAPI_list_t *media_component_rm = media_component_rm_new();
+        ogs_sbi_request_t *request;
+
+        memset(&outcome, 0, sizeof(outcome));
+        sess->result.callback = result_callback;
+        sess->result.user_data = &outcome;
+        sess->operation = PCF_APP_SESSION_OP_CREATE;
+        answer(tc, sess, "POST", "app-sessions", 201, locations[i], "{\"ascRespData\":{\"suppFeat\":\"2\"}}");
+        ABTS_TRUE(tc, outcome.success);
+        ABTS_STR_EQUAL(tc, "42", sess->pcf_app_session_id ? sess->pcf_app_session_id : "(none)");
+        /* the URIs of the operations that follow are those of the context that the PCF named */
+        request = pcf_policyauthorization_request_update(sess, media_component_rm);
+        ABTS_PTR_NOTNULL(tc, request);
+        if (request) {
+            ABTS_STR_EQUAL(tc, expected_uri[i], request->h.uri ? request->h.uri : "");
+            ogs_sbi_request_free(request);
+        }
+        pcf_media_components_rm_free(media_component_rm);
+        _pcf_app_session_free(sess);
+    }
+}
+
+/*
+ * TS 29.501 V19.5.0 clause 4.6.1.1.1.2: the body of the 201 "should" hold the created resource, and TS 29.514 V19.8.0 table 5.6.2.3-1 has the features
+ * "only when feature negotiation needs to take place" while clause 5.8 has the PCF indicate them: the context that the PCF created is kept, with no
+ * optional feature (CR-055, CONSUMERS audit O8).
+ */
+static void create_no_features_func(abts_case *tc, void *data)
+{
+    static const char *answers[] = {NULL, "{\"ascRespData\":{}}"};
+    int i;
+
+    for (i = 0; i < 2; i++) {
+        outcome_t outcome;
+        pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF);
+
+        memset(&outcome, 0, sizeof(outcome));
+        sess->result.callback = result_callback;
+        sess->result.user_data = &outcome;
+        sess->operation = PCF_APP_SESSION_OP_CREATE;
+        sess->policyauthorization_features = PCF_LIB_FEATURES;
+        answer(tc, sess, "POST", "app-sessions", 201, CREATED_URI, answers[i]);
+        ABTS_INT_EQUAL(tc, 1, outcome.calls);
+        ABTS_TRUE(tc, outcome.success);
+        ABTS_TRUE(tc, outcome.features == 0);
+        if (outcome.success) {
+            ABTS_STR_EQUAL(tc, "42", sess->pcf_app_session_id ? sess->pcf_app_session_id : "(none)");
+            _pcf_app_session_free(sess);
+        }
+    }
+}
+
+/*
+ * TS 29.514 V19.8.0 clause 4.2.2.2 and table 5.3.2.3.1-3: an error answer has the cause of its ProblemDetails and may have a Retry-After; the 303 See
+ * Other has the Location of the existing context (CONSUMERS audit O2, O3).
+ */
+static void answer_result_func(abts_case *tc, void *data)
+{
+    outcome_t outcome;
+    pcf_app_session_t *sess;
+
+    sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF);
+    memset(&outcome, 0, sizeof(outcome));
+    sess->result.callback = result_callback;
+    sess->result.user_data = &outcome;
+    sess->operation = PCF_APP_SESSION_OP_CREATE;
+    answer_with(tc, sess, "POST", "app-sessions", 403, NULL,
+                "{\"title\":\"Forbidden\",\"status\":403,\"cause\":\"REQUESTED_SERVICE_NOT_AUTHORIZED\"}", "120");
+    ABTS_INT_EQUAL(tc, 1, outcome.calls);
+    ABTS_INT_EQUAL(tc, PCF_APP_SESSION_OP_CREATE, outcome.operation);
+    ABTS_TRUE(tc, !outcome.success);
+    ABTS_INT_EQUAL(tc, 403, outcome.http_status);
+    ABTS_STR_EQUAL(tc, "REQUESTED_SERVICE_NOT_AUTHORIZED", outcome.problem_cause);
+    ABTS_INT_EQUAL(tc, 120, outcome.retry_after);
+    ABTS_STR_EQUAL(tc, "", outcome.redirect_location);
+
+    sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF);
+    memset(&outcome, 0, sizeof(outcome));
+    sess->result.callback = result_callback;
+    sess->result.user_data = &outcome;
+    sess->operation = PCF_APP_SESSION_OP_CREATE;
+    answer(tc, sess, "POST", "app-sessions", 303, "http://127.0.0.13:7777/npcf-policyauthorization/v1/app-sessions/41", NULL);
+    ABTS_INT_EQUAL(tc, 1, outcome.calls);
+    ABTS_TRUE(tc, !outcome.success);
+    ABTS_INT_EQUAL(tc, 303, outcome.http_status);
+    ABTS_STR_EQUAL(tc, "http://127.0.0.13:7777/npcf-policyauthorization/v1/app-sessions/41", outcome.redirect_location);
+    ABTS_INT_EQUAL(tc, -1, outcome.retry_after);
+
+    /* a refused update, with a date as the retry interval far in the future */
+    sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+    memset(&outcome, 0, sizeof(outcome));
+    sess->pcf_app_session_id = ogs_strdup("42");
+    sess->result.callback = result_callback;
+    sess->result.user_data = &outcome;
+    sess->operation = PCF_APP_SESSION_OP_UPDATE;
+    answer_with(tc, sess, "PATCH", "app-sessions/42", 403, NULL, "{\"title\":\"Forbidden\",\"status\":403,\"cause\":\"X\"}",
+                "Fri, 31 Dec 2100 23:59:59 GMT");
+    ABTS_INT_EQUAL(tc, 1, outcome.calls);
+    ABTS_TRUE(tc, !outcome.success);
+    ABTS_INT_EQUAL(tc, PCF_APP_SESSION_OP_UPDATE, outcome.operation);
+    ABTS_TRUE(tc, outcome.retry_after > 1000000);
+    _pcf_app_session_free(sess);
+}
+
+/* RFC 9110 clause 10.2.3: Retry-After is a number of seconds or a date */
+static void retry_after_func(abts_case *tc, void *data)
+{
+    ABTS_INT_EQUAL(tc, 120, _retry_after_seconds("120", 946684800));
+    ABTS_INT_EQUAL(tc, 7, _retry_after_seconds(" 7 ", 946684800));
+    ABTS_INT_EQUAL(tc, 0, _retry_after_seconds("0", 946684800));
+    ABTS_INT_EQUAL(tc, 60, _retry_after_seconds("Sat, 01 Jan 2000 00:01:00 GMT", 946684800));
+    ABTS_INT_EQUAL(tc, 0, _retry_after_seconds("Sat, 01 Jan 2000 00:01:00 GMT", 946684800 + 3600));
+    ABTS_INT_EQUAL(tc, -1, _retry_after_seconds("soon", 946684800));
+    ABTS_INT_EQUAL(tc, -1, _retry_after_seconds("12x", 946684800));
+    ABTS_INT_EQUAL(tc, -1, _retry_after_seconds("", 946684800));
+    ABTS_INT_EQUAL(tc, -1, _retry_after_seconds(NULL, 946684800));
+    ABTS_INT_EQUAL(tc, 2147483647, _retry_after_seconds("99999999999", 946684800));
+}
+
+#define EVENT_BIT(event) (1 << (event))
+
+/*
+ * TS 29.514 V19.8.0 clauses 4.2.2.2, 4.2.3.2, 4.2.4.3 and 4.2.6.2: the EventsNotification that the PCF puts into its answer (evsNotif of the
+ * AppSessionContext, evNotifs of the EventsSubscPutData) is what a notification would carry, and reaches the callbacks of those events (O5).
+ */
+static void answer_notifications_func(abts_case *tc, void *data)
+{
+    outcome_t outcome;
+    pcf_app_session_t *sess;
+
+    /* create */
+    sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+    memset(&outcome, 0, sizeof(outcome));
+    outcome.retry_after = -1;
+    _pcf_app_session_add_event_notification(sess, PCF_APP_SESSION_EVENT_TYPE_SUCCESSFUL_RESOURCES_ALLOCATION, counting_callback, &outcome);
+    sess->operation = PCF_APP_SESSION_OP_CREATE;
+    answer(tc, sess, "POST", "app-sessions", 201, CREATED_URI,
+           "{\"ascRespData\":{\"suppFeat\":\"2\"},\"evsNotif\":{\"evSubsUri\":\"http://127.0.0.13:7777/npcf-policyauthorization/v1/app-sessions/42/events-subscription\",\"evNotifs\":[{\"event\":\"SUCCESSFUL_RESOURCES_ALLOCATION\"}]}}");
+    ABTS_INT_EQUAL(tc, EVENT_BIT(OpenAPI_npcf_af_event_SUCCESSFUL_RESOURCES_ALLOCATION), outcome.notifications);
+
+    /* update */
+    memset(&outcome, 0, sizeof(outcome));
+    _pcf_app_session_add_event_notification(sess, PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF, counting_callback, &outcome);
+    sess->operation = PCF_APP_SESSION_OP_UPDATE;
+    answer(tc, sess, "PATCH", "app-sessions/42", 200,  NULL,
+           "{\"ascReqData\":{\"notifUri\":\"http://127.0.0.1:9999/n\",\"suppFeat\":\"2\"},\"evsNotif\":{\"evSubsUri\":\"http://127.0.0.13:7777/npcf-policyauthorization/v1/app-sessions/42/events-subscription\",\"evNotifs\":[{\"event\":\"QOS_NOTIF\"}]}}");
+    ABTS_INT_EQUAL(tc, EVENT_BIT(OpenAPI_npcf_af_event_QOS_NOTIF), outcome.notifications);
+
+    /* subscription: the EventsSubscPutData "may contain the notification of the already met events" */
+    memset(&outcome, 0, sizeof(outcome));
+    sess->operation = PCF_APP_SESSION_OP_EVENTS;
+    answer(tc, sess, "PUT", "app-sessions/42/events-subscription", 200, NULL,
+           "{\"events\":[{\"event\":\"QOS_NOTIF\",\"notifMethod\":\"EVENT_DETECTION\"}],\"evSubsUri\":\"http://127.0.0.13:7777/npcf-policyauthorization/v1/app-sessions/42/events-subscription\",\"evNotifs\":[{\"event\":\"QOS_NOTIF\"}]}");
+    ABTS_INT_EQUAL(tc, EVENT_BIT(OpenAPI_npcf_af_event_QOS_NOTIF), outcome.notifications);
+
+    /* delete: the usage report of clause 4.2.4.3 */
+    memset(&outcome, 0, sizeof(outcome));
+    _pcf_app_session_add_event_notification(sess, PCF_APP_SESSION_EVENT_TYPE_USAGE_REPORT, counting_callback, &outcome);
+    sess->operation = PCF_APP_SESSION_OP_DELETE;
+    answer(tc, sess, "POST", "app-sessions/42/delete", 200, NULL,
+           "{\"ascReqData\":{\"notifUri\":\"http://127.0.0.1:9999/n\",\"suppFeat\":\"2\"},\"evsNotif\":{\"evSubsUri\":\"http://127.0.0.13:7777/npcf-policyauthorization/v1/app-sessions/42/events-subscription\",\"evNotifs\":[{\"event\":\"USAGE_REPORT\"}]}}");
+    ABTS_INT_EQUAL(tc, EVENT_BIT(OpenAPI_npcf_af_event_USAGE_REPORT), outcome.notifications);
+    /* the answer ended the object: it is not freed again */
+}
+
+/*
+ * TS 29.514 V19.8.0 clause 4.2.7.2: the DELETE of the Events Subscription removes all its events, and the library forgets them with the callbacks
+ * registered for them: a later subscription sends only the events that it names (CONSUMERS audit O10).
+ */
+static void unsubscribe_func(abts_case *tc, void *data)
+{
+    static const OpenAPI_npcf_af_event_e more[] = {OpenAPI_npcf_af_event_USAGE_REPORT};
+    outcome_t outcome;
+    pcf_app_session_options_t options;
+    pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF | PCF_APP_SESSION_EVENT_TYPE_FAILED_RESOURCES_ALLOCATION);
+    OpenAPI_events_subsc_req_data_t *subsc;
+    ogs_sbi_request_t *request;
+
+    memset(&options, 0, sizeof(options));
+    options.events = PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF | PCF_APP_SESSION_EVENT_TYPE_FAILED_RESOURCES_ALLOCATION;
+    request = pcf_policyauthorization_request_create(sess, NULL, &options);
+    ABTS_PTR_NOTNULL(tc, request);
+    if (request) ogs_sbi_request_free(request);
+    sess->pcf_app_session_id = ogs_strdup("42");
+    ABTS_INT_EQUAL(tc, 2, put_events(tc, sess));
+    ABTS_INT_EQUAL(tc, 1, (int)ogs_list_count(&sess->pcf_event_notifications));
+
+    memset(&outcome, 0, sizeof(outcome));
+    sess->result.callback = result_callback;
+    sess->result.user_data = &outcome;
+    sess->operation = PCF_APP_SESSION_OP_EVENTS;
+    answer(tc, sess, "DELETE", "app-sessions/42/events-subscription", 204, NULL, NULL);
+    ABTS_INT_EQUAL(tc, 1, outcome.calls);
+    ABTS_INT_EQUAL(tc, PCF_APP_SESSION_OP_EVENTS, outcome.operation);
+    ABTS_TRUE(tc, outcome.success);
+    ABTS_INT_EQUAL(tc, 0, (int)ogs_list_count(&sess->pcf_event_notifications));
+
+    subsc = subsc_new(1, more);
+    ABTS_INT_EQUAL(tc, 1, merge_event_subsc_to_app_session_context(sess, subsc));
+    subsc_free(subsc);
+    ABTS_INT_EQUAL(tc, 1, put_events(tc, sess));
+    _pcf_app_session_free(sess);
+
+    /* an answer that is not 204 leaves the subscription as it was */
+    sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF);
+    memset(&options, 0, sizeof(options));
+    options.events = PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF;
+    request = pcf_policyauthorization_request_create(sess, NULL, &options);
+    if (request) ogs_sbi_request_free(request);
+    sess->pcf_app_session_id = ogs_strdup("42");
+    memset(&outcome, 0, sizeof(outcome));
+    sess->result.callback = result_callback;
+    sess->result.user_data = &outcome;
+    sess->operation = PCF_APP_SESSION_OP_EVENTS;
+    answer(tc, sess, "DELETE", "app-sessions/42/events-subscription", 404, NULL, "{\"title\":\"Not Found\",\"status\":404}");
+    ABTS_TRUE(tc, !outcome.success);
+    ABTS_INT_EQUAL(tc, 1, (int)ogs_list_count(&sess->pcf_event_notifications));
+    ABTS_INT_EQUAL(tc, 1, put_events(tc, sess));
+    _pcf_app_session_free(sess);
+}
+
+/*
+ * TS 29.514 V19.8.0 table 5.6.2.6-1 and clause 4.2.6.2: the details of an events subscription (the QoS monitoring parameters and thresholds, the
+ * notification correlation identifier) given to a later subscription are sent with it (CONSUMERS audit O12).
+ */
+static void subscribe_details_func(abts_case *tc, void *data)
+{
+    static const OpenAPI_npcf_af_event_e monitoring[] = {OpenAPI_npcf_af_event_QOS_MONITORING};
+    pcf_app_session_options_t options;
+    pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+    OpenAPI_events_subsc_req_data_t *subsc = subsc_new(1, monitoring);
+    ogs_sbi_request_t *request;
+    cJSON *json, *params, *qos_mon;
+
+    memset(&options, 0, sizeof(options));
+    request = pcf_policyauthorization_request_create(sess, NULL, &options);
+    if (request) ogs_sbi_request_free(request);
+    sess->pcf_app_session_id = ogs_strdup("42");
+
+    subsc->req_qos_mon_params = OpenAPI_list_create();
+    OpenAPI_list_add(subsc->req_qos_mon_params, (void *)(intptr_t)OpenAPI_requested_qos_monitoring_parameter_DOWNLINK);
+    subsc->qos_mon = ogs_calloc(1, sizeof(*subsc->qos_mon));
+    subsc->qos_mon->is_rep_thresh_dl = true;
+    subsc->qos_mon->rep_thresh_dl = 10;
+    subsc->notif_corre_id = ogs_strdup("correlation-2");
+    ABTS_INT_EQUAL(tc, 1, merge_event_subsc_to_app_session_context(sess, subsc) > 0);
+    OpenAPI_list_free(subsc->req_qos_mon_params);
+    subsc->req_qos_mon_params = NULL;
+    ogs_free(subsc->qos_mon);
+    subsc->qos_mon = NULL;
+    ogs_free(subsc->notif_corre_id);
+    subsc->notif_corre_id = NULL;
+    subsc_free(subsc);
+
+    request = pcf_policyauthorization_req_subscribe_event(sess);
+    json = content_of(tc, request);
+    params = cJSON_GetObjectItemCaseSensitive(json, "reqQosMonParams");
+    ABTS_TRUE(tc, cJSON_IsArray(params) && cJSON_GetArraySize(params) == 1);
+    if (cJSON_IsArray(params) && cJSON_GetArraySize(params) == 1)
+        ABTS_STR_EQUAL(tc, "DOWNLINK", cJSON_GetArrayItem(params, 0)->valuestring);
+    qos_mon = cJSON_GetObjectItemCaseSensitive(json, "qosMon");
+    ABTS_PTR_NOTNULL(tc, qos_mon);
+    if (qos_mon) {
+        cJSON *threshold = cJSON_GetObjectItemCaseSensitive(qos_mon, "repThreshDl");
+        ABTS_TRUE(tc, cJSON_IsNumber(threshold) && threshold->valueint == 10);
+    }
+    ABTS_STR_EQUAL(tc, "correlation-2", string_of(json, "notifCorreId") ? string_of(json, "notifCorreId") : "");
+    if (json) cJSON_Delete(json);
+    if (request) ogs_sbi_request_free(request);
+    _pcf_app_session_free(sess);
+}
+
+/*
+ * The answer to the deletion of one application session context ends that object and no other: another one of the same PCF session that the PCF has
+ * not answered yet has no identifier to compare.
+ */
+static void delete_sibling_func(abts_case *tc, void *data)
+{
+    outcome_t outcome;
+    pcf_app_session_t *pending = app_session_new("10.45.0.3", PCF_APP_SESSION_EVENT_TYPE_NONE);
+    pcf_app_session_t *deleted = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+
+    memset(&outcome, 0, sizeof(outcome));
+    deleted->pcf_app_session_id = ogs_strdup("42");
+    deleted->result.callback = result_callback;
+    deleted->result.user_data = &outcome;
+    deleted->operation = PCF_APP_SESSION_OP_DELETE;
+    answer(tc, deleted, "POST", "app-sessions/42/delete", 204, NULL, NULL);
+    ABTS_INT_EQUAL(tc, 1, outcome.calls);
+    ABTS_TRUE(tc, outcome.success);
+    ABTS_TRUE(tc, _pcf_app_session_exists(pending));
+    ABTS_TRUE(tc, !_pcf_app_session_exists(deleted));
+    _pcf_app_session_free(pending);
+}
+
+/* TS 29.514 V19.8.0 clause 5.5.3 and 4.2.5.3: the termCause of the TerminationInfo of a termination request is given to the application (O14) */
+static void termination_cause_func(abts_case *tc, void *data)
+{
+    static const char *bodies[] = {
+        "{\"resUri\":\"http://127.0.0.13:7777/npcf-policyauthorization/v1/app-sessions/42\",\"termCause\":\"PDU_SESSION_TERMINATION\"}",
+        "{\"resUri\":\"x\",\"termCause\":\"ALL_SDF_DEACTIVATION\"}",
+        "not json",
+        NULL
+    };
+    static const char *causes[] = {"PDU_SESSION_TERMINATION", "ALL_SDF_DEACTIVATION", "", ""};
+    int i;
+
+    for (i = 0; i < 4; i++) {
+        outcome_t outcome;
+        pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+
+        memset(&outcome, 0, sizeof(outcome));
+        sess->result.callback = result_callback;
+        sess->result.user_data = &outcome;
+        sess->operation = PCF_APP_SESSION_OP_TERMINATED;
+        _pcf_app_session_set_answer(sess, 0, NULL);
+        _pcf_app_session_set_termination_cause(sess, bodies[i]);
+        ABTS_TRUE(tc, _pcf_app_session_change_callback_call(sess, true));
+        ABTS_INT_EQUAL(tc, PCF_APP_SESSION_OP_TERMINATED, outcome.operation);
+        ABTS_STR_EQUAL(tc, causes[i], outcome.termination_cause);
+        _pcf_app_session_free(sess);
+    }
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

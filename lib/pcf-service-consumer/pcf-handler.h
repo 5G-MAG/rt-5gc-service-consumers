@@ -19,6 +19,7 @@ extern "C" {
 void pcf_policyauthorization_create(pcf_app_session_t *sess, ogs_sbi_message_t *recvmsg, ogs_sbi_response_t *response);
 void pcf_policyauthorization_update(pcf_app_session_t *sess, ogs_sbi_message_t *recvmsg);
 void pcf_policyauthorization_delete(pcf_app_session_t *app_sess);
+void pcf_policyauthorization_delete_answer(pcf_app_session_t *sess, ogs_sbi_response_t *response);
 
 void pcf_policyauthorization_subscribe_event(pcf_app_session_t *sess, ogs_sbi_message_t *recvmsg, ogs_sbi_response_t *response);
 

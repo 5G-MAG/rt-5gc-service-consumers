@@ -34,6 +34,7 @@ pcf_app_session_t *_pcf_app_session_new(pcf_session_t *pcf_session, const ue_net
     if (!sess) return NULL;
 
     sess->pcf_session = pcf_session;
+    sess->retry_after = -1;
     /* TS 29.514 V19.8.0 clause 5.8: what the library offers; the PCF answers with the features that both support */
     sess->policyauthorization_features = PCF_LIB_FEATURES;
     sess->policyauthorization_features_hi = PCF_LIB_FEATURES_HI;
@@ -76,8 +77,12 @@ void _pcf_app_session_free(pcf_app_session_t *app_session)
     if (app_session->notif_url) ogs_free(app_session->notif_url);
     if (app_session->problem_title) ogs_free(app_session->problem_title);
     if (app_session->problem_detail) ogs_free(app_session->problem_detail);
+    if (app_session->problem_cause) ogs_free(app_session->problem_cause);
+    if (app_session->redirect_location) ogs_free(app_session->redirect_location);
+    if (app_session->termination_cause) ogs_free(app_session->termination_cause);
     if (app_session->ue_network_identifier) __ue_network_identifier_free(app_session->ue_network_identifier);
     if (app_session->pcf_app_session_id) ogs_free(app_session->pcf_app_session_id);
+    if (app_session->resource_path) ogs_free(app_session->resource_path);
     if (app_session->ipv4addr) ogs_free(app_session->ipv4addr);
     if (app_session->ipv6addr) ogs_free(app_session->ipv6addr);
     if (app_session->supi) ogs_free(app_session->supi);
@@ -169,9 +174,48 @@ void _pcf_app_session_set_answer(pcf_app_session_t *app_session, int http_status
     app_session->last_status = http_status;
     if (app_session->problem_title) { ogs_free(app_session->problem_title); app_session->problem_title = NULL; }
     if (app_session->problem_detail) { ogs_free(app_session->problem_detail); app_session->problem_detail = NULL; }
+    if (app_session->problem_cause) { ogs_free(app_session->problem_cause); app_session->problem_cause = NULL; }
+    if (app_session->redirect_location) { ogs_free(app_session->redirect_location); app_session->redirect_location = NULL; }
+    app_session->retry_after = -1;
     if (problem) {
         if (problem->title) app_session->problem_title = ogs_strdup(problem->title);
         if (problem->detail) app_session->problem_detail = ogs_strdup(problem->detail);
+        if (problem->cause) app_session->problem_cause = ogs_strdup(problem->cause);
+    }
+}
+
+/* The termCause of the TerminationInfo (TS 29.514 V19.8.0 table 5.5.3.3.1-2) of a termination request, kept as text for the result */
+void _pcf_app_session_set_termination_cause(pcf_app_session_t *app_session, const char *termination_info_json)
+{
+    cJSON *json;
+    OpenAPI_termination_info_t *info;
+
+    if (!app_session) return;
+    if (app_session->termination_cause) { ogs_free(app_session->termination_cause); app_session->termination_cause = NULL; }
+    if (!termination_info_json) return;
+    json = cJSON_Parse(termination_info_json);
+    if (!json) return;
+    info = OpenAPI_termination_info_parseFromJSON(json);
+    if (info && info->term_cause != OpenAPI_termination_cause_NULL)
+        app_session->termination_cause = ogs_strdup(OpenAPI_termination_cause_ToString(info->term_cause));
+    if (info) OpenAPI_termination_info_free(info);
+    cJSON_Delete(json);
+}
+
+/*
+ * What the headers of the answer add to the result: TS 29.514 V19.8.0 table 5.3.2.3.1-3 gives the Location of the existing context for 303 See
+ * Other, and clause 4.2.2.2 the Retry-After of a 403 (RFC 9110 clause 10.2.3: seconds, or a date)
+ */
+void _pcf_app_session_set_answer_headers(pcf_app_session_t *app_session, const ogs_sbi_response_t *response)
+{
+    const char *value;
+
+    if (!app_session || !response) return;
+    value = ogs_sbi_header_get(response->http.headers, "Retry-After");
+    app_session->retry_after = _retry_after_seconds(value, time(NULL));
+    if (response->status == OGS_SBI_HTTP_STATUS_SEE_OTHER) {
+        value = ogs_sbi_header_get(response->http.headers, OGS_SBI_LOCATION);
+        if (value) app_session->redirect_location = ogs_strdup(value);
     }
 }
 
@@ -201,6 +245,10 @@ bool _pcf_app_session_change_callback_call(pcf_app_session_t *app_session, bool 
         result.http_status = app_session->last_status;
         result.problem_title = app_session->problem_title;
         result.problem_detail = app_session->problem_detail;
+        result.problem_cause = app_session->problem_cause;
+        result.retry_after = app_session->retry_after;
+        result.redirect_location = app_session->redirect_location;
+        result.termination_cause = app_session->termination_cause;
 
         /* the operation is over whatever its outcome */
         app_session->operation = PCF_APP_SESSION_OP_NONE;
@@ -211,6 +259,18 @@ bool _pcf_app_session_change_callback_call(pcf_app_session_t *app_session, bool 
     if (!app_session->change.callback) return false;
 
     return app_session->change.callback(delete_or_error?NULL:app_session, app_session->change.user_data);
+}
+
+/*
+ * The EventsNotification that the PCF puts into the answer to an operation (TS 29.514 V19.8.0 clause 4.2.2.2: evsNotif, and the usage report of
+ * clause 4.2.4.3) is what a notification would carry: it goes to the callbacks that were registered for those events. See CONSUMERS audit O5 (no CR:
+ * the text says what the PCF sends, not what the consumer does with it).
+ */
+void _pcf_app_session_answer_notifications(pcf_app_session_t *app_session, const OpenAPI_events_notification_t *notifications)
+{
+    if (!app_session || !notifications) return;
+    if (!notifications->ev_notifs || !notifications->ev_notifs->count) return;
+    _pcf_app_session_notifications_callback_call(app_session, (OpenAPI_events_notification_t *)notifications);
 }
 
 bool _pcf_app_session_notifications_callback_call(pcf_app_session_t *app_session, OpenAPI_events_notification_t *notifications)

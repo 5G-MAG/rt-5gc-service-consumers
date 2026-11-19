@@ -143,6 +143,11 @@ bool _pcf_process_event(ogs_event_t *e)
 
                                                 app_session->operation = PCF_APP_SESSION_OP_TERMINATED;
                                                 _pcf_app_session_set_answer(app_session, 0, NULL);
+                                                /*
+                                                 * The TerminationInfo (table 5.5.3.3.1-2) says why: its termCause goes to the application. A body that
+                                                 * cannot be read does not stop the termination: the PCF said that the context is no longer valid.
+                                                 */
+                                                _pcf_app_session_set_termination_cause(app_session, request->http.content);
                                                 if (!_pcf_app_session_change_callback_call(app_session, true))
                                                     ogs_error("AppSession Change callback failed");
                                                 /*
@@ -263,6 +268,7 @@ bool _pcf_process_event(ogs_event_t *e)
 
                 /* what the PCF answered, for the result that the requester gets */
                 _pcf_app_session_set_answer(sess, message.res_status, message.ProblemDetails);
+                _pcf_app_session_set_answer_headers(sess, response);
 
                 SWITCH(message.h.service.name)
                 CASE(OpenAPI_service_name_ToString(OpenAPI_service_name_npcf_policyauthorization))
@@ -280,6 +286,9 @@ bool _pcf_process_event(ogs_event_t *e)
                                     break;
 		                		    
                                 CASE(OGS_SBI_RESOURCE_NAME_DELETE)
+                                    /* TS 29.514 V19.8.0 clause 4.2.4.3 and table 5.3.3.4.2.2-2: the 200 carries the usage report (evsNotif) */
+                                    if (message.res_status == OGS_SBI_HTTP_STATUS_OK)
+                                        pcf_policyauthorization_delete_answer(sess, response);
 			            pcf_policyauthorization_delete(sess);
                                     break;
 
@@ -316,6 +325,16 @@ bool _pcf_process_event(ogs_event_t *e)
                                     ogs_debug("taking event for OGS_EVENT_SBI_CLIENT");
                                 } else if (message.res_status == OGS_SBI_HTTP_STATUS_NOT_FOUND) {
                                     ogs_error("UE address not known by the PCF");
+                                    if (sess) pcf_app_sess_remove(sess);
+                                } else if (message.res_status == OGS_SBI_HTTP_STATUS_SEE_OTHER) {
+                                    /*
+                                     * Implementation choice, text silent about the consumer's action, see CONSUMERS audit O3 (no CR: library
+                                     * behaviour): TS 29.514 V19.8.0 table 5.3.2.3.1-3 gives the Location of the existing context for 303 See Other
+                                     * and nothing more. The create is reported as not done and the Location is in the result; the library
+                                     * does not take over a context that it did not create.
+                                     */
+                                    ogs_warn("The PCF answered 303 See Other for the creation of an application session context: %s",
+                                             sess && sess->redirect_location ? sess->redirect_location : "(no Location)");
                                     if (sess) pcf_app_sess_remove(sess);
                                 } else {
                                     ogs_debug("Unknown response code %i when creating an AppSessionContext", message.res_status);

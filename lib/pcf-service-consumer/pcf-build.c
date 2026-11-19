@@ -13,16 +13,36 @@
 #include "context.h"
 #include "pcf-build.h"
 #include "pcf-evsubsc.h"
+#include "utils.h"
 
 static void events_free(OpenAPI_list_t *EventList);
+
+/*
+ * The URI of the Individual Application Session Context resource, or of its sub-resource: TS 29.514 V19.8.0 clause 4.2.2.2 builds them from the
+ * Location of the answer to the creation (the path of it is kept; the PCF is reached at its configured address and port, which is where the
+ * Location points for the PCF that answered), and TS 29.501 V19.5.0 clause 4.4.1 puts an IPv6 address into brackets. Implementation choice, text
+ * silent about a Location with another authority (it would need a client of its own), see CONSUMERS audit O4 (no CR): the path of the Location is
+ * used with the configured address. The caller releases the text.
+ */
+static char *session_uri(const pcf_app_session_t *sess, const char *suffix)
+{
+    char *authority = _pcf_authority(sess->pcf_session->pcf_addr), *uri;
+
+    if (!suffix) suffix = "";
+    if (sess->resource_path)
+        uri = ogs_msprintf("http://%s%s%s", authority, sess->resource_path, suffix);
+    else
+        uri = ogs_msprintf("http://%s/npcf-policyauthorization/v1/app-sessions/%s%s", authority, sess->pcf_app_session_id, suffix);
+    ogs_free(authority);
+    return uri;
+}
 
 ogs_sbi_request_t *pcf_policyauthorization_request_create(
         pcf_app_session_t *sess, OpenAPI_list_t *media_component, const pcf_app_session_options_t *options)
 {
     ogs_sbi_message_t message;
     ogs_sbi_request_t *request = NULL;
-    char pcf_ipv4addr[OGS_ADDRSTRLEN];
-    int pcf_port;
+    char *authority;
 
     OpenAPI_events_subsc_req_data_t evSubsc;
 
@@ -45,9 +65,6 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
         return NULL;
     }
 
-    OGS_ADDR(sess->pcf_session->pcf_addr, pcf_ipv4addr);
-    pcf_port = OGS_PORT(sess->pcf_session->pcf_addr);
-
     memset(&message, 0, sizeof(message));
     message.h.method = (char *)OGS_SBI_HTTP_METHOD_POST;
     message.h.service.name =
@@ -56,7 +73,9 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
     message.h.resource.component[0] =
         (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
 
-    message.h.uri = ogs_msprintf("http://%s:%i/npcf-policyauthorization/v1/app-sessions", pcf_ipv4addr, pcf_port);
+    authority = _pcf_authority(sess->pcf_session->pcf_addr);
+    message.h.uri = ogs_msprintf("http://%s/npcf-policyauthorization/v1/app-sessions", authority);
+    ogs_free(authority);
     message.AppSessionContext = &AppSessionContext;
 
     memset(&AppSessionContext, 0, sizeof(AppSessionContext));
@@ -141,13 +160,23 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
     /* TS 29.514 V19.8.0 clause 4.2.2.5: the sponsor is given with the identity of the application service provider */
     AscReqData.asp_id = (char *)options->asp_id;
     AscReqData.spon_id = (char *)options->spon_id;
-    AscReqData.spon_status = (options->asp_id && options->spon_id && options->sponsoring_enabled) ?
-        OpenAPI_sponsoring_status_SPONSOR_ENABLED : OpenAPI_sponsoring_status_SPONSOR_DISABLED;
+    /*
+     * Implementation choice, text silent, see CONSUMERS audit O7 (no CR): table 5.6.2.3-1 gives sponStatus for the SponsoredConnectivity feature and
+     * says that its absence means that sponsored connectivity is enabled; clause 4.2.2.5 has the sponsor given with aspId and sponId. Without
+     * the identities of a sponsor there is no sponsoring to enable or disable, so no sponStatus is sent.
+     */
+    if (options->asp_id && options->spon_id)
+        AscReqData.spon_status = options->sponsoring_enabled ?
+            OpenAPI_sponsoring_status_SPONSOR_ENABLED : OpenAPI_sponsoring_status_SPONSOR_DISABLED;
 
     AscReqData.supi = sess->supi;
     AscReqData.gpsi = sess->gpsi;
 
-    AscReqData.res_prio = OpenAPI_reserv_priority_PRIO_16;
+    /*
+     * Implementation choice, text silent, see CONSUMERS audit O1 (no CR): resPrio is optional ("may") and the PCF "may take the priority into
+     * account", so it is sent only when the application gives one (it was always PRIO_16, the highest priority, before)
+     */
+    AscReqData.res_prio = options->res_prio;
 
     AscReqData.med_components = media_component;
 
@@ -195,8 +224,6 @@ ogs_sbi_request_t *pcf_policyauthorization_request_update(pcf_app_session_t *ses
     ogs_sbi_message_t message;
     ogs_sbi_request_t *request = NULL;
     ogs_sbi_header_t header;
-    char pcf_addr[OGS_ADDRSTRLEN];
-    int pcf_port;
 
     OpenAPI_app_session_context_update_data_patch_t AppSessionContextUpdateDataPatch;
     OpenAPI_app_session_context_update_data_t AscUpdateData;
@@ -213,8 +240,6 @@ ogs_sbi_request_t *pcf_policyauthorization_request_update(pcf_app_session_t *ses
         return NULL;
     }
 
-    OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);
-    pcf_port = OGS_PORT(sess->pcf_session->pcf_addr);
 
     memset(&message, 0, sizeof(message));
     message.h.method = (char *)OGS_SBI_HTTP_METHOD_PATCH;
@@ -223,7 +248,7 @@ ogs_sbi_request_t *pcf_policyauthorization_request_update(pcf_app_session_t *ses
     message.h.resource.component[0] = (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
     message.h.resource.component[1] = sess->pcf_app_session_id;
 
-    message.h.uri = ogs_msprintf("http://%s:%i/npcf-policyauthorization/v1/app-sessions/%s", pcf_addr, pcf_port, sess->pcf_app_session_id);
+    message.h.uri = session_uri(sess, NULL);
 
     message.AppSessionContextUpdateDataPatch = &AppSessionContextUpdateDataPatch;
     memset(&AppSessionContextUpdateDataPatch, 0, sizeof(AppSessionContextUpdateDataPatch));
@@ -238,7 +263,7 @@ ogs_sbi_request_t *pcf_policyauthorization_request_update(pcf_app_session_t *ses
 
     ogs_debug("\n PCF policy authorization update (Request header): \n Method: [%s] \n URI: [%s] \n Service Name: [%s] \n Resource Component: [%s]\n", message.h.method, message.h.uri, header.service.name, message.h.resource.component[0]);
 
-    AscUpdateData.res_prio = OpenAPI_reserv_priority_PRIO_16;
+    /* no resPrio: a PATCH that does not speak of it leaves the priority of the creation as it is (RFC 7396); see the note at the creation (O1) */
 
     AscUpdateData.med_components = media_component;
 
@@ -276,8 +301,6 @@ ogs_sbi_request_t *pcf_policyauthorization_subscribe_request_event(pcf_app_sessi
     ogs_sbi_message_t message;
     ogs_sbi_request_t *request = NULL;
     ogs_sbi_header_t header;
-    char pcf_addr[OGS_ADDRSTRLEN];
-    int pcf_port;
 
     cJSON *app_sess_context;
     char *app_sess_context_text;
@@ -287,10 +310,6 @@ ogs_sbi_request_t *pcf_policyauthorization_subscribe_request_event(pcf_app_sessi
         return NULL;
     }
 
-    OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);
-    pcf_port = OGS_PORT(sess->pcf_session->pcf_addr);
-
-    ogs_error("PCF address in build [%s:%d]",pcf_addr, pcf_port);
 
     memset(&message, 0, sizeof(message));
     message.h.method = (char *)OGS_SBI_HTTP_METHOD_PUT;
@@ -301,7 +320,7 @@ ogs_sbi_request_t *pcf_policyauthorization_subscribe_request_event(pcf_app_sessi
     message.h.resource.component[1] = (char *)sess->pcf_app_session_id;
     message.h.resource.component[2] = "events-subscription";
 
-    message.h.uri = ogs_msprintf("http://%s:%i/npcf-policyauthorization/v1/app-sessions/%s/events-subscription", pcf_addr, pcf_port, sess->pcf_app_session_id);
+    message.h.uri = session_uri(sess, "/events-subscription");
 
     message.AppSessionContext = sess->pcf_app_session_context_requested;
 
@@ -333,19 +352,15 @@ ogs_sbi_request_t *pcf_policyauthorization_req_unsubscribe_event(pcf_app_session
 
     ogs_sbi_request_t *request = NULL;
 
-    char pcf_addr[OGS_ADDRSTRLEN];
-    int pcf_port;
 
     if (!sess || !sess->pcf_session || !sess->pcf_session->pcf_addr || !sess->pcf_app_session_id) {
         ogs_error("The application session has not been created in the PCF");
         return NULL;
     }
 
-    OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);
-    pcf_port = OGS_PORT(sess->pcf_session->pcf_addr);
     request = ogs_sbi_request_new();
     request->h.method = ogs_strdup("DELETE");
-    request->h.uri = ogs_msprintf("http://%s:%i/npcf-policyauthorization/v1/app-sessions/%s/events-subscription", pcf_addr, pcf_port, sess->pcf_app_session_id);
+    request->h.uri = session_uri(sess, "/events-subscription");
     request->h.api.version = ogs_strdup("v1");
     return request;
 
@@ -358,8 +373,6 @@ ogs_sbi_request_t *pcf_policyauthorization_req_subscribe_event(pcf_app_session_t
 
     OpenAPI_events_subsc_req_data_t *evt_subsc_req = NULL;
 
-    char pcf_addr[OGS_ADDRSTRLEN];
-    int pcf_port;
     cJSON *ev_subsc;
     char *data;
 
@@ -379,8 +392,6 @@ ogs_sbi_request_t *pcf_policyauthorization_req_subscribe_event(pcf_app_session_t
         return NULL;
     }
 
-    OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);
-    pcf_port = OGS_PORT(sess->pcf_session->pcf_addr);
     ev_subsc = OpenAPI_events_subsc_req_data_convertToJSON(evt_subsc_req); 
     data = cJSON_Print(ev_subsc);
 
@@ -388,7 +399,7 @@ ogs_sbi_request_t *pcf_policyauthorization_req_subscribe_event(pcf_app_session_t
 
     request = ogs_sbi_request_new();
     request->h.method = ogs_strdup("PUT");
-    request->h.uri = ogs_msprintf("http://%s:%i/npcf-policyauthorization/v1/app-sessions/%s/events-subscription", pcf_addr, pcf_port, sess->pcf_app_session_id);
+    request->h.uri = session_uri(sess, "/events-subscription");
     request->h.api.version = ogs_strdup("v1");
 
     if (data) {
@@ -416,8 +427,6 @@ ogs_sbi_request_t *pcf_policyauthorization_request_subscribe_event(pcf_app_sessi
     OpenAPI_events_subsc_req_data_t *evSubsc;
     OpenAPI_list_t *subsc_events = NULL;
     char *notif_uri = NULL;
-    char pcf_addr[OGS_ADDRSTRLEN];
-    int pcf_port;
     cJSON *ev_subsc;
     char *data;
 
@@ -433,8 +442,6 @@ ogs_sbi_request_t *pcf_policyauthorization_request_subscribe_event(pcf_app_sessi
             false, 0, false, 0);
 
 
-    OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);
-    pcf_port = OGS_PORT(sess->pcf_session->pcf_addr);
 
     memset(&message, 0, sizeof(message));
     message.h.method = (char *)OGS_SBI_HTTP_METHOD_PUT;
@@ -444,7 +451,7 @@ ogs_sbi_request_t *pcf_policyauthorization_request_subscribe_event(pcf_app_sessi
     message.h.resource.component[0] =
         (char *)OGS_SBI_RESOURCE_NAME_APP_SESSIONS;
 
-    message.h.uri = ogs_msprintf("http://%s:%i/npcf-policyauthorization/v1/app-sessions/%s/events-subscription", pcf_addr, pcf_port, sess->pcf_app_session_id);	    
+    message.h.uri = session_uri(sess, "/events-subscription");	    
 
     ev_subsc = OpenAPI_events_subsc_req_data_convertToJSON(evSubsc);
     data = cJSON_Print(ev_subsc);
@@ -515,16 +522,12 @@ ogs_sbi_request_t *pcf_policyauthorization_request_delete(pcf_app_session_t *ses
 {
     ogs_sbi_message_t message;
     ogs_sbi_request_t *request = NULL;
-    char pcf_addr[OGS_ADDRSTRLEN];
-    int pcf_port;
 
     if (!sess || !sess->pcf_session || !sess->pcf_session->pcf_addr || !sess->pcf_app_session_id) {
         ogs_error("The application session has not been created in the PCF");
         return NULL;
     }
     
-    OGS_ADDR(sess->pcf_session->pcf_addr, pcf_addr);
-    pcf_port = OGS_PORT(sess->pcf_session->pcf_addr);
 
     memset(&message, 0, sizeof(message));
     message.h.method = (char *)OGS_SBI_HTTP_METHOD_POST;
@@ -537,7 +540,7 @@ ogs_sbi_request_t *pcf_policyauthorization_request_delete(pcf_app_session_t *ses
     message.h.resource.component[2] =
         (char *)OGS_SBI_RESOURCE_NAME_DELETE;
     
-    message.h.uri = ogs_msprintf("http://%s:%i/npcf-policyauthorization/v1/app-sessions/%s/%s", pcf_addr, pcf_port, sess->pcf_app_session_id, (char *)OGS_SBI_RESOURCE_NAME_DELETE);
+    message.h.uri = session_uri(sess, "/" OGS_SBI_RESOURCE_NAME_DELETE);
     request = ogs_sbi_build_request(&message);
     ogs_free(message.h.uri);
 

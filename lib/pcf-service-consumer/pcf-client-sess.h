@@ -45,6 +45,8 @@ bool _pcf_client_sess_ipv4addr_set_from_sockaddr(pcf_app_session_t *sess, const 
 void _pcf_client_sess_notification_callback_init(pcf_app_session_t *sess);
 bool _pcf_client_sess_notification_callback_set(pcf_app_session_t *sess, pcf_app_session_notification_callback cb, int events, OpenAPI_events_subsc_req_data_t *evt_subsc_req, void *user_data);
 void _pcf_app_sess_event_notifications_remove(pcf_app_session_t *sess);
+/* The events subscription of the application session is gone from the PCF: the events and the callbacks for them are dropped */
+void _pcf_app_session_clear_events(pcf_app_session_t *sess);
 
 bool _pcf_client_app_sess_context_updates_set(pcf_app_session_t *sess, OpenAPI_app_session_context_update_data_patch_t *AppSessionContext);
 

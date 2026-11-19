@@ -168,6 +168,15 @@ typedef struct pcf_app_session_result_s {
     int http_status;                /**< Status of the PCF's answer; 0 if there was none (no connection, timeout, answer not usable). */
     const char *problem_title;      /**< Title of the ProblemDetails of an error answer, or NULL. Valid during the callback only. */
     const char *problem_detail;     /**< Detail of the ProblemDetails of an error answer, or NULL. Valid during the callback only. */
+    const char *problem_cause;      /**< Cause of the ProblemDetails of an error answer, or NULL. Valid during the callback only. */
+    /**
+     * The Retry-After of an error answer in seconds (TS 29.514 V19.8.0 clause 4.2.2.2: after a 403 with a retry interval the same service
+     * information is not to be sent again until the interval has elapsed), or -1. The library does not judge which requests carry "the same
+     * service information": the application keeps to the interval.
+     */
+    int retry_after;
+    const char *redirect_location;  /**< The Location of a 303 See Other (the existing Individual Application Session Context), or NULL. Valid during the callback only. */
+    const char *termination_cause;  /**< For PCF_APP_SESSION_OP_TERMINATED: the termCause of the TerminationInfo (for example "PDU_SESSION_TERMINATION"), or NULL. Valid during the callback only. */
 } pcf_app_session_result_t;
 
 /**
@@ -249,7 +258,13 @@ typedef struct pcf_app_session_options_s {
     const OpenAPI_events_subsc_req_data_t *events_subscription;
     const char *asp_id;             /**< The identity of the application service provider (aspId), or NULL. */
     const char *spon_id;            /**< The sponsor of the data connectivity (sponId), or NULL. */
-    bool sponsoring_enabled;        /**< With asp_id and spon_id: the sponsoring status is SPONSOR_ENABLED, else SPONSOR_DISABLED. */
+    bool sponsoring_enabled;        /**< With asp_id and spon_id: the sponsoring status is SPONSOR_ENABLED, else SPONSOR_DISABLED. Without them no sponsoring status is sent. */
+    /**
+     * The reservation priority (resPrio of TS 29.514 V19.8.0 table 5.6.2.3-1; PRIO_1 is the lowest and PRIO_16 the highest priority), or
+     * OpenAPI_reserv_priority_NULL (0, the default) to send none: the text lets the consumer include it ("may") and the PCF takes it into
+     * account at its option, so the library does not rank a session above those of other consumers unless the application asks.
+     */
+    OpenAPI_reserv_priority_e res_prio;
 } pcf_app_session_options_t;
 
 /**
