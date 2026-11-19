@@ -87,27 +87,63 @@ bool _pcf_client_sess_notification_callback_set(pcf_app_session_t *sess,  pcf_ap
 
 }
 
+static bool event_subscription_equal(const OpenAPI_af_event_subscription_t *a, const OpenAPI_af_event_subscription_t *b)
+{
+    return a->event == b->event && a->notif_method == b->notif_method &&
+           a->is_rep_period == b->is_rep_period && (!a->is_rep_period || a->rep_period == b->rep_period) &&
+           a->is_wait_time == b->is_wait_time && (!a->is_wait_time || a->wait_time == b->wait_time) &&
+           a->qos_mon_param_type == b->qos_mon_param_type;
+}
+
+/*
+ * TS 29.514 V19.8.0 clause 4.2.6.2: the PUT request carries the complete list of the subscribed events, so an event that is subscribed again
+ * replaces its entry and is not listed twice. Returns the number of entries that were added or changed.
+ */
 int merge_event_subsc_to_app_session_context(pcf_app_session_t *app_session, OpenAPI_events_subsc_req_data_t *evt_subsc_req) {
+    OpenAPI_app_session_context_req_data_t *asc_req_data;
+    OpenAPI_events_subsc_req_data_t *held;
     OpenAPI_lnode_t *node = NULL;
     OpenAPI_lnode_t *node1 = NULL;
-    OpenAPI_af_event_subscription_t *Event = NULL;
-    OpenAPI_af_event_subscription_t *Event_from_subsc = NULL;
-    OpenAPI_af_event_subscription_t *Event_to_add = NULL;
     int merged_events = 0;
 
-    OpenAPI_list_for_each(app_session->pcf_app_session_context_requested->asc_req_data->ev_subsc->events, node){
-        Event = node->data;
-	OpenAPI_list_for_each(evt_subsc_req->events, node1){ 
-	    Event_from_subsc = node1->data;
-	    if(strcmp(OpenAPI_npcf_af_event_ToString(Event->event), OpenAPI_npcf_af_event_ToString(Event_from_subsc->event)) || strcmp(OpenAPI_af_notif_method_ToString(Event->notif_method), OpenAPI_af_notif_method_ToString(Event_from_subsc->notif_method))) {
-                Event_to_add = OpenAPI_af_event_subscription_copy(NULL, Event_from_subsc);
-                ogs_assert(Event_to_add);
-                OpenAPI_list_add(app_session->pcf_app_session_context_requested->asc_req_data->ev_subsc->events, Event_to_add);
-		merged_events++;
-	    }
-	}
+    if (!app_session->pcf_app_session_context_requested || !app_session->pcf_app_session_context_requested->asc_req_data) return 0;
+    asc_req_data = app_session->pcf_app_session_context_requested->asc_req_data;
+
+    held = asc_req_data->ev_subsc;
+    if (!held) {
+        /* the application session was created without an event subscription: it is made with the same notification URI */
+        held = ogs_calloc(1, sizeof(*held));
+        ogs_assert(held);
+        held->events = OpenAPI_list_create();
+        ogs_assert(held->events);
+        held->notif_uri = ogs_strdup(asc_req_data->notif_uri);
+        asc_req_data->ev_subsc = held;
     }
-    return merged_events;	
+
+    OpenAPI_list_for_each(evt_subsc_req->events, node) {
+        OpenAPI_af_event_subscription_t *Event_from_subsc = node->data;
+        OpenAPI_af_event_subscription_t *Event_held = NULL;
+
+        if (!Event_from_subsc) continue;
+        OpenAPI_list_for_each(held->events, node1) {
+            OpenAPI_af_event_subscription_t *Event = node1->data;
+
+            if (Event && Event->event == Event_from_subsc->event) {
+                Event_held = Event;
+                break;
+            }
+        }
+        if (Event_held) {
+            if (event_subscription_equal(Event_held, Event_from_subsc)) continue;
+            node1->data = OpenAPI_af_event_subscription_copy(NULL, Event_from_subsc);
+            ogs_assert(node1->data);
+            OpenAPI_af_event_subscription_free(Event_held);
+        } else {
+            OpenAPI_list_add(held->events, OpenAPI_af_event_subscription_copy(NULL, Event_from_subsc));
+        }
+        merged_events++;
+    }
+    return merged_events;
 }
 
 void merge_evt_subsc_to_app_session_context(pcf_app_session_t *app_session,

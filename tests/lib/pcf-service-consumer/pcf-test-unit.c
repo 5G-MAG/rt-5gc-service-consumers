@@ -32,6 +32,7 @@ static void create_ipv4_func(abts_case *tc, void *data);
 static void create_ipv6_func(abts_case *tc, void *data);
 static void create_answer_func(abts_case *tc, void *data);
 static void create_resp_data_func(abts_case *tc, void *data);
+static void subscribe_merge_func(abts_case *tc, void *data);
 static void no_query_func(abts_case *tc, void *data);
 static void update_sponsor_func(abts_case *tc, void *data);
 static void update_answer_func(abts_case *tc, void *data);
@@ -71,6 +72,7 @@ abts_suite *test_pcf_unit(abts_suite *suite)
     abts_run_test(suite, create_ipv6_func, NULL);
     abts_run_test(suite, create_answer_func, NULL);
     abts_run_test(suite, create_resp_data_func, NULL);
+    abts_run_test(suite, subscribe_merge_func, NULL);
     abts_run_test(suite, update_request_func, NULL);
     abts_run_test(suite, no_query_func, NULL);
     abts_run_test(suite, update_sponsor_func, NULL);
@@ -384,6 +386,98 @@ static void create_resp_data_func(abts_case *tc, void *data)
         ABTS_TRUE(tc, outcome.features == 2);
         if (outcome.success) _pcf_app_session_free(sess);
     }
+}
+
+/* The events of a subscription (EventsSubscReqData) with the default notification method; the caller releases it with subsc_free() */
+static OpenAPI_events_subsc_req_data_t *subsc_new(int num_events, const OpenAPI_npcf_af_event_e *events)
+{
+    OpenAPI_events_subsc_req_data_t *subsc = ogs_calloc(1, sizeof(*subsc));
+    int i;
+
+    ogs_assert(subsc);
+    subsc->events = OpenAPI_list_create();
+    for (i = 0; i < num_events; i++) {
+        OpenAPI_af_event_subscription_t *event = ogs_calloc(1, sizeof(*event));
+
+        ogs_assert(event);
+        event->event = events[i];
+        event->notif_method = OpenAPI_af_notif_method_EVENT_DETECTION;
+        OpenAPI_list_add(subsc->events, event);
+    }
+    return subsc;
+}
+
+static void subsc_free(OpenAPI_events_subsc_req_data_t *subsc)
+{
+    OpenAPI_lnode_t *node = NULL;
+
+    OpenAPI_list_for_each(subsc->events, node)
+        ogs_free(node->data);
+    OpenAPI_list_free(subsc->events);
+    ogs_free(subsc);
+}
+
+/* The number of events that the PUT request of the subscription carries, or -1 if it carries none */
+static int put_events(abts_case *tc, pcf_app_session_t *sess)
+{
+    ogs_sbi_request_t *request = pcf_policyauthorization_req_subscribe_event(sess);
+    cJSON *json = content_of(tc, request), *events;
+    int count = -1;
+
+    events = cJSON_GetObjectItemCaseSensitive(json, "events");
+    if (cJSON_IsArray(events)) count = cJSON_GetArraySize(events);
+    if (json) cJSON_Delete(json);
+    if (request) ogs_sbi_request_free(request);
+    return count;
+}
+
+/*
+ * TS 29.514 V19.8.0 clause 4.2.6.2: the PUT request of the events subscription carries the events to be subscribed, each of them once,
+ * also when the application session was created without any event.
+ */
+static void subscribe_merge_func(abts_case *tc, void *data)
+{
+    static const OpenAPI_npcf_af_event_e created[] = {OpenAPI_npcf_af_event_QOS_NOTIF, OpenAPI_npcf_af_event_FAILED_RESOURCES_ALLOCATION};
+    static const OpenAPI_npcf_af_event_e again[] = {OpenAPI_npcf_af_event_QOS_NOTIF};
+    static const OpenAPI_npcf_af_event_e more[] = {OpenAPI_npcf_af_event_USAGE_REPORT};
+    pcf_app_session_options_t options;
+    pcf_app_session_t *sess;
+    OpenAPI_events_subsc_req_data_t *subsc;
+    ogs_sbi_request_t *request;
+    int i;
+
+    /* two events at creation: an event that is subscribed again is not entered twice, a new one is added */
+    sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+    memset(&options, 0, sizeof(options));
+    options.events = PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF | PCF_APP_SESSION_EVENT_TYPE_FAILED_RESOURCES_ALLOCATION;
+    request = pcf_policyauthorization_request_create(sess, NULL, &options);
+    ABTS_PTR_NOTNULL(tc, request);
+    if (request) ogs_sbi_request_free(request);
+    sess->pcf_app_session_id = ogs_strdup("42");
+    subsc = subsc_new(1, again);
+    ABTS_INT_EQUAL(tc, 0, merge_event_subsc_to_app_session_context(sess, subsc));
+    subsc_free(subsc);
+    ABTS_INT_EQUAL(tc, 2, put_events(tc, sess));
+    subsc = subsc_new(1, more);
+    ABTS_INT_EQUAL(tc, 1, merge_event_subsc_to_app_session_context(sess, subsc));
+    subsc_free(subsc);
+    ABTS_INT_EQUAL(tc, 3, put_events(tc, sess));
+    _pcf_app_session_free(sess);
+
+    /* no event at creation: the first subscription has an event to send */
+    sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+    memset(&options, 0, sizeof(options));
+    request = pcf_policyauthorization_request_create(sess, NULL, &options);
+    ABTS_PTR_NOTNULL(tc, request);
+    if (request) ogs_sbi_request_free(request);
+    sess->pcf_app_session_id = ogs_strdup("42");
+    for (i = 0; i < 2; i++) {
+        subsc = subsc_new(1, more);
+        ABTS_INT_EQUAL(tc, i == 0 ? 1 : 0, merge_event_subsc_to_app_session_context(sess, subsc));
+        subsc_free(subsc);
+    }
+    ABTS_INT_EQUAL(tc, 1, put_events(tc, sess));
+    _pcf_app_session_free(sess);
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:
