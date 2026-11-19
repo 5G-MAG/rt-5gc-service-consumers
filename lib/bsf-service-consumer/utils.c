@@ -37,7 +37,12 @@ ogs_time_t _response_to_expiry_time(ogs_sbi_response_t *response)
 {
     ogs_hash_index_t *hi;
     ogs_time_t base_time;
-    ogs_time_t max_age = 5; /* default 5 seconds from now */
+    /*
+     * Implementation choice, text silent, see CONSUMERS audit R7 (no CR): TS 29.500 V19.7.1 clause 5.2.2.2 says that the cache directives no-cache,
+     * no-store, max-age and must-revalidate "shall be supported" and gives no lifetime for an answer without any, so such an answer is not kept.
+     * (The default was 5, which was added to a time in microseconds: an entry lived 5 microseconds, whatever the answer said.)
+     */
+    ogs_time_t max_age = 0; /* seconds */
     ogs_time_t current_age = 0;
 
     base_time = ogs_time_now();
@@ -60,7 +65,7 @@ ogs_time_t _response_to_expiry_time(ogs_sbi_response_t *response)
 
     max_age -= current_age;
     if (max_age < 0) max_age = 0;
-    return base_time + max_age;
+    return base_time + ogs_time_from_sec(max_age);
 }
 
 ogs_time_t _cache_control_to_cache_age(const char *cache_control)

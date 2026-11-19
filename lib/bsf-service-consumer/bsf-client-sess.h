@@ -36,10 +36,23 @@ typedef struct bsf_client_sess_s {
     char *gpsi;
     char *ip_domain;
 
+    /* a query with narrowing keys: its answer is for that combination and not for the UE address alone (O16) */
+    bool narrowed;
+
     struct {
         bsf_retrieve_callback_f callback;
         void *user_data;
     } retrieve;
+
+    /* the callback that is told how the BSF answered (bsf_retrieve_pcf_binding_with_result()) */
+    struct {
+        bsf_retrieve_result_callback_f callback;
+        void *user_data;
+    } result;
+
+    /* the answer of the BSF: its status (0 if there was none) and the cause of its ProblemDetails */
+    int answer_status;
+    char *answer_cause;
 } bsf_client_sess_t;
 
 bsf_client_sess_t *_bsf_client_sess_new(void);
@@ -53,6 +66,8 @@ bool _bsf_client_sess_ipv6prefix_set_from_sockaddr(bsf_client_sess_t *sess, cons
 
 bool _bsf_client_sess_query_set(bsf_client_sess_t *sess, const bsf_pcf_binding_query_t *query);
 bool _bsf_client_sess_retrieve_callback_set(bsf_client_sess_t *sess, bsf_retrieve_callback_f cb, void *user_data);
+bool _bsf_client_sess_result_callback_set(bsf_client_sess_t *sess, bsf_retrieve_result_callback_f cb, void *user_data);
+void _bsf_client_sess_set_answer(bsf_client_sess_t *sess, int status, const ogs_sbi_response_t *response);
 bool _bsf_client_sess_retrieve_callback_call(bsf_client_sess_t *sess, const OpenAPI_pcf_binding_t *binding);
 bool _bsf_client_sess_discover_and_send(bsf_client_sess_t *sess);
 

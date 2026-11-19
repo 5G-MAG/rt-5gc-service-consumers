@@ -50,6 +50,7 @@ void _bsf_client_sess_free(bsf_client_sess_t *sess)
     if (sess->supi) ogs_free(sess->supi);
     if (sess->gpsi) ogs_free(sess->gpsi);
     if (sess->ip_domain) ogs_free(sess->ip_domain);
+    if (sess->answer_cause) ogs_free(sess->answer_cause);
     if (sess->ipv6prefix) {
         ogs_free(sess->ipv6prefix);
         sess->ipv6prefix = NULL;
@@ -99,6 +100,7 @@ bool _bsf_client_sess_query_set(bsf_client_sess_t *sess, const bsf_pcf_binding_q
     if (query->supi) sess->supi = ogs_strdup(query->supi);
     if (query->gpsi) sess->gpsi = ogs_strdup(query->gpsi);
     if (query->ip_domain) sess->ip_domain = ogs_strdup(query->ip_domain);
+    sess->narrowed = query->dnn || query->s_nssai || query->supi || query->gpsi || query->ip_domain;
 
     return true;
 }
@@ -141,12 +143,49 @@ bool _bsf_client_sess_retrieve_callback_set(bsf_client_sess_t *sess, bsf_retriev
     return true;
 }
 
+bool _bsf_client_sess_result_callback_set(bsf_client_sess_t *sess, bsf_retrieve_result_callback_f cb, void *user_data)
+{
+    if (!sess) return false;
+
+    sess->result.callback = cb;
+    sess->result.user_data = user_data;
+
+    return true;
+}
+
+/* What the BSF answered: its status, and the cause of the ProblemDetails of an error (TS 29.521 V19.7.0 table 5.3.2.3.2-3) */
+void _bsf_client_sess_set_answer(bsf_client_sess_t *sess, int status, const ogs_sbi_response_t *response)
+{
+    if (!sess) return;
+    sess->answer_status = status;
+    if (sess->answer_cause) { ogs_free(sess->answer_cause); sess->answer_cause = NULL; }
+    if (response && status >= 400 && response->http.content) {
+        cJSON *json = cJSON_Parse(response->http.content);
+        OpenAPI_problem_details_t *problem = json ? OpenAPI_problem_details_parseFromJSON(json) : NULL;
+
+        if (problem && problem->cause) sess->answer_cause = ogs_strdup(problem->cause);
+        if (problem) OpenAPI_problem_details_free(problem);
+        if (json) cJSON_Delete(json);
+    }
+}
+
 bool _bsf_client_sess_retrieve_callback_call(bsf_client_sess_t *sess, const OpenAPI_pcf_binding_t *binding)
 {
     OpenAPI_pcf_binding_t *bind_copy = NULL;
     bool ret;
 
     if (!sess) return false;
+    if (sess->result.callback) {
+        bsf_pcf_binding_result_t result;
+
+        memset(&result, 0, sizeof(result));
+        result.pcf_binding = binding;
+        result.http_status = sess->answer_status;
+        result.problem_cause = sess->answer_cause;
+        ret = sess->result.callback(&result, sess->result.user_data);
+        if (!ret) ogs_error("BSF client callback failed");
+        return ret;
+    }
     if (!sess->retrieve.callback) return false;
 
     if (binding)

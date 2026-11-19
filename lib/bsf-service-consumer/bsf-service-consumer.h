@@ -57,6 +57,34 @@ typedef struct bsf_pcf_binding_query_s {
     const char *ip_domain;
 } bsf_pcf_binding_query_t;
 
+/**
+ * The outcome of a PCF binding request to the BSF (Nbsf_Management_Discovery, TS 29.521 V19.7.0 clause 4.2.4.2)
+ *
+ * Everything is borrowed and valid during the callback only.
+ */
+typedef struct bsf_pcf_binding_result_s {
+    const OpenAPI_pcf_binding_t *pcf_binding;   /**< The PCF binding (200), or NULL if there is none. */
+    /**
+     * The status of the BSF's answer: 200 with a binding, 204 or 404 for no binding, 400 for a refused request (see problem_cause for
+     * MANDATORY_QUERY_PARAM_MISSING or MULTIPLE_BINDING_INFO_FOUND), 307 or 308 for a redirection; 0 if there was no usable answer (no BSF
+     * found, no connection, timeout). A redirection is reported and not followed: TS 29.500 V19.7.1 clause 6.10.9.1 has the request redirected
+     * in indirect communication, which this library does not use.
+     */
+    int http_status;
+    const char *problem_cause;                  /**< The cause of the ProblemDetails of an error answer, or NULL. */
+} bsf_pcf_binding_result_t;
+
+typedef bool (*bsf_retrieve_result_callback_f)(const bsf_pcf_binding_result_t *result, void *user_data);
+
+/**
+ * Ask the BSF for the PCF binding of a PDU session and be told how the BSF answered
+ *
+ * Like bsf_retrieve_pcf_binding_for_pdu_session_narrowed(), with a callback that gets the status of the answer and the cause of an error. @query
+ * may be NULL. The callback is called exactly once.
+ */
+BSF_CLIENT_API bool bsf_retrieve_pcf_binding_with_result(ogs_sockaddr_t *ue_address, const bsf_pcf_binding_query_t *query,
+                bsf_retrieve_result_callback_f callback, void *user_data);
+
 BSF_CLIENT_API bool bsf_retrieve_pcf_binding_for_pdu_session(ogs_sockaddr_t *ue_address, bsf_retrieve_callback_f callback, void *user_data);
 /* The same with narrowing keys; the cache of bindings is not used for such a query (it is keyed by the address only) */
 BSF_CLIENT_API bool bsf_retrieve_pcf_binding_for_pdu_session_narrowed(ogs_sockaddr_t *ue_address, const bsf_pcf_binding_query_t *query, bsf_retrieve_callback_f callback, void *user_data);

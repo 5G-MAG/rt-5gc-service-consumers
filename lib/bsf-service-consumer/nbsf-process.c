@@ -144,14 +144,25 @@ bool _bsf_process_event(ogs_event_t *e)
                             }
 
                             expires = _response_to_expiry_time(response);
-                            _bsf_client_context_add_pcf_binding(sess->ue_address, message.PcfBinding, expires);
-                                
+                            /*
+                             * Implementation choice, text silent, see CONSUMERS audit O16 (no CR): TS 29.500 V19.7.1 clause 5.2.2.2 gives the caching
+                             * of a consumer by the headers only. The cache is keyed by the UE address, and an answer to a query with the narrowing
+                             * keys (DNN, slice, SUPI, GPSI, IP domain; clause 4.2.4.2 of TS 29.521 for addresses that overlap) is the one of that
+                             * combination: kept under the bare address it could answer a later query for the same address in another slice or
+                             * domain. Such an answer is not kept.
+                             */
+                            if (!sess->narrowed)
+                                _bsf_client_context_add_pcf_binding(sess->ue_address, message.PcfBinding, expires);
+                            _bsf_client_sess_set_answer(sess, OGS_SBI_HTTP_STATUS_OK, response);
+
                             if (!_bsf_client_sess_retrieve_callback_call(sess, message.PcfBinding)) {
                                 ogs_error("_bsf_client_sess_retrieve_callback_call() failed");
                             }
                         } else {
                             char *ip = ogs_ipstrdup(sess->ue_address);
                             ogs_error("Unable to find PCF binding for %s", ip);
+                            /* the status and the cause of the answer go to the requester (204, 404, 400, and the 307 and 308 that are not followed) */
+                            _bsf_client_sess_set_answer(sess, message.res_status, response);
                             _bsf_client_sess_retrieve_callback_call(sess, NULL);
                             ogs_free(ip);
                         }

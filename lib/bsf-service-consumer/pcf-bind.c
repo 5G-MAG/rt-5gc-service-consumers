@@ -19,12 +19,14 @@ https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
 extern "C" {
 #endif
 
-static bool retrieve(ogs_sockaddr_t *ue_address, const bsf_pcf_binding_query_t *query, bsf_retrieve_callback_f callback, void *user_data)
+static bool retrieve(ogs_sockaddr_t *ue_address, const bsf_pcf_binding_query_t *query, bsf_retrieve_callback_f callback,
+                     bsf_retrieve_result_callback_f result_callback, void *user_data)
 {
     OpenAPI_pcf_binding_t *binding;
     bsf_client_sess_t *sess;
+    bool narrowed = query && (query->dnn || query->s_nssai || query->supi || query->gpsi || query->ip_domain);
 
-    if (!ue_address || !callback) {
+    if (!ue_address || (!callback && !result_callback)) {
         ogs_error("A PCF binding cannot be asked for without a UE address and a callback");
         return false;
     }
@@ -34,15 +36,28 @@ static bool retrieve(ogs_sockaddr_t *ue_address, const bsf_pcf_binding_query_t *
     }
 
     ogs_debug("_bsf_retrieve_pcf_binding_for_pdu_session(ue_address=%p, callback=%p, user_data=%p)", ue_address, callback, user_data);
-    /* Check the cache */
-    binding = query ? NULL : _bsf_client_pcf_bindings_from_cache(ue_address);
+    /*
+     * Check the cache, which holds the answers for a UE address (the narrowing keys are not part of its key: an answer for a combination of them
+     * is neither kept in it, see nbsf-process.c, nor looked for in it)
+     */
+    binding = narrowed ? NULL : _bsf_client_pcf_bindings_from_cache(ue_address);
     if (binding) {
-        OpenAPI_pcf_binding_t *bind_copy;
+        if (result_callback) {
+            bsf_pcf_binding_result_t result;
 
-        bind_copy = OpenAPI_pcf_binding_copy(NULL, binding);
-        if (!callback(bind_copy, user_data)) {
-            ogs_error("BSF client callback failed");
-            OpenAPI_pcf_binding_free(bind_copy);
+            memset(&result, 0, sizeof(result));
+            result.pcf_binding = binding;
+            result.http_status = OGS_SBI_HTTP_STATUS_OK;
+            if (!result_callback(&result, user_data))
+                ogs_error("BSF client callback failed");
+        } else {
+            OpenAPI_pcf_binding_t *bind_copy;
+
+            bind_copy = OpenAPI_pcf_binding_copy(NULL, binding);
+            if (!callback(bind_copy, user_data)) {
+                ogs_error("BSF client callback failed");
+                OpenAPI_pcf_binding_free(bind_copy);
+            }
         }
         return true;
     }
@@ -59,7 +74,10 @@ static bool retrieve(ogs_sockaddr_t *ue_address, const bsf_pcf_binding_query_t *
     }
     if (query)
         _bsf_client_sess_query_set(sess, query);
-    _bsf_client_sess_retrieve_callback_set(sess, callback, user_data);
+    if (result_callback)
+        _bsf_client_sess_result_callback_set(sess, result_callback, user_data);
+    else
+        _bsf_client_sess_retrieve_callback_set(sess, callback, user_data);
 
     _bsf_client_context_log_debug();
 
@@ -70,12 +88,17 @@ static bool retrieve(ogs_sockaddr_t *ue_address, const bsf_pcf_binding_query_t *
 
 bool _bsf_retrieve_pcf_binding_for_pdu_session(ogs_sockaddr_t *ue_address, bsf_retrieve_callback_f callback, void *user_data)
 {
-    return retrieve(ue_address, NULL, callback, user_data);
+    return retrieve(ue_address, NULL, callback, NULL, user_data);
 }
 
 bool _bsf_retrieve_pcf_binding_for_pdu_session_narrowed(ogs_sockaddr_t *ue_address, const bsf_pcf_binding_query_t *query, bsf_retrieve_callback_f callback, void *user_data)
 {
-    return retrieve(ue_address, query, callback, user_data);
+    return retrieve(ue_address, query, callback, NULL, user_data);
+}
+
+bool _bsf_retrieve_pcf_binding_with_result(ogs_sockaddr_t *ue_address, const bsf_pcf_binding_query_t *query, bsf_retrieve_result_callback_f callback, void *user_data)
+{
+    return retrieve(ue_address, query, NULL, callback, user_data);
 }
 
 #ifdef __cplusplus
