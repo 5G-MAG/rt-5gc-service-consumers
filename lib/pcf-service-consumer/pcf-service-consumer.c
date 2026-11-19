@@ -79,10 +79,6 @@ static bool create_app_session(pcf_session_t *session,
     sess->result.user_data = result_user_data;
     sess->operation = PCF_APP_SESSION_OP_CREATE;
 
-    _pcf_client_sess_ipv4addr_set_from_sockaddr(sess, (const ogs_sockaddr_t *)sess->ue_network_identifier->address);
-
-    _pcf_client_sess_ipv6prefix_set_from_sockaddr(sess, (const ogs_sockaddr_t *)sess->ue_network_identifier->address);
-
     request = pcf_policyauthorization_request_create(sess, media_component, options);
     if (!request) {
         /* nothing was sent, so nobody is waiting for an answer: the object goes without calling the callback */

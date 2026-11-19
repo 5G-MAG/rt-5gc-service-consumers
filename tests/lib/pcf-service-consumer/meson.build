@@ -43,4 +43,24 @@ test('pcf-service-consumer',
     is_parallel : false,
     suite: 'app')
 
+# the requests and the answers of the library, checked without a core network: the internals are hidden in the shared library, so this
+# executable links the objects of the library instead
+test5gc_pcf_unit_sources = files('''
+    abts-main-unit.c
+    pcf-test-unit.h
+    pcf-test-unit.c
+'''.split())
 
+test5gc_pcf_unit_exe = executable('pcf-service-consumer-unit',
+    sources : test5gc_pcf_unit_sources,
+    objects : libscpcf.extract_all_objects(recursive : false),
+    c_args : testunit_core_cc_flags,
+    include_directories : [srcinc, libscpcf_inc, libinc],
+    dependencies : [libtest5gc_dep, libapp_dep, libcore_dep, libcrypt_dep, libsbi_dep])
+
+test('pcf-service-consumer-unit',
+    test5gc_pcf_unit_exe,
+    args : ['-c', meson.global_build_root() / 'subprojects' / 'open5gs' / 'configs' / 'vonr.yaml'],
+    timeout : 120,
+    is_parallel : false,
+    suite: 'app')

@@ -42,6 +42,9 @@ pcf_app_session_t *_pcf_app_session_new(pcf_session_t *pcf_session, const ue_net
         sess->instance_id &= 0x7fffffffffffffffULL;
     } while (sess->instance_id == 0 || _pcf_app_session_find_by_instance_id(sess->instance_id));
     sess->ue_network_identifier = __ue_network_identifier_clone(ue_connection);
+    /* the address of the UE as the text that the requests carry */
+    _pcf_client_sess_ipv4addr_set_from_sockaddr(sess, sess->ue_network_identifier->address);
+    _pcf_client_sess_ipv6prefix_set_from_sockaddr(sess, sess->ue_network_identifier->address);
 
     ogs_list_init(&sess->pcf_event_notifications);
 
