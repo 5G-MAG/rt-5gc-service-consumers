@@ -48,18 +48,14 @@ bool _pcf_client_sess_ipv4addr_set_from_sockaddr(pcf_app_session_t *sess, const 
 
 
 
-bool _pcf_client_sess_ipv6prefix_set_from_sockaddr(pcf_app_session_t *sess, const ogs_sockaddr_t *addr)
+bool _pcf_client_sess_ipv6addr_set_from_sockaddr(pcf_app_session_t *sess, const ogs_sockaddr_t *addr)
 {
-    char *ipv6addr;
-
     if (!sess) return false;
     if (!addr) return false;
     if (addr->ogs_sa_family != AF_INET6) return false;
 
-    if (sess->ipv6prefix) ogs_free(sess->ipv6prefix);
-    ipv6addr = _sockaddr_to_string(addr);
-    sess->ipv6prefix = ogs_msprintf("%s/128", ipv6addr);
-    ogs_free(ipv6addr);
+    if (sess->ipv6addr) ogs_free(sess->ipv6addr);
+    sess->ipv6addr = _sockaddr_to_string(addr);
 
     return true;
 }

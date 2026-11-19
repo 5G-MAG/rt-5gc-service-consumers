@@ -29,6 +29,7 @@
 static pcf_session_t *session = NULL;
 
 static void create_ipv4_func(abts_case *tc, void *data);
+static void create_ipv6_func(abts_case *tc, void *data);
 static void create_answer_func(abts_case *tc, void *data);
 static void update_request_func(abts_case *tc, void *data);
 
@@ -63,6 +64,7 @@ abts_suite *test_pcf_unit(abts_suite *suite)
     suite = ADD_SUITE(suite)
 
     abts_run_test(suite, create_ipv4_func, NULL);
+    abts_run_test(suite, create_ipv6_func, NULL);
     abts_run_test(suite, create_answer_func, NULL);
     abts_run_test(suite, update_request_func, NULL);
 
@@ -129,6 +131,29 @@ static void create_ipv4_func(abts_case *tc, void *data)
         ABTS_STR_EQUAL(tc, "10.45.0.2", string_of(req_data, "ueIpv4") ? string_of(req_data, "ueIpv4") : "");
         ABTS_PTR_NOTNULL(tc, string_of(req_data, "notifUri"));
         ABTS_PTR_NOTNULL(tc, string_of(req_data, "suppFeat"));
+    }
+    if (json) cJSON_Delete(json);
+    if (request) ogs_sbi_request_free(request);
+    _pcf_app_session_free(sess);
+}
+
+static void create_ipv6_func(abts_case *tc, void *data)
+{
+    pcf_app_session_t *sess = app_session_new("2001:db8:cafe::2", PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF);
+    pcf_app_session_options_t options;
+    ogs_sbi_request_t *request;
+    cJSON *json, *req_data;
+
+    memset(&options, 0, sizeof(options));
+    options.events = PCF_APP_SESSION_EVENT_TYPE_QOS_NOTIF;
+    request = pcf_policyauthorization_request_create(sess, NULL, &options);
+    json = content_of(tc, request);
+    req_data = cJSON_GetObjectItemCaseSensitive(json, "ascReqData");
+    ABTS_PTR_NOTNULL(tc, req_data);
+    if (req_data) {
+        /* TS 29.514 V19.8.0 clause 4.2.2.2: for an IP type PDU session the IPv6 address of the UE is in ueIpv6, and only one address is given */
+        ABTS_STR_EQUAL(tc, "2001:db8:cafe::2", string_of(req_data, "ueIpv6") ? string_of(req_data, "ueIpv6") : "");
+        ABTS_TRUE(tc, cJSON_GetObjectItemCaseSensitive(req_data, "ueIpv4") == NULL);
     }
     if (json) cJSON_Delete(json);
     if (request) ogs_sbi_request_free(request);

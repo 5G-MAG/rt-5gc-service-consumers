@@ -53,7 +53,6 @@ typedef struct pcf_app_session_s {
 
     char *ipv4addr;
     char *ipv6addr;
-    char *ipv6prefix;
 
     char *supi;
     char *gpsi;

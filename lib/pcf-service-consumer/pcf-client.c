@@ -42,9 +42,9 @@ pcf_app_session_t *_pcf_app_session_new(pcf_session_t *pcf_session, const ue_net
         sess->instance_id &= 0x7fffffffffffffffULL;
     } while (sess->instance_id == 0 || _pcf_app_session_find_by_instance_id(sess->instance_id));
     sess->ue_network_identifier = __ue_network_identifier_clone(ue_connection);
-    /* the address of the UE as the text that the requests carry */
+    /* TS 29.514 V19.8.0 clause 4.2.2.2: the IPv4 or the IPv6 address of the UE is given as the text that the requests carry */
     _pcf_client_sess_ipv4addr_set_from_sockaddr(sess, sess->ue_network_identifier->address);
-    _pcf_client_sess_ipv6prefix_set_from_sockaddr(sess, sess->ue_network_identifier->address);
+    _pcf_client_sess_ipv6addr_set_from_sockaddr(sess, sess->ue_network_identifier->address);
 
     ogs_list_init(&sess->pcf_event_notifications);
 
@@ -80,7 +80,6 @@ void _pcf_app_session_free(pcf_app_session_t *app_session)
     if (app_session->pcf_app_session_id) ogs_free(app_session->pcf_app_session_id);
     if (app_session->ipv4addr) ogs_free(app_session->ipv4addr);
     if (app_session->ipv6addr) ogs_free(app_session->ipv6addr);
-    if (app_session->ipv6prefix) ogs_free(app_session->ipv6prefix);
     if (app_session->supi) ogs_free(app_session->supi);
     if (app_session->gpsi) ogs_free(app_session->gpsi);
     if (app_session->dnn) ogs_free(app_session->dnn);

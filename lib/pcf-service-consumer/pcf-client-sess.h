@@ -51,7 +51,7 @@ bool _pcf_client_app_sess_context_updates_set(pcf_app_session_t *sess, OpenAPI_a
 
 bool _pcf_client_sess_change_callback_set(pcf_app_session_t *sess,  pcf_app_session_change_callback cb, void *user_data);
 
-bool _pcf_client_sess_ipv6prefix_set_from_sockaddr(pcf_app_session_t *sess, const ogs_sockaddr_t *addr);
+bool _pcf_client_sess_ipv6addr_set_from_sockaddr(pcf_app_session_t *sess, const ogs_sockaddr_t *addr);
 
 bool _pcf_client_requested_app_sess_context_set(pcf_app_session_t *sess, OpenAPI_app_session_context_t *AppSessionContext);
 
