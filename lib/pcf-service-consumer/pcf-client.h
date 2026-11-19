@@ -23,13 +23,15 @@ extern "C" {
 
 /*
  * The optional features of the Npcf_PolicyAuthorization API that the library implements (TS 29.514 V19.8.0 table 5.8-1): 2 SponsoredConnectivity
- * (the sponsor and the usage threshold of an application session context), 16 QoSMonitoring, 28 PatchCorrection (the update is a JSON Merge
- * Patch), 63 L4S (l4sInd of a media component and the L4S_SUPP event), 17 AuthorizationWithRequiredQoS (altSerReqs of a media component), 59
- * PDUSetHandling (pduSetQosDl, pduSetQosUl, protoDescDl and protoDescUl). The features above number 64 are in the second word: 68 MpxMedia
- * (mpxMediaUlInfos and mpxMediaDlInfos) and 69 TrafficCharChange (datBurstSizeInd, timetoNextBurstInd and expTranInd).
+ * (the sponsor and the usage threshold of an application session context), 15 EnhancedSubscriptionToNotification (the notification method,
+ * the period and the waiting time of an event, and the notification correlation identifier of a subscription), 16 QoSMonitoring (which requires
+ * feature 15), 28 PatchCorrection (the update is a JSON Merge Patch), 63 L4S (l4sInd of a media component and the L4S_SUPP event), 17
+ * AuthorizationWithRequiredQoS (altSerReqs of a media component), 59 PDUSetHandling (pduSetQosDl, pduSetQosUl, protoDescDl and protoDescUl). The
+ * features above number 64 are in the second word: 68 MpxMedia (mpxMediaUlInfos and mpxMediaDlInfos) and 69 TrafficCharChange (datBurstSizeInd,
+ * timetoNextBurstInd and expTranInd).
  */
-#define PCF_LIB_FEATURES (((uint64_t)1 << (2 - 1)) | ((uint64_t)1 << (16 - 1)) | ((uint64_t)1 << (17 - 1)) | ((uint64_t)1 << (28 - 1)) | \
-                          ((uint64_t)1 << (59 - 1)) | ((uint64_t)1 << (63 - 1)))
+#define PCF_LIB_FEATURES (((uint64_t)1 << (2 - 1)) | ((uint64_t)1 << (15 - 1)) | ((uint64_t)1 << (16 - 1)) | ((uint64_t)1 << (17 - 1)) | \
+                          ((uint64_t)1 << (28 - 1)) | ((uint64_t)1 << (59 - 1)) | ((uint64_t)1 << (63 - 1)))
 #define PCF_LIB_FEATURES_HI (((uint64_t)1 << (68 - 65)) | ((uint64_t)1 << (69 - 65)))
 
 typedef struct pcf_event_notification_s {

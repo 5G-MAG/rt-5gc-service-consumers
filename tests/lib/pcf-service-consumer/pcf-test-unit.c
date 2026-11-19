@@ -34,6 +34,7 @@ static void create_answer_func(abts_case *tc, void *data);
 static void create_resp_data_func(abts_case *tc, void *data);
 static void subscribe_merge_func(abts_case *tc, void *data);
 static void create_events_func(abts_case *tc, void *data);
+static void create_features_func(abts_case *tc, void *data);
 static void no_query_func(abts_case *tc, void *data);
 static void update_sponsor_func(abts_case *tc, void *data);
 static void update_answer_func(abts_case *tc, void *data);
@@ -75,6 +76,7 @@ abts_suite *test_pcf_unit(abts_suite *suite)
     abts_run_test(suite, create_resp_data_func, NULL);
     abts_run_test(suite, subscribe_merge_func, NULL);
     abts_run_test(suite, create_events_func, NULL);
+    abts_run_test(suite, create_features_func, NULL);
     abts_run_test(suite, update_request_func, NULL);
     abts_run_test(suite, no_query_func, NULL);
     abts_run_test(suite, update_sponsor_func, NULL);
@@ -512,6 +514,44 @@ static void create_events_func(abts_case *tc, void *data)
         if (request) ogs_sbi_request_free(request);
         _pcf_app_session_free(sess);
     }
+}
+
+/*
+ * TS 29.514 V19.8.0 table 5.8-1: QoSMonitoring (16) requires EnhancedSubscriptionToNotification (15), which includes the notification
+ * correlation identifier of a subscription to an event (notifCorreId of table 5.6.2.6-1).
+ */
+static void create_features_func(abts_case *tc, void *data)
+{
+    pcf_app_session_t *sess = app_session_new("10.45.0.2", PCF_APP_SESSION_EVENT_TYPE_NONE);
+    pcf_app_session_options_t options;
+    static const OpenAPI_npcf_af_event_e event[] = {OpenAPI_npcf_af_event_QOS_MONITORING};
+    OpenAPI_events_subsc_req_data_t *subsc = subsc_new(1, event);
+    ogs_sbi_request_t *request;
+    cJSON *json, *req_data, *ev_subsc;
+    uint64_t lo = 0, hi = 0;
+
+    subsc->notif_corre_id = (char *)"correlation-1";
+    memset(&options, 0, sizeof(options));
+    options.events_subscription = subsc;
+    request = pcf_policyauthorization_request_create(sess, NULL, &options);
+    json = content_of(tc, request);
+    req_data = cJSON_GetObjectItemCaseSensitive(json, "ascReqData");
+    ABTS_PTR_NOTNULL(tc, req_data);
+    if (req_data) {
+        ABTS_PTR_NOTNULL(tc, string_of(req_data, "suppFeat"));
+        if (string_of(req_data, "suppFeat"))
+            ogs_sbi_features_from_string(string_of(req_data, "suppFeat"), &lo, &hi);
+        ABTS_TRUE(tc, lo & ((uint64_t)1 << (16 - 1)));
+        ABTS_TRUE(tc, lo & ((uint64_t)1 << (15 - 1)));
+        ev_subsc = cJSON_GetObjectItemCaseSensitive(req_data, "evSubsc");
+        ABTS_PTR_NOTNULL(tc, ev_subsc);
+        ABTS_STR_EQUAL(tc, "correlation-1", string_of(ev_subsc, "notifCorreId") ? string_of(ev_subsc, "notifCorreId") : "");
+    }
+    if (json) cJSON_Delete(json);
+    if (request) ogs_sbi_request_free(request);
+    subsc->notif_corre_id = NULL;
+    subsc_free(subsc);
+    _pcf_app_session_free(sess);
 }
 
 /* vim:ts=8:sts=4:sw=4:expandtab:

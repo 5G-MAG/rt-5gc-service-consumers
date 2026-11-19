@@ -119,6 +119,7 @@ ogs_sbi_request_t *pcf_policyauthorization_request_create(
         evSubsc.rtt_flow_ref = extra->rtt_flow_ref;
         evSubsc.req_anis = extra->req_anis;
         evSubsc.usg_thres = extra->usg_thres;
+        evSubsc.notif_corre_id = extra->notif_corre_id;
         evSubsc.af_app_ids = extra->af_app_ids;
         evSubsc.is_direct_notif_ind = extra->is_direct_notif_ind;
         evSubsc.direct_notif_ind = extra->direct_notif_ind;
